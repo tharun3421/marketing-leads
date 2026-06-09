@@ -19,7 +19,7 @@ import {
   Mail,
   Phone,
   Layers,
-  DollarSign,
+  IndianRupeeIcon,
   Trash2,
   Bell
 } from 'lucide-react';
@@ -121,9 +121,12 @@ export default function SalesPortal({
       adBudget: '',
       startDate: '',
       deliveryDeadline: '',
-      notes: ''
+      notes: '',
+      isConfirmed: false
     }
   });
+
+  const formValues = watch();
 
   // Filter leads for this salesperson (backend already filters, but double check in frontend)
   const salespersonLeads = leads;
@@ -180,14 +183,18 @@ export default function SalesPortal({
       adBudget: '',
       startDate: '',
       deliveryDeadline: '',
-      notes: ''
+      notes: '',
+      isConfirmed: false
     });
     setCurrentStep(0);
     setWizardMode('create');
   };
 
   const openEditWizard = (lead) => {
-    reset(lead);
+    reset({
+      ...lead,
+      isConfirmed: false
+    });
     setEditingLeadId(lead._id || lead.id);
     setCurrentStep(0);
     setWizardMode('edit');
@@ -745,8 +752,7 @@ export default function SalesPortal({
                           <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" /> {lead.mobileNumber}</div>
                           {lead.websiteUrl && <div className="flex items-center gap-2 truncate"><Globe className="w-3.5 h-3.5 text-gray-400" /> {lead.websiteUrl}</div>}
                           <div className="flex items-center gap-2"><Layers className="w-3.5 h-3.5 text-gray-400" /> {lead.platforms ? lead.platforms.length : 0} channels, {Number(lead.postersRequired || 0) + Number(lead.videosRequired || 0)} assets</div>
-                          <div className="flex items-center gap-2"><DollarSign className="w-3.5 h-3.5 text-emerald-500" /> Budget: <strong className="text-gray-900 dark:text-white">₹{lead.adBudget || '0'}</strong></div>
-                        </div>
+                          <div className="flex items-center gap-2"><IndianRupeeIcon className="w-3.5 h-3.5 text-emerald-500" /> Budget: <strong className="text-gray-900 dark:text-white">₹{lead.adBudget || '0'}</strong></div>                        </div>
 
                         {/* Service status tracking dropdowns */}
                         <div className="border-t border-gray-100 dark:border-slate-800/40 pt-3.5 space-y-2">
@@ -947,6 +953,7 @@ export default function SalesPortal({
                           register={register} 
                           watch={watch} 
                           errors={errors} 
+                          formValues={formValues}
                         />
                       )}
                     </motion.div>
@@ -979,6 +986,7 @@ export default function SalesPortal({
                         type="submit"
                         variant="primary"
                         isLoading={isSubmitting}
+                        disabled={!formValues.isConfirmed}
                         icon={Send}
                       >
                         {wizardMode === 'create' ? 'Save Campaign Brief' : 'Update Campaign Spec'}

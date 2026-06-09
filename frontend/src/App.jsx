@@ -108,9 +108,9 @@ export default function App() {
         
         {/* Logo */}
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold text-xl shadow-lg shadow-indigo-500/20">
+          {/* <div className="p-2.5 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white font-bold text-xl shadow-lg shadow-indigo-500/20">
             L
-          </div>
+          </div> */}
           <div>
             <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent leading-none">
               Livedigit
@@ -146,7 +146,7 @@ export default function App() {
               exit={{ opacity: 0, y: -15 }}
               className="max-w-md mx-auto py-12 px-4"
             >
-              <Card title="Aetheria CRM Authorization" subtitle="Log in with your administrator or representative credentials">
+              <Card title="Livedigit CRM Authorization" subtitle="Log in with your administrator or representative credentials">
                 <form onSubmit={handleLoginSubmit} className="space-y-5">
                   <div className="w-14 h-14 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto border border-indigo-500/20">
                     <Lock className="w-6 h-6" />
@@ -158,7 +158,7 @@ export default function App() {
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. admin or tharun"
+                      placeholder="e.g. admin or sales person"
                       value={usernameInput}
                       onChange={(e) => setUsernameInput(e.target.value)}
                       required
@@ -189,11 +189,11 @@ export default function App() {
                     Sign In to Portal
                   </Button>
 
-                  <div className="p-3.5 bg-indigo-500/5 rounded-xl border border-indigo-500/10 text-xs text-indigo-950 dark:text-indigo-400 space-y-1.5">
+                  {/* <div className="p-3.5 bg-indigo-500/5 rounded-xl border border-indigo-500/10 text-xs text-indigo-950 dark:text-indigo-400 space-y-1.5">
                     <strong className="font-semibold block mb-0.5">Testing Accounts:</strong>
                     <div>Admin: <code className="bg-indigo-500/10 dark:bg-indigo-500/20 px-1 py-0.5 rounded font-mono font-bold">admin</code> / <code className="bg-indigo-500/10 dark:bg-indigo-500/20 px-1 py-0.5 rounded font-mono font-bold">admin123</code></div>
                     <div>Sales: <code className="bg-indigo-500/10 dark:bg-indigo-500/20 px-1 py-0.5 rounded font-mono font-bold">tharun</code> / <code className="bg-indigo-500/10 dark:bg-indigo-500/20 px-1 py-0.5 rounded font-mono font-bold">sales123</code></div>
-                  </div>
+                  </div> */}
                 </form>
               </Card>
             </motion.div>

@@ -5,15 +5,15 @@ import {
   Video, 
   Megaphone, 
   Palette, 
-  Flag, 
-  DollarSign, 
+  Flag,  
   CalendarRange,
   Facebook, 
   Instagram, 
   Youtube, 
   Linkedin,
   Chrome,
-  Notebook
+  Notebook,
+  IndianRupeeIcon
 } from 'lucide-react';
 
 const platformOptions = [
@@ -273,7 +273,7 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
             type="number"
             min="0"
             placeholder="e.g. 5000"
-            icon={DollarSign}
+            icon={IndianRupeeIcon}
             disabled={isReadOnlyProfile}
             error={errors.adBudget?.message}
             {...register('adBudget', { 

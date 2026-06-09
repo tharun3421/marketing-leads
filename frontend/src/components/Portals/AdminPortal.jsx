@@ -457,26 +457,30 @@ export default function AdminPortal({
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
               {/* Date Filters */}
-              <div className="flex items-center gap-2 text-xs font-semibold text-gray-650 dark:text-gray-400">
-                <span>Timeline From:</span>
-                <input
-                  type="date"
-                  value={filterStartDate}
-                  onChange={(e) => setFilterStartDate(e.target.value)}
-                  className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
-                />
-                <span>To:</span>
-                <input
-                  type="date"
-                  value={filterEndDate}
-                  onChange={(e) => setFilterEndDate(e.target.value)}
-                  className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
-                />
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-650 dark:text-gray-400">
+                <div className="flex items-center gap-2">
+                  <span>Timeline From:</span>
+                  <input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>To:</span>
+                  <input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
+                  />
+                </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 justify-end">
                 {/* Reset Filters */}
                 {(filterService !== 'All' || filterStatus !== 'All' || filterStartDate || filterEndDate) && (
                   <Button
@@ -517,7 +521,7 @@ export default function AdminPortal({
             </div>
           ) : (
             <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
-              <table className="w-full text-left text-sm border-collapse">
+              <table className="min-w-[900px] w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
                     <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Contact</th>

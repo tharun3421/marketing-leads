@@ -10,8 +10,9 @@ import {
   Globe
 } from 'lucide-react';
 
-export default function StepReviewSubmit({ register, watch, errors }) {
-  const formValues = watch();
+export default function StepReviewSubmit({ register, watch, errors, formValues: propFormValues }) {
+  const watchedFormValues = watch();
+  const formValues = propFormValues || watchedFormValues;
 
   return (
     <div className="space-y-5">
@@ -134,6 +135,19 @@ export default function StepReviewSubmit({ register, watch, errors }) {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Confirmation Checkbox */}
+      <div className="border-t border-gray-150/40 dark:border-slate-800/40 pt-4 flex items-start gap-3.5 p-3.5 rounded-xl border border-dashed border-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-500/2">
+        <input
+          type="checkbox"
+          id="isConfirmed"
+          className="w-4.5 h-4.5 rounded-sm border-gray-300 dark:border-slate-700 text-indigo-650 focus:ring-indigo-500 mt-0.5 cursor-pointer"
+          {...register('isConfirmed', { required: 'You must confirm these details before saving.' })}
+        />
+        <label htmlFor="isConfirmed" className="text-xs font-semibold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+          I confirm that all the campaign details and credentials compiled in this brief are verified and correct.
+        </label>
       </div>
     </div>
   );
