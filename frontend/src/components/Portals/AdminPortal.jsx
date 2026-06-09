@@ -26,36 +26,29 @@ import Card from '../UI/Card';
 import Button from '../UI/Button';
 import { Input } from '../UI/Input';
 import AppsScriptGuide from '../Help/AppsScriptGuide';
+import { useAuth } from '../../context/AuthContext';
 
 export default function AdminPortal({ 
-  leads = [], 
-  salespersonsList = [], 
-  appsScriptUrl = '',
-  setAppsScriptUrl,
   notifications = [],
   setNotifications,
-  onAddSalesperson,
   onAddToast,
-  onAddNotification,
-  onDeleteLead,
-  onBackToGateway
+  onAddNotification
 }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem('admin_authenticated') === 'true';
-  });
+  const { authFetch, logout } = useAuth();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [localUrl, setLocalUrl] = useState(appsScriptUrl);
+  const [leads, setLeads] = useState([]);
+  const [salespersonsList, setSalespersonsList] = useState([]);
+  const [appsScriptUrl, setAppsScriptUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [localUrl, setLocalUrl] = useState('');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  useEffect(() => {
-    setLocalUrl(appsScriptUrl);
-  }, [appsScriptUrl]);
-
   const [selectedRep, setSelectedRep] = useState(null); // name string | 'All' | null
   const [newRepName, setNewRepName] = useState('');
+  const [newRepUsername, setNewRepUsername] = useState('');
+  const [newRepPassword, setNewRepPassword] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState(null);
 
@@ -65,83 +58,46 @@ export default function AdminPortal({
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
 
-  const handleLoginSubmit = (e) => {
-    e.preventDefault();
-    if (username === 'admin' && password === 'admin123') {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('admin_authenticated', 'true');
-      onAddToast('Authorized', 'Admin session started.', 'success');
-      setUsername('');
-      setPassword('');
-    } else {
-      onAddToast('Access Denied', 'Invalid admin credentials.', 'error');
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const leadsRes = await authFetch('/api/leads');
+      if (leadsRes.ok) {
+        const leadsData = await leadsRes.json();
+        setLeads(leadsData);
+      }
+
+      const salespersonsRes = await authFetch('/api/auth/salespersons');
+      if (salespersonsRes.ok) {
+        const salespersonsData = await salespersonsRes.json();
+        setSalespersonsList(salespersonsData);
+      }
+
+      const configRes = await authFetch('/api/config/sheets-url');
+      if (configRes.ok) {
+        const configData = await configRes.json();
+        setAppsScriptUrl(configData.url || '');
+        setLocalUrl(configData.url || '');
+      }
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+      onAddToast('Fetch Error', 'Failed to load system data from server.', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  if (!isAuthenticated) {
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  if (isLoading) {
     return (
-      <div className="max-w-md mx-auto py-12 px-4">
-        <Card title="Administrator Authorization" subtitle="Sign in to manage active portfolios and system settings">
-          <form onSubmit={handleLoginSubmit} className="space-y-5">
-            <div className="w-14 h-14 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto border border-indigo-500/20">
-              <ShieldCheck className="w-6 h-6 animate-pulse" />
-            </div>
-
-            <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                Admin Username
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. admin"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3.5 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white transition-all outline-hidden focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                Admin Password
-              </label>
-              <input
-                type="password"
-                placeholder="Enter password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3.5 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white transition-all outline-hidden focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="flex flex-col gap-2 w-full">
-              <Button
-                type="submit"
-                variant="primary"
-                className="w-full"
-              >
-                Sign In to Admin
-              </Button>
-              {onBackToGateway && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={onBackToGateway}
-                >
-                  Back to Portal Selector
-                </Button>
-              )}
-            </div>
-
-            {/* <div className="p-3.5 bg-indigo-500/5 rounded-xl border border-indigo-500/10 text-xs text-indigo-850 dark:text-indigo-400 leading-normal">
-              <strong>Testing Credentials:</strong><br />
-              Username: <code className="bg-indigo-500/10 dark:bg-indigo-500/20 px-1 py-0.5 rounded font-mono font-bold">admin</code><br />
-              Password: <code className="bg-indigo-500/10 dark:bg-indigo-500/20 px-1 py-0.5 rounded font-mono font-bold">admin123</code>
-            </div> */}
-          </form>
-        </Card>
+      <div className="min-h-[50vh] flex items-center justify-center text-gray-905 dark:text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold">Loading administration data...</span>
+        </div>
       </div>
     );
   }
@@ -213,7 +169,8 @@ export default function AdminPortal({
   });
 
   // Rep Stats Mapper
-  const repStats = salespersonsList.map(name => {
+  const repStats = salespersonsList.map(rep => {
+    const name = typeof rep === 'string' ? rep : rep.name;
     const repLeads = leads.filter(l => l.salespersonName === name);
     const total = repLeads.length;
     const completed = repLeads.filter(l => getProjectStatus(l) === 'Completed').length;
@@ -224,22 +181,64 @@ export default function AdminPortal({
   });
 
   // Handle salesperson account creation
-  const handleCreateRep = (e) => {
+  const handleCreateRep = async (e) => {
     e.preventDefault();
     const cleanName = newRepName.trim();
-    if (!cleanName) return;
+    const cleanUsername = newRepUsername.trim().toLowerCase();
+    const cleanPassword = newRepPassword;
 
-    if (salespersonsList.some(name => name.toLowerCase() === cleanName.toLowerCase())) {
-      onAddToast('Account Creation Blocked', `${cleanName} is already registered in the directory.`, 'warning');
+    if (!cleanName || !cleanUsername || !cleanPassword) {
+      onAddToast('Validation Error', 'All fields (name, username, password) are required.', 'warning');
       return;
     }
 
-    onAddSalesperson(cleanName);
-    onAddToast('Representative Registered', `Registered ${cleanName} to active salesperson directory.`, 'success');
-    if (onAddNotification) {
-      onAddNotification(`New representative profile "${cleanName}" registered by Admin.`, 'assignment');
+    const nameExists = salespersonsList.some(rep => {
+      const name = typeof rep === 'string' ? rep : rep.name;
+      const username = typeof rep === 'string' ? '' : rep.username;
+      return name.toLowerCase() === cleanName.toLowerCase() || username.toLowerCase() === cleanUsername;
+    });
+
+    if (nameExists) {
+      onAddToast('Account Creation Blocked', `${cleanName} or username "${cleanUsername}" is already registered.`, 'warning');
+      return;
     }
-    setNewRepName('');
+
+    try {
+      const res = await authFetch('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: cleanName,
+          username: cleanUsername,
+          password: cleanPassword
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        onAddToast('Representative Registered', `Registered ${cleanName} successfully.`, 'success');
+        if (onAddNotification) {
+          onAddNotification(`New representative profile "${cleanName}" registered by Admin.`, 'assignment');
+        }
+        
+        // Refresh salespersons list
+        const salespersonsRes = await authFetch('/api/auth/salespersons');
+        if (salespersonsRes.ok) {
+          const salespersonsData = await salespersonsRes.json();
+          setSalespersonsList(salespersonsData);
+        }
+        
+        // Clear fields
+        setNewRepName('');
+        setNewRepUsername('');
+        setNewRepPassword('');
+      } else {
+        onAddToast('Registration Failed', data.message || 'Error registering representative.', 'error');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      onAddToast('Registration Failed', 'Network or server error during registration.', 'error');
+    }
   };
 
   // Intake Over Time Chart Data (Last 7 Days)
@@ -891,12 +890,8 @@ export default function AdminPortal({
             variant="outline"
             size="sm"
             onClick={() => {
-              setIsAuthenticated(false);
-              sessionStorage.removeItem('admin_authenticated');
+              logout();
               onAddToast('Sign Out Success', 'Admin session terminated.', 'info');
-              if (onBackToGateway) {
-                onBackToGateway();
-              }
             }}
             icon={LogOut}
           >
@@ -1402,6 +1397,21 @@ export default function AdminPortal({
                 value={newRepName}
                 onChange={(e) => setNewRepName(e.target.value)}
               />
+              <Input
+                label="Username"
+                placeholder="Enter username (e.g. tharun)"
+                required
+                value={newRepUsername}
+                onChange={(e) => setNewRepUsername(e.target.value)}
+              />
+              <Input
+                label="Password"
+                type="password"
+                placeholder="Enter password (e.g. sales123)"
+                required
+                value={newRepPassword}
+                onChange={(e) => setNewRepPassword(e.target.value)}
+              />
               
               <Button
                 type="submit"
@@ -1433,9 +1443,23 @@ export default function AdminPortal({
                 <Button
                   variant="primary"
                   className="flex-1"
-                  onClick={() => {
-                    setAppsScriptUrl(localUrl);
-                    onAddToast('Integration Saved', 'Google Sheets endpoint updated successfully.', 'success');
+                  onClick={async () => {
+                    try {
+                      const res = await authFetch('/api/config/sheets-url', {
+                        method: 'POST',
+                        body: JSON.stringify({ url: localUrl })
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        setAppsScriptUrl(data.url);
+                        onAddToast('Integration Saved', 'Google Sheets endpoint updated successfully.', 'success');
+                      } else {
+                        onAddToast('Save Failed', 'Failed to update Google Sheets endpoint.', 'error');
+                      }
+                    } catch (error) {
+                      console.error('Save error:', error);
+                      onAddToast('Save Failed', 'Network error while updating integration URL.', 'error');
+                    }
                   }}
                 >
                   Save URL

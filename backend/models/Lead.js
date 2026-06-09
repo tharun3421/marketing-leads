@@ -1,0 +1,151 @@
+const mongoose = require('mongoose');
+
+const leadSchema = new mongoose.Schema({
+  salesperson: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  salespersonName: {
+    type: String,
+    required: true
+  },
+  clientName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  companyName: {
+    type: String,
+    trim: true
+  },
+  businessCategory: {
+    type: String,
+    trim: true
+  },
+  websiteUrl: {
+    type: String,
+    trim: true
+  },
+  websiteRequired: {
+    type: Boolean,
+    default: false
+  },
+  websiteType: {
+    type: String,
+    trim: true
+  },
+  mobileNumber: {
+    type: String,
+    required: true
+  },
+  email: {
+    type: String,
+    required: true,
+    lowercase: true,
+    trim: true
+  },
+  facebookId: {
+    type: String,
+    trim: true
+  },
+  facebookPassword: {
+    type: String,
+    trim: true
+  },
+  instagramId: {
+    type: String,
+    trim: true
+  },
+  instagramPassword: {
+    type: String,
+    trim: true
+  },
+  postersRequired: {
+    type: Number,
+    default: 0
+  },
+  postersPending: {
+    type: Number,
+    default: 0
+  },
+  postersStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  videosRequired: {
+    type: Number,
+    default: 0
+  },
+  videosPending: {
+    type: Number,
+    default: 0
+  },
+  videosStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  adsRequired: {
+    type: Number,
+    default: 0
+  },
+  adsPending: {
+    type: Number,
+    default: 0
+  },
+  adsStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  websiteStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  websitePending: {
+    type: Number,
+    default: 0
+  },
+  platforms: [{
+    type: String
+  }],
+  brandColors: {
+    type: String,
+    default: '#6366f1'
+  },
+  targetAudience: {
+    type: String,
+    trim: true
+  },
+  competitors: {
+    type: String,
+    trim: true
+  },
+  adBudget: {
+    type: Number,
+    default: 0
+  },
+  startDate: {
+    type: String
+  },
+  deliveryDeadline: {
+    type: String
+  },
+  notes: {
+    type: String,
+    trim: true
+  },
+  status: {
+    type: String,
+    enum: ['Draft', 'Submitted to Admin'],
+    default: 'Draft'
+  }
+}, {
+  timestamps: true
+});
+
+const Lead = mongoose.model('Lead', leadSchema);
+module.exports = Lead;
