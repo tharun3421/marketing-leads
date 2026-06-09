@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Lead = require('../models/Lead');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
 
 // Generate JWT token helper
@@ -78,6 +79,33 @@ router.get('/salespersons', protect, async (req, res) => {
   try {
     const salespersons = await User.find({ role: 'salesperson' }).select('name username createdAt');
     res.json(salespersons);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   DELETE /api/auth/salespersons/:id
+// @desc    Delete a salesperson and their leads
+// @access  Private/Admin
+router.delete('/salespersons/:id', protect, adminOnly, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'Salesperson not found' });
+    }
+
+    if (user.role !== 'salesperson') {
+      return res.status(400).json({ message: 'Only salesperson accounts can be deleted' });
+    }
+
+    // Cascade delete: Remove all leads associated with this salesperson
+    await Lead.deleteMany({ salesperson: req.params.id });
+
+    // Delete the user
+    await User.findByIdAndDelete(req.params.id);
+
+    res.json({ message: 'Salesperson and all associated leads deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

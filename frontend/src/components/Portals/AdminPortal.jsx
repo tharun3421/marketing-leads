@@ -20,7 +20,8 @@ import {
   Clock,
   LogOut,
   HelpCircle,
-  Bell
+  Bell,
+  Trash2
 } from 'lucide-react';
 import Card from '../UI/Card';
 import Button from '../UI/Button';
@@ -51,6 +52,7 @@ export default function AdminPortal({
   const [newRepPassword, setNewRepPassword] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState(null);
+  const [repToDelete, setRepToDelete] = useState(null);
 
   // Advanced filters state
   const [filterService, setFilterService] = useState('All');
@@ -171,13 +173,15 @@ export default function AdminPortal({
   // Rep Stats Mapper
   const repStats = salespersonsList.map(rep => {
     const name = typeof rep === 'string' ? rep : rep.name;
+    const id = typeof rep === 'string' ? null : rep._id;
+    const username = typeof rep === 'string' ? '' : rep.username;
     const repLeads = leads.filter(l => l.salespersonName === name);
     const total = repLeads.length;
     const completed = repLeads.filter(l => getProjectStatus(l) === 'Completed').length;
     const inProgress = repLeads.filter(l => getProjectStatus(l) === 'In Progress').length;
     const pending = repLeads.filter(l => getProjectStatus(l) === 'Pending').length;
     const submitted = completed; // for compatibility
-    return { name, total, completed, inProgress, pending, submitted };
+    return { id, name, username, total, completed, inProgress, pending, submitted };
   });
 
   // Handle salesperson account creation
@@ -241,6 +245,31 @@ export default function AdminPortal({
     }
   };
 
+  // Handle representative deletion confirmation
+  const handleDeleteRepConfirm = async () => {
+    if (!repToDelete) return;
+    try {
+      const res = await authFetch(`/api/auth/salespersons/${repToDelete.id}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onAddToast('Representative Deleted', `Successfully deleted representative ${repToDelete.name}.`, 'success');
+        if (onAddNotification) {
+          onAddNotification(`Representative "${repToDelete.name}" account was deleted by Admin.`, 'assignment');
+        }
+        await fetchData();
+      } else {
+        onAddToast('Deletion Failed', data.message || 'Error deleting representative.', 'error');
+      }
+    } catch (error) {
+      console.error('Deletion error:', error);
+      onAddToast('Deletion Failed', 'Network or server error during deletion.', 'error');
+    } finally {
+      setRepToDelete(null);
+    }
+  };
+
   // Intake Over Time Chart Data (Last 7 Days)
   const getIntakeData = () => {
     const data = {};
@@ -251,8 +280,9 @@ export default function AdminPortal({
       data[dateStr] = 0;
     }
     leads.forEach(lead => {
-      if (lead.timestamp) {
-        const dateStr = new Date(lead.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const ts = lead.createdAt || lead.timestamp;
+      if (ts) {
+        const dateStr = new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
         if (data[dateStr] !== undefined) {
           data[dateStr]++;
         }
@@ -340,7 +370,7 @@ export default function AdminPortal({
       const adsCompleted = adsReq - adsPending;
 
       const values = [
-        lead.timestamp || '',
+        lead.createdAt || lead.timestamp || '',
         lead.salespersonName || '',
         lead.clientName || '',
         lead.mobileNumber || '',
@@ -555,7 +585,7 @@ export default function AdminPortal({
                         </td>
                       )}
                       <td className="p-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
-                        {lead.timestamp ? new Date(lead.timestamp).toLocaleString() : 'N/A'}
+                        {(lead.createdAt || lead.timestamp) ? new Date(lead.createdAt || lead.timestamp).toLocaleString() : 'N/A'}
                       </td>
                       <td className="p-3 text-xs">
                         <div className="space-y-1">
@@ -628,8 +658,8 @@ export default function AdminPortal({
                 <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                   <div>
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">Lead Details Brief</h3>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                      Submitted by {selectedLead.salespersonName} on {new Date(selectedLead.timestamp).toLocaleString()}
+                    <p className="text-xs text-gray-400 dark:text-gray-550 mt-1">
+                      Submitted by {selectedLead.salespersonName} on {new Date(selectedLead.createdAt || selectedLead.timestamp).toLocaleString()}
                     </p>
                   </div>
                   <button 
@@ -1368,7 +1398,21 @@ export default function AdminPortal({
                         {rep.name}
                       </h4>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-600 transition-colors" />
+                    <div className="flex items-center gap-1">
+                      {rep.id && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRepToDelete({ id: rep.id, name: rep.name });
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 hover:text-red-600 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          title={`Delete ${rep.name}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-600 transition-colors" />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-4 text-center border-t border-gray-150/40 dark:border-slate-800/40 pt-3.5 mt-4 text-[10px] font-semibold text-gray-400">
@@ -1485,6 +1529,47 @@ export default function AdminPortal({
         isOpen={isHelpOpen} 
         onClose={() => setIsHelpOpen(false)} 
       />
+
+      {/* Delete Representative Confirmation Modal */}
+      {repToDelete && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in duration-200">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-500/10 text-red-650 rounded-full flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Representative?</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">This action is permanent and deletes all associated leads.</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-650 dark:text-gray-300 leading-normal">
+                Are you sure you want to permanently delete the representative <strong className="text-gray-900 dark:text-white">{repToDelete.name}</strong>? This will remove their user login credentials and delete all client lead briefs they created.
+              </p>
+
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-gray-100 dark:border-slate-800/40">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRepToDelete(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="!bg-red-600 hover:!bg-red-700 !border-red-600 hover:!border-red-700 text-white"
+                  onClick={handleDeleteRepConfirm}
+                >
+                  Delete Account
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

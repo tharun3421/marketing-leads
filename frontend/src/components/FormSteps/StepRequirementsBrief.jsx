@@ -7,18 +7,16 @@ import {
   Palette, 
   Flag,  
   CalendarRange,
-  Facebook, 
-  Instagram, 
   Youtube, 
   Linkedin,
   Chrome,
   Notebook,
-  IndianRupeeIcon
+  IndianRupeeIcon,
+  Infinity
 } from 'lucide-react';
 
 const platformOptions = [
-  { id: 'Facebook Ads', name: 'Facebook Ads', icon: Facebook },
-  { id: 'Instagram Ads', name: 'Instagram Ads', icon: Instagram },
+  { id: 'Meta Ads', name: 'Meta Ads', icon: Infinity },
   { id: 'Google Ads', name: 'Google Ads', icon: Chrome },
   { id: 'YouTube Ads', name: 'YouTube Ads', icon: Youtube },
   { id: 'LinkedIn Ads', name: 'LinkedIn Ads', icon: Linkedin },
