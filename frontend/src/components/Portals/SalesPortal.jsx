@@ -752,7 +752,16 @@ export default function SalesPortal({
                           <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" /> {lead.mobileNumber}</div>
                           {lead.websiteUrl && <div className="flex items-center gap-2 truncate"><Globe className="w-3.5 h-3.5 text-gray-400" /> {lead.websiteUrl}</div>}
                           <div className="flex items-center gap-2"><Layers className="w-3.5 h-3.5 text-gray-400" /> {lead.platforms ? lead.platforms.length : 0} channels, {Number(lead.postersRequired || 0) + Number(lead.videosRequired || 0)} assets</div>
-                          <div className="flex items-center gap-2"><IndianRupeeIcon className="w-3.5 h-3.5 text-emerald-500" /> Budget: <strong className="text-gray-900 dark:text-white">₹{lead.adBudget || '0'}</strong></div>                        </div>
+                          <div className="flex items-start gap-2 flex-col bg-slate-500/5 dark:bg-slate-500/2 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50 mt-1">
+                            <div className="text-[10px] font-bold text-gray-450 dark:text-gray-500 uppercase tracking-wider mb-0.5">Budget Specifications</div>
+                            <div className="grid grid-cols-2 w-full gap-x-2 gap-y-1 text-[11px]">
+                              <div>Plan Amount: <strong className="text-gray-900 dark:text-white">₹{lead.planAmount || '0'}</strong></div>
+                              <div>Advance: <strong className="text-gray-900 dark:text-white">₹{lead.advanceAmount || '0'}</strong></div>
+                              <div>Pending: <strong className="text-amber-600 dark:text-amber-400 font-bold">₹{lead.pendingAmount || '0'}</strong></div>
+                              <div>Ad Budget: <strong className="text-emerald-600 dark:text-emerald-450">₹{lead.adBudget || '0'}</strong></div>
+                            </div>
+                          </div>
+                        </div>
 
                         {/* Service status tracking dropdowns */}
                         <div className="border-t border-gray-100 dark:border-slate-800/40 pt-3.5 space-y-2">

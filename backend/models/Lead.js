@@ -124,6 +124,18 @@ const leadSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  planAmount: {
+    type: Number,
+    default: 0
+  },
+  advanceAmount: {
+    type: Number,
+    default: 0
+  },
+  pendingAmount: {
+    type: Number,
+    default: 0
+  },
   adBudget: {
     type: Number,
     default: 0

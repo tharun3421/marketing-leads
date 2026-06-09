@@ -313,7 +313,7 @@ export default function AdminPortal({
       "Facebook ID/Username", "Facebook Password", "Instagram ID/Username", "Instagram Password",
       "Posters (Total/Pending/Completed)", "Videos (Total/Pending/Completed)", 
       "Ads (Total/Pending/Completed)", "Website Status", "Website Pending", "Selected Platforms", 
-      "Brand Colors", "Target Audience", "Competitors", "Ad Budget", "Start Date", "Delivery Deadline",
+      "Brand Colors", "Target Audience", "Competitors", "Plan Amount", "Advance Amount", "Pending Amount", "Ad Budget", "Start Date", "Delivery Deadline",
       "Total Count", "Pending Count", "Completed Count", "Notes"
     ];
 
@@ -363,6 +363,9 @@ export default function AdminPortal({
         lead.brandColors || '',
         lead.targetAudience || '',
         lead.competitors || '',
+        lead.planAmount || 0,
+        lead.advanceAmount || 0,
+        lead.pendingAmount || 0,
         lead.adBudget || '',
         lead.startDate || '',
         lead.deliveryDeadline || '',
@@ -788,7 +791,10 @@ export default function AdminPortal({
                           />
                         )}
                       </div>
-                      <div><span className="text-gray-400">Competitors:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.competitors || '—'}</span></div>
+                       <div><span className="text-gray-400">Competitors:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.competitors || '—'}</span></div>
+                      <div><span className="text-gray-400">Plan Amount:</span> <span className="text-gray-900 dark:text-white font-bold">{selectedLead.planAmount ? `₹${selectedLead.planAmount}` : '—'}</span></div>
+                      <div><span className="text-gray-400">Advance Amount:</span> <span className="text-gray-900 dark:text-white font-bold">{selectedLead.advanceAmount ? `₹${selectedLead.advanceAmount}` : '—'}</span></div>
+                      <div><span className="text-gray-400">Pending Amount:</span> <span className="text-amber-600 dark:text-amber-400 font-bold">{selectedLead.pendingAmount ? `₹${selectedLead.pendingAmount}` : '—'}</span></div>
                       <div><span className="text-gray-400">Ad Budget:</span> <span className="text-emerald-600 dark:text-emerald-400 font-bold">{selectedLead.adBudget ? `₹${selectedLead.adBudget}` : '—'}</span></div>
                       <div><span className="text-gray-400">Start Date:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.startDate || '—'}</span></div>
                       <div><span className="text-gray-400">Delivery Deadline:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.deliveryDeadline || '—'}</span></div>

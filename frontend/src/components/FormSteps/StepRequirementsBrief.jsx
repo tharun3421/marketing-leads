@@ -38,6 +38,14 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
   const watchAdsStatus = watch('adsStatus');
   const watchWebsiteStatus = watch('websiteStatus');
 
+  const watchPlanAmount = Number(watch('planAmount') || 0);
+  const watchAdvanceAmount = Number(watch('advanceAmount') || 0);
+
+  React.useEffect(() => {
+    const calculatedPending = Math.max(0, watchPlanAmount - watchAdvanceAmount);
+    setValue('pendingAmount', calculatedPending);
+  }, [watchPlanAmount, watchAdvanceAmount, setValue]);
+
   const statusOptions = [
     { value: 'Pending', label: 'Pending' },
     { value: 'In Progress', label: 'In Progress' },
@@ -268,6 +276,44 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Input
+            label="Plan Amount (INR)"
+            type="number"
+            min="0"
+            placeholder="e.g. 15000"
+            icon={IndianRupeeIcon}
+            disabled={isReadOnlyProfile}
+            error={errors.planAmount?.message}
+            {...register('planAmount', { 
+              min: { value: 0, message: 'Plan Amount cannot be negative' }
+            })}
+          />
+
+          <Input
+            label="Advance Amount (INR)"
+            type="number"
+            min="0"
+            placeholder="e.g. 5000"
+            icon={IndianRupeeIcon}
+            disabled={isReadOnlyProfile}
+            error={errors.advanceAmount?.message}
+            {...register('advanceAmount', { 
+              min: { value: 0, message: 'Advance Amount cannot be negative' }
+            })}
+          />
+
+          <Input
+            label="Pending Amount (INR)"
+            type="number"
+            min="0"
+            placeholder="Auto-calculated"
+            icon={IndianRupeeIcon}
+            readOnly
+            className="opacity-75"
+            error={errors.pendingAmount?.message}
+            {...register('pendingAmount')}
+          />
+
           <Input
             label="Ad Budget (INR)"
             type="number"

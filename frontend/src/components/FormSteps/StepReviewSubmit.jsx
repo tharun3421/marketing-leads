@@ -111,8 +111,11 @@ export default function StepReviewSubmit({ register, watch, errors, formValues: 
             <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900 dark:text-white">
               <DollarSign className="w-3.5 h-3.5 text-emerald-500" /> Plan & Budget
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 text-xs gap-x-4 gap-y-1">
-              <div><span className="text-gray-400">Budget:</span> <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{formValues.adBudget || '0'}</span></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 text-xs gap-x-4 gap-y-1.5">
+              <div><span className="text-gray-400">Plan Amount:</span> <span className="font-bold text-gray-900 dark:text-white">₹{formValues.planAmount || '0'}</span></div>
+              <div><span className="text-gray-400">Advance Amount:</span> <span className="font-bold text-gray-900 dark:text-white">₹{formValues.advanceAmount || '0'}</span></div>
+              <div><span className="text-gray-400">Pending Amount:</span> <span className="font-bold text-amber-600 dark:text-amber-400">₹{formValues.pendingAmount || '0'}</span></div>
+              <div><span className="text-gray-400">Ad Budget:</span> <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{formValues.adBudget || '0'}</span></div>
               <div className="flex items-center gap-2">
                 <span className="text-gray-400">Colors:</span>
                 <span className="font-mono text-gray-900 dark:text-white">{formValues.brandColors || '—'}</span>
