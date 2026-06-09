@@ -29,7 +29,8 @@ export const AuthProvider = ({ children }) => {
   }, [token, user]);
 
   const login = async (username, password) => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
     try {
       const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
@@ -68,7 +69,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const authFetch = async (url, options = {}) => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
     const headers = {
       'Content-Type': 'application/json',
       ...options.headers
