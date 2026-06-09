@@ -181,16 +181,44 @@ router.post('/:id/sync', protect, async (req, res) => {
 
     // Trigger sync POST request to Apps Script Web App
     try {
-      await fetch(appsScriptUrl, {
+      const response = await fetch(appsScriptUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain'
         },
         body: JSON.stringify(payload)
       });
+
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        throw new Error(`Google Sheets responded with status ${response.status}: ${response.statusText}`);
+      }
+
+      // If the body contains HTML indicating a Google sign-in/access prompt
+      if (
+        responseText.includes('Sign in - Google Accounts') || 
+        responseText.includes('You need access') || 
+        responseText.includes('request-access-icon') || 
+        responseText.includes('docs-drivelogo-text')
+      ) {
+        throw new Error('Access Denied: Please check that the Google Apps Script Web App deployment has "Who has access" set to "Anyone"');
+      }
+
+      // Check if Apps Script returned an error JSON
+      try {
+        const jsonRes = JSON.parse(responseText);
+        if (jsonRes.status === 'error') {
+          throw new Error(`Apps Script execution error: ${jsonRes.message}`);
+        }
+      } catch (jsonErr) {
+        // Response was not JSON, which is fine as long as it wasn't a Google login page
+      }
     } catch (fetchError) {
       console.error('Fetch Google Sheets error:', fetchError);
-      // Suppress network error in dev/mock if it's CORS or similar, but in real MERN we should log it.
+      return res.status(500).json({ 
+        message: `Google Sheets Sync failed: ${fetchError.message}` 
+      });
     }
 
     // Set lead status to Synced
