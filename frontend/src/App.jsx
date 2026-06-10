@@ -42,6 +42,29 @@ export default function App() {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
+  // Auto-prune notifications older than 12 hours
+  useEffect(() => {
+    const pruneNotifications = () => {
+      const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+      const cutoff = Date.now() - TWELVE_HOURS;
+      setNotifications(prev => {
+        if (!Array.isArray(prev)) return [];
+        const filtered = prev.filter(n => {
+          if (!n.timestamp) return false;
+          return new Date(n.timestamp).getTime() > cutoff;
+        });
+        if (filtered.length !== prev.length) {
+          return filtered;
+        }
+        return prev;
+      });
+    };
+
+    pruneNotifications();
+    const interval = setInterval(pruneNotifications, 60000); // Check every minute
+    return () => clearInterval(interval);
+  }, [setNotifications]);
+
   // Toast System Actions
   const addToast = (title, message, type = 'info') => {
     const id = Date.now() + Math.random().toString(36).substr(2, 9);
