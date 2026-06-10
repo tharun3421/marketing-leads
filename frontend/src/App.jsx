@@ -139,7 +139,7 @@ export default function App() {
             L
           </div> */}
           <div>
-            <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent leading-none">
+            <h1 className="text-xl font-extrabold tracking-tight bg-linear-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 bg-clip-text text-transparent leading-none">
               Livedigit
             </h1>
             <p className="text-[10px] text-gray-400 dark:text-gray-500 tracking-wider font-semibold uppercase mt-1">

@@ -100,7 +100,7 @@ export default function TechnicalPortal({
       if (res.ok) {
         onAddToast('Lead Updated', `Successfully updated deliverables status for ${editingLead.clientName}.`, 'success');
         if (onAddNotification) {
-          onAddNotification(`Technical member "${user.name}" updated campaign specs for client "${editingLead.clientName}".`, 'info');
+          onAddNotification(`Technical member "${user?.name || ''}" updated campaign specs for client "${editingLead.clientName}".`, 'info');
         }
         setEditingLead(null);
         await fetchAssignedLeads();
@@ -164,7 +164,7 @@ export default function TechnicalPortal({
           </div>
           <div>
             <h2 className="text-lg font-bold text-gray-950 dark:text-white">Technical Team Work Portal</h2>
-            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">Logged in as: <strong className="text-gray-900 dark:text-white font-bold">{user.name}</strong> ({user.username})</p>
+            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">Logged in as: <strong className="text-gray-900 dark:text-white font-bold">{user?.name}</strong> ({user?.username})</p>
           </div>
         </div>
 
