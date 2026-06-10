@@ -22,7 +22,9 @@ import {
   HelpCircle,
   Bell,
   Trash2,
-  KeyRound
+  KeyRound,
+  Sliders,
+  AlertCircle
 } from 'lucide-react';
 import Card from '../UI/Card';
 import Button from '../UI/Button';
@@ -56,6 +58,11 @@ export default function AdminPortal({
   const [repToDelete, setRepToDelete] = useState(null);
   const [repToResetPassword, setRepToResetPassword] = useState(null);
   const [resetPasswordInput, setResetPasswordInput] = useState('');
+  const [technicalList, setTechnicalList] = useState([]);
+  const [newRepRole, setNewRepRole] = useState('salesperson');
+  const [selectedLeadIds, setSelectedLeadIds] = useState([]);
+  const [assignToTechId, setAssignToTechId] = useState('');
+  const [currentView, setCurrentView] = useState('dashboard');
 
   // Advanced filters state
   const [filterService, setFilterService] = useState('All');
@@ -76,6 +83,12 @@ export default function AdminPortal({
       if (salespersonsRes.ok) {
         const salespersonsData = await salespersonsRes.json();
         setSalespersonsList(salespersonsData);
+      }
+
+      const technicalRes = await authFetch('/api/auth/technical');
+      if (technicalRes.ok) {
+        const technicalData = await technicalRes.json();
+        setTechnicalList(technicalData);
       }
 
       const configRes = await authFetch('/api/config/sheets-url');
@@ -123,6 +136,7 @@ export default function AdminPortal({
 
   // Global Metrics
   const totalRepsCount = salespersonsList.length;
+  const totalEmployeesCount = salespersonsList.length + technicalList.length;
   const totalClientsCount = leads.length;
   const totalPendingCount = leads.filter(l => l.status !== 'Submitted to Admin').length;
 
@@ -187,7 +201,7 @@ export default function AdminPortal({
     return { id, name, username, total, completed, inProgress, pending, submitted };
   });
 
-  // Handle salesperson account creation
+  // Handle salesperson / staff account creation
   const handleCreateRep = async (e) => {
     e.preventDefault();
     const cleanName = newRepName.trim();
@@ -199,13 +213,13 @@ export default function AdminPortal({
       return;
     }
 
-    const nameExists = salespersonsList.some(rep => {
+    const checkExists = (list) => list.some(rep => {
       const name = typeof rep === 'string' ? rep : rep.name;
       const username = typeof rep === 'string' ? '' : rep.username;
       return name.toLowerCase() === cleanName.toLowerCase() || username.toLowerCase() === cleanUsername;
     });
 
-    if (nameExists) {
+    if (checkExists(salespersonsList) || checkExists(technicalList)) {
       onAddToast('Account Creation Blocked', `${cleanName} or username "${cleanUsername}" is already registered.`, 'warning');
       return;
     }
@@ -216,23 +230,29 @@ export default function AdminPortal({
         body: JSON.stringify({
           name: cleanName,
           username: cleanUsername,
-          password: cleanPassword
+          password: cleanPassword,
+          role: newRepRole
         })
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        onAddToast('Representative Registered', `Registered ${cleanName} successfully.`, 'success');
+        onAddToast('Account Registered', `Registered ${cleanName} as ${newRepRole === 'salesperson' ? 'Sales' : 'Technical'} staff successfully.`, 'success');
         if (onAddNotification) {
-          onAddNotification(`New representative profile "${cleanName}" registered by Admin.`, 'assignment');
+          onAddNotification(`New staff profile "${cleanName}" (${newRepRole}) registered by Admin.`, 'assignment');
         }
         
-        // Refresh salespersons list
+        // Refresh appropriate lists
         const salespersonsRes = await authFetch('/api/auth/salespersons');
         if (salespersonsRes.ok) {
           const salespersonsData = await salespersonsRes.json();
           setSalespersonsList(salespersonsData);
+        }
+        const technicalRes = await authFetch('/api/auth/technical');
+        if (technicalRes.ok) {
+          const technicalData = await technicalRes.json();
+          setTechnicalList(technicalData);
         }
         
         // Clear fields
@@ -306,6 +326,63 @@ export default function AdminPortal({
     } catch (error) {
       console.error('Password reset error:', error);
       onAddToast('Reset Failed', 'Network or server error during password reset.', 'error');
+    }
+  };
+
+  // Bulk assign leads to a technical staff member
+  const handleBulkAssign = async () => {
+    if (selectedLeadIds.length === 0 || !assignToTechId) return;
+    const targetTechId = assignToTechId === 'unassign' ? null : assignToTechId;
+
+    try {
+      const res = await authFetch('/api/leads/assign', {
+        method: 'PUT',
+        body: JSON.stringify({
+          leadIds: selectedLeadIds,
+          assignedTo: targetTechId
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        onAddToast('Tasks Assigned', `Successfully updated assignments for ${selectedLeadIds.length} card(s).`, 'success');
+        if (onAddNotification) {
+          onAddNotification(`${selectedLeadIds.length} campaign task(s) updated by Admin.`, 'info');
+        }
+        setSelectedLeadIds([]);
+        setAssignToTechId('');
+        await fetchData(); // refresh list
+      } else {
+        onAddToast('Assignment Failed', data.message || 'Error assigning leads.', 'error');
+      }
+    } catch (error) {
+      console.error('Assignment error:', error);
+      onAddToast('Assignment Failed', 'Network or server error during assignment.', 'error');
+    }
+  };
+
+  const handleSelectLead = (leadId) => {
+    setSelectedLeadIds(prev => 
+      prev.includes(leadId) ? prev.filter(id => id !== leadId) : [...prev, leadId]
+    );
+  };
+
+  const handleSelectAllLeads = (filteredLeads) => {
+    const allFilteredIds = filteredLeads.map(l => l._id);
+    const areAllSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedLeadIds.includes(id));
+
+    if (areAllSelected) {
+      setSelectedLeadIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+    } else {
+      setSelectedLeadIds(prev => {
+        const newSelection = [...prev];
+        allFilteredIds.forEach(id => {
+          if (!newSelection.includes(id)) {
+            newSelection.push(id);
+          }
+        });
+        return newSelection;
+      });
     }
   };
 
@@ -601,6 +678,7 @@ export default function AdminPortal({
                     {selectedRep === 'All' && (
                       <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Representative</th>
                     )}
+                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assignee</th>
                     <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Timestamp</th>
                     <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Deliverables Status</th>
                     <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Sync Status</th>
@@ -623,6 +701,15 @@ export default function AdminPortal({
                           {lead.salespersonName}
                         </td>
                       )}
+                      <td className="p-3 text-xs">
+                        {lead.assignedToName ? (
+                          <span className="bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-2 py-0.5 font-bold text-indigo-600 dark:text-indigo-400">
+                            {lead.assignedToName}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500 italic">Unassigned</span>
+                        )}
+                      </td>
                       <td className="p-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
                         {(lead.createdAt || lead.timestamp) ? new Date(lead.createdAt || lead.timestamp).toLocaleString() : 'N/A'}
                       </td>
@@ -902,6 +989,630 @@ export default function AdminPortal({
       </div>
     );
   }
+
+  if (currentView === 'assign-tasks') {
+    const allLeadsFiltered = leads.filter(lead => {
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = (
+        (lead.clientName || '').toLowerCase().includes(searchLower) ||
+        (lead.companyName || '').toLowerCase().includes(searchLower) ||
+        (lead.businessCategory || '').toLowerCase().includes(searchLower) ||
+        (lead.salespersonName || '').toLowerCase().includes(searchLower)
+      );
+
+      let matchesService = true;
+      if (filterService === 'Posters') matchesService = Number(lead.postersRequired) > 0;
+      else if (filterService === 'Videos') matchesService = Number(lead.videosRequired) > 0;
+      else if (filterService === 'Ads') matchesService = Number(lead.adsRequired) > 0;
+      else if (filterService === 'Website') matchesService = lead.websiteRequired === true;
+
+      let matchesStatus = true;
+      if (filterStatus !== 'All') {
+        if (filterService === 'Posters') matchesStatus = lead.postersStatus === filterStatus;
+        else if (filterService === 'Videos') matchesStatus = lead.videosStatus === filterStatus;
+        else if (filterService === 'Ads') matchesStatus = lead.adsStatus === filterStatus;
+        else if (filterService === 'Website') matchesStatus = lead.websiteStatus === filterStatus;
+        else {
+          matchesStatus = getProjectStatus(lead) === filterStatus;
+        }
+      }
+
+      let matchesDate = true;
+      if (filterStartDate) {
+        matchesDate = matchesDate && lead.startDate >= filterStartDate;
+      }
+      if (filterEndDate) {
+        matchesDate = matchesDate && lead.startDate <= filterEndDate;
+      }
+
+      return matchesSearch && matchesService && matchesStatus && matchesDate;
+    });
+
+    const handleExportAllCSV = () => {
+      if (leads.length === 0) return;
+
+      const headers = [
+        "Timestamp", "Salesperson Name", "Client Name", "Mobile Number", "Email",
+        "Company Name", "Business Category", "Website URL", "Website Required", "Website Type", 
+        "Facebook ID/Username", "Facebook Password", "Instagram ID/Username", "Instagram Password",
+        "Posters (Total/Pending/Completed)", "Videos (Total/Pending/Completed)", 
+        "Ads (Total/Pending/Completed)", "Website Status", "Website Pending", "Selected Platforms", 
+        "Brand Colors", "Target Audience", "Competitors", "Plan Amount", "Advance Amount", "Pending Amount", "Ad Budget", "Start Date", "Delivery Deadline",
+        "Total Count", "Pending Count", "Completed Count", "Notes", "Assignee"
+      ];
+
+      const csvRows = [headers.join(',')];
+
+      leads.forEach(lead => {
+        const totalReq = Number(lead.postersRequired || 0) + Number(lead.videosRequired || 0) + Number(lead.adsRequired || 0) + (lead.websiteRequired ? 1 : 0);
+        const pendingReq = Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)) + 
+                           Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)) + 
+                           Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0)) + 
+                           (lead.websiteRequired ? (lead.websiteStatus === 'Completed' ? 0 : 1) : 0);
+        const completedReq = totalReq - pendingReq;
+
+        const postersPending = Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0));
+        const postersReq = Number(lead.postersRequired || 0);
+        const postersCompleted = postersReq - postersPending;
+
+        const videosPending = Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0));
+        const videosReq = Number(lead.videosRequired || 0);
+        const videosCompleted = videosReq - videosPending;
+
+        const adsPending = Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0));
+        const adsReq = Number(lead.adsRequired || 0);
+        const adsCompleted = adsReq - adsPending;
+
+        const values = [
+          lead.createdAt || lead.timestamp || '',
+          lead.salespersonName || '',
+          lead.clientName || '',
+          lead.mobileNumber || '',
+          lead.email || '',
+          lead.companyName || '',
+          lead.businessCategory || '',
+          lead.websiteUrl || '',
+          lead.websiteRequired ? 'Yes' : 'No',
+          lead.websiteType || '',
+          lead.facebookId || '',
+          lead.facebookPassword || '',
+          lead.instagramId || '',
+          lead.instagramPassword || '',
+          `Total: ${postersReq} | Pending: ${postersPending} | Completed: ${postersCompleted}`,
+          `Total: ${videosReq} | Pending: ${videosPending} | Completed: ${videosCompleted}`,
+          `Total: ${adsReq} | Pending: ${adsPending} | Completed: ${adsCompleted}`,
+          lead.websiteStatus || 'Pending',
+          lead.websiteRequired ? (lead.websiteStatus === 'Completed' ? 0 : 1) : 0,
+          (lead.platforms || []).join('; '),
+          lead.brandColors || '',
+          lead.targetAudience || '',
+          lead.competitors || '',
+          lead.planAmount || 0,
+          lead.advanceAmount || 0,
+          lead.pendingAmount || 0,
+          lead.adBudget || '',
+          lead.startDate || '',
+          lead.deliveryDeadline || '',
+          totalReq,
+          pendingReq,
+          completedReq,
+          lead.notes || '',
+          lead.assignedToName || 'Unassigned'
+        ].map(val => {
+          const escaped = ('' + val).replace(/"/g, '""');
+          return `"${escaped}"`;
+        });
+        csvRows.push(values.join(','));
+      });
+
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `leads_report_all.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Sub-Header */}
+        <div className="flex items-center gap-3 border-b border-gray-200/50 dark:border-slate-800/50 pb-5">
+          <button
+            onClick={() => {
+              setCurrentView('dashboard');
+              setSearchTerm('');
+              setSelectedLeadIds([]);
+            }}
+            className="p-2 rounded-xl border border-gray-200 dark:border-slate-800 bg-white/50 hover:bg-white/80 dark:bg-slate-950/30 dark:hover:bg-slate-950/60 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all cursor-pointer"
+          >
+            <ArrowLeft className="w-4.5 h-4.5" />
+          </button>
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Task Assignment Console</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Assign campaign client briefs to Technical Team members
+            </p>
+          </div>
+        </div>
+
+        {/* Task Assignment Console Card */}
+        <Card title="Assign Client Tasks" subtitle="Select client cards to assign them to technical specialists in bulk">
+          
+          {/* Bulk Assignment Toolbar */}
+          {selectedLeadIds.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 mb-5 bg-indigo-500/10 dark:bg-indigo-500/5 border border-indigo-500/20 rounded-xl animate-in slide-in-from-top duration-200">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                <span className="text-sm font-semibold text-indigo-700 dark:text-indigo-300">
+                  {selectedLeadIds.length} client card(s) selected
+                </span>
+              </div>
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <select
+                  value={assignToTechId}
+                  onChange={(e) => setAssignToTechId(e.target.value)}
+                  className="rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-905 dark:text-white cursor-pointer outline-hidden focus:border-indigo-500"
+                >
+                  <option value="">Choose Technical Member...</option>
+                  {technicalList.map(tech => (
+                    <option key={tech._id} value={tech._id}>{tech.name}</option>
+                  ))}
+                  <option value="unassign">❌ Unassign Task</option>
+                </select>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleBulkAssign}
+                  disabled={!assignToTechId}
+                >
+                  Apply Assignment
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4 mb-6">
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Search */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="Search by client, company, category, rep..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Service Filter */}
+              <div className="w-full md:w-44">
+                <select
+                  value={filterService}
+                  onChange={(e) => setFilterService(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500"
+                >
+                  <option value="All">All Services</option>
+                  <option value="Posters">Posters</option>
+                  <option value="Videos">Videos</option>
+                  <option value="Ads">Advertisements</option>
+                  <option value="Website">Websites</option>
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="w-full md:w-44">
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
+              {/* Date Filters */}
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-650 dark:text-gray-400">
+                <div className="flex items-center gap-2">
+                  <span>Timeline From:</span>
+                  <input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>To:</span>
+                  <input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                {/* Clear Filters */}
+                {(filterService !== 'All' || filterStatus !== 'All' || filterStartDate || filterEndDate) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFilterService('All');
+                      setFilterStatus('All');
+                      setFilterStartDate('');
+                      setFilterEndDate('');
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={Download}
+                  onClick={handleExportAllCSV}
+                  disabled={leads.length === 0}
+                >
+                  Export CSV Report
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {allLeadsFiltered.length === 0 ? (
+            <div className="text-center py-12 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
+              <Users className="w-10 h-10 text-gray-300 dark:text-slate-700 mx-auto mb-3" />
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                {leads.length === 0 
+                  ? 'No client records have been submitted to the system yet.' 
+                  : 'No client records match the filter query.'}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+              <table className="min-w-[1000px] w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
+                    <th className="p-3 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={allLeadsFiltered.length > 0 && allLeadsFiltered.every(l => selectedLeadIds.includes(l._id))}
+                        onChange={() => handleSelectAllLeads(allLeadsFiltered)}
+                        className="rounded border-gray-300 dark:border-slate-800 text-indigo-650 focus:ring-indigo-500 cursor-pointer w-4 h-4"
+                      />
+                    </th>
+                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Contact</th>
+                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Company & Sector</th>
+                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Representative</th>
+                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assignee</th>
+                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Timestamp</th>
+                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Deliverables Status</th>
+                    <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Sync Status</th>
+                    <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40">
+                  {allLeadsFiltered.map((lead, idx) => (
+                    <tr key={idx} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/2 transition-colors">
+                      <td className="p-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedLeadIds.includes(lead._id)}
+                          onChange={() => handleSelectLead(lead._id)}
+                          className="rounded border-gray-300 dark:border-slate-800 text-indigo-650 focus:ring-indigo-500 cursor-pointer w-4 h-4"
+                        />
+                      </td>
+                      <td className="p-3 font-medium text-gray-900 dark:text-white">
+                        <div>{lead.clientName}</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500">{lead.email}</div>
+                      </td>
+                      <td className="p-3 text-gray-600 dark:text-gray-300">
+                        <div>{lead.companyName || '—'}</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500">{lead.businessCategory || '—'}</div>
+                      </td>
+                      <td className="p-3 text-sm text-indigo-600 dark:text-indigo-400 font-bold">
+                        {lead.salespersonName}
+                      </td>
+                      <td className="p-3 text-xs">
+                        {lead.assignedToName ? (
+                          <span className="bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-2 py-0.5 font-bold text-indigo-600 dark:text-indigo-400">
+                            {lead.assignedToName}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500 italic">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                        {(lead.createdAt || lead.timestamp) ? new Date(lead.createdAt || lead.timestamp).toLocaleString() : 'N/A'}
+                      </td>
+                      <td className="p-3 text-xs">
+                        <div className="space-y-1">
+                          {Number(lead.postersRequired || 0) > 0 && (
+                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                              <span>Posters: </span>
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {Number(lead.postersRequired || 0) - (Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)))} Comp / {Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0))} Pend
+                              </span>
+                            </div>
+                          )}
+                          {Number(lead.videosRequired || 0) > 0 && (
+                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                              <span>Videos: </span>
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {Number(lead.videosRequired || 0) - (Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)))} Comp / {Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0))} Pend
+                              </span>
+                            </div>
+                          )}
+                          {Number(lead.adsRequired || 0) > 0 && (
+                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                              <span>Ads: </span>
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {Number(lead.adsRequired || 0) - (Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0)))} Comp / {Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0))} Pend
+                              </span>
+                            </div>
+                          )}
+                          {!lead.postersRequired && !lead.videosRequired && !lead.adsRequired && (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className={`
+                          text-[10px] font-bold px-2 py-0.5 rounded-md border
+                          ${lead.status === 'Submitted to Admin'
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/10 dark:bg-emerald-500/5 dark:border-emerald-500/10'
+                            : lead.status === 'Client Submitted'
+                              ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/10 dark:bg-indigo-500/5 dark:border-indigo-500/10'
+                              : 'bg-slate-500/10 text-slate-600 border-slate-500/10 dark:bg-slate-500/5 dark:border-slate-500/10'
+                          }
+                        `}>
+                          {lead.status}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <button
+                          onClick={() => setSelectedLead(lead)}
+                          className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 transition-colors inline-flex cursor-pointer"
+                          title="Inspect Lead"
+                        >
+                          <Eye className="w-4.5 h-4.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Details Modal */}
+          {selectedLead && (
+            <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+              <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Lead Details Brief</h3>
+                    <p className="text-xs text-gray-400 dark:text-gray-550 mt-1">
+                      Submitted by {selectedLead.salespersonName} on {new Date(selectedLead.createdAt || selectedLead.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedLead(null)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal Content */}
+                <div className="p-6 overflow-y-auto space-y-6 text-sm text-gray-700 dark:text-gray-300">
+                  {/* Client Info */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2.5">
+                      Client Profile & Metadata
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 bg-gray-50 dark:bg-slate-950/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/40">
+                      <div><span className="text-gray-400">Client Name:</span> <strong className="text-gray-900 dark:text-white">{selectedLead.clientName}</strong></div>
+                      <div><span className="text-gray-400">Mobile Number:</span> <strong className="text-gray-900 dark:text-white">{selectedLead.mobileNumber}</strong></div>
+                      <div><span className="text-gray-400">Email Address:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.email}</span></div>
+                      <div><span className="text-gray-400">Company Name:</span> <span className="text-gray-900 dark:text-white">{selectedLead.companyName || '—'}</span></div>
+                      <div><span className="text-gray-400">Business Category:</span> <span className="text-gray-900 dark:text-white">{selectedLead.businessCategory || '—'}</span></div>
+                      <div><span className="text-gray-400">Website URL:</span> <a href={selectedLead.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline break-all">{selectedLead.websiteUrl || '—'}</a></div>
+                      <div><span className="text-gray-400">Website Required:</span> <strong className="text-gray-955 dark:text-white">{selectedLead.websiteRequired ? 'Yes' : 'No'}</strong></div>
+                      {selectedLead.websiteRequired && (
+                        <div className="md:col-span-2"><span className="text-gray-400">Website Type:</span> <span className="text-gray-900 dark:text-white font-semibold">{selectedLead.websiteType || '—'}</span></div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Account Access */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2.5">
+                      Social Channels Credentials
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-3 bg-gray-50 dark:bg-slate-950/20 rounded-xl border border-gray-100 dark:border-slate-800/40">
+                        <span className="text-xs font-semibold text-gray-400 block mb-1">Facebook ID</span>
+                        <span className="font-mono text-gray-900 dark:text-white">{selectedLead.facebookId || '—'}</span>
+                        {selectedLead.facebookPassword && (
+                          <div className="mt-1">
+                            <span className="text-xs font-semibold text-gray-400 block mb-1">Facebook Password</span>
+                            <span className="font-mono text-rose-500 select-all">{selectedLead.facebookPassword}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-3 bg-gray-50 dark:bg-slate-950/20 rounded-xl border border-gray-100 dark:border-slate-800/40">
+                        <span className="text-xs font-semibold text-gray-400 block mb-1">Instagram ID</span>
+                        <span className="font-mono text-gray-900 dark:text-white">{selectedLead.instagramId || '—'}</span>
+                        {selectedLead.instagramPassword && (
+                          <div className="mt-1">
+                            <span className="text-xs font-semibold text-gray-400 block mb-1">Instagram Password</span>
+                            <span className="font-mono text-rose-500 select-all">{selectedLead.instagramPassword}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Marketing Requirements */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2.5">
+                        Marketing Assets
+                      </h4>
+                      <div className="space-y-3 bg-gray-50 dark:bg-slate-950/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/40">
+                        {/* Posters */}
+                        {Number(selectedLead.postersRequired || 0) > 0 && (
+                          <div className="flex justify-between items-center border-b border-gray-200/40 dark:border-slate-800/40 pb-2">
+                            <div>
+                              <span className="text-gray-700 dark:text-gray-300 text-xs font-bold block">Posters</span>
+                              <span className="text-[10px] text-gray-400 dark:text-gray-550 font-semibold">Status: {selectedLead.postersStatus || 'Pending'}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                Total: {selectedLead.postersRequired || 0}
+                              </span>
+                              <div className="text-[10px] text-gray-550 dark:text-gray-400 font-bold mt-0.5">
+                                Completed: {Number(selectedLead.postersRequired || 0) - Number(selectedLead.postersPending ?? (selectedLead.postersStatus === 'Completed' ? 0 : selectedLead.postersRequired || 0))} | Pending: {Number(selectedLead.postersPending ?? (selectedLead.postersStatus === 'Completed' ? 0 : selectedLead.postersRequired || 0))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Videos */}
+                        {Number(selectedLead.videosRequired || 0) > 0 && (
+                          <div className="flex justify-between items-center border-b border-gray-200/40 dark:border-slate-800/40 pb-2">
+                            <div>
+                              <span className="text-gray-700 dark:text-gray-300 text-xs font-bold block">Videos</span>
+                              <span className="text-[10px] text-gray-400 dark:text-gray-550 font-semibold">Status: {selectedLead.videosStatus || 'Pending'}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                Total: {selectedLead.videosRequired || 0}
+                              </span>
+                              <div className="text-[10px] text-gray-550 dark:text-gray-400 font-bold mt-0.5">
+                                Completed: {Number(selectedLead.videosRequired || 0) - Number(selectedLead.videosPending ?? (selectedLead.videosStatus === 'Completed' ? 0 : selectedLead.videosRequired || 0))} | Pending: {Number(selectedLead.videosPending ?? (selectedLead.videosStatus === 'Completed' ? 0 : selectedLead.videosRequired || 0))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Ads */}
+                        {Number(selectedLead.adsRequired || 0) > 0 && (
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="text-gray-700 dark:text-gray-300 text-xs font-bold block">Advertisements</span>
+                              <span className="text-[10px] text-gray-400 dark:text-gray-550 font-semibold">Status: {selectedLead.adsStatus || 'Pending'}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                Total: {selectedLead.adsRequired || 0}
+                              </span>
+                              <div className="text-[10px] text-gray-550 dark:text-gray-400 font-bold mt-0.5">
+                                Completed: {Number(selectedLead.adsRequired || 0) - Number(selectedLead.adsPending ?? (selectedLead.adsStatus === 'Completed' ? 0 : selectedLead.adsRequired || 0))} | Pending: {Number(selectedLead.adsPending ?? (selectedLead.adsStatus === 'Completed' ? 0 : selectedLead.adsRequired || 0))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {!selectedLead.postersRequired && !selectedLead.videosRequired && !selectedLead.adsRequired && (
+                          <div className="text-xs text-gray-400 dark:text-gray-500 py-1">No core assets required</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2.5">
+                        Selected Platforms
+                      </h4>
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {selectedLead.platforms && selectedLead.platforms.length > 0 ? (
+                          selectedLead.platforms.map((plat, idx) => (
+                            <span key={idx} className="px-2.5 py-1 bg-indigo-500/10 dark:bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 text-xs font-semibold rounded-lg border border-indigo-500/20">
+                              {plat}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-gray-400">None selected</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Creative Brief */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2.5">
+                      Creative & Project Planning
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 dark:bg-slate-950/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/40">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-400">Brand Colors:</span>
+                        <span className="font-mono text-gray-900 dark:text-white font-medium">{selectedLead.brandColors || '—'}</span>
+                        {selectedLead.brandColors && (
+                          <span 
+                            className="w-4 h-4 rounded-full border border-gray-300 dark:border-slate-700 inline-block shadow-sm"
+                            style={{ backgroundColor: selectedLead.brandColors }}
+                          />
+                        )}
+                      </div>
+                      <div><span className="text-gray-400">Competitors:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.competitors || '—'}</span></div>
+                      <div><span className="text-gray-400">Plan Amount:</span> <span className="text-gray-900 dark:text-white font-bold">{selectedLead.planAmount ? `₹${selectedLead.planAmount}` : '—'}</span></div>
+                      <div><span className="text-gray-400">Advance Amount:</span> <span className="text-gray-900 dark:text-white font-bold">{selectedLead.advanceAmount ? `₹${selectedLead.advanceAmount}` : '—'}</span></div>
+                      <div><span className="text-gray-400">Pending Amount:</span> <span className="text-amber-600 dark:text-amber-400 font-bold">{selectedLead.pendingAmount ? `₹${selectedLead.pendingAmount}` : '—'}</span></div>
+                      <div><span className="text-gray-400">Ad Budget:</span> <span className="text-emerald-600 dark:text-emerald-400 font-bold">{selectedLead.adBudget ? `₹${selectedLead.adBudget}` : '—'}</span></div>
+                      <div><span className="text-gray-400">Start Date:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.startDate || '—'}</span></div>
+                      <div><span className="text-gray-400">Delivery Deadline:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.deliveryDeadline || '—'}</span></div>
+                      <div className="md:col-span-2 mt-1">
+                        <span className="text-gray-400 block mb-1">Target Audience:</span>
+                        <p className="text-gray-900 dark:text-white bg-white/60 dark:bg-slate-900/40 p-2.5 rounded-lg border border-gray-200/50 dark:border-slate-800/40">
+                          {selectedLead.targetAudience || '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Special Notes */}
+                  {selectedLead.notes && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1.5">
+                        Notes & Instructions
+                      </h4>
+                      <p className="p-3.5 bg-yellow-500/5 dark:bg-yellow-500/2 border border-yellow-500/20 text-yellow-900 dark:text-yellow-300 rounded-xl leading-relaxed">
+                        {selectedLead.notes}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-5 border-t border-gray-100 dark:border-slate-800/80 bg-gray-50/50 dark:bg-slate-900/30 flex justify-end">
+                  <Button onClick={() => setSelectedLead(null)} variant="outline" size="sm">
+                    Close View
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       
@@ -991,13 +1702,17 @@ export default function AdminPortal({
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5">
+        <div 
+          onClick={() => setCurrentView('assign-tasks')}
+          className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5 cursor-pointer hover:bg-blue-500/5 dark:hover:bg-blue-500/2 transition-all"
+          title="Click to assign tasks to technical team"
+        >
           <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
-            <Users className="w-5 h-5" />
+            <Sliders className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Representatives</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalRepsCount}</p>
+            <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Assign Tasks</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{leads.length}</p>
           </div>
         </div>
 
@@ -1489,14 +2204,99 @@ export default function AdminPortal({
               ))}
             </div>
           </Card>
+
+          {/* Technical Team Directory */}
+          <div className="mt-6">
+            <Card title="Technical Team Directory" subtitle="Manage technical specialist accounts and credentials">
+              {technicalList.length === 0 ? (
+                <div className="text-center py-8 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
+                  <Users className="w-8 h-8 text-gray-300 dark:text-slate-700 mx-auto mb-2" />
+                  <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    No technical team members have been registered yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {technicalList.map((tech, idx) => {
+                    const techLeadsCount = leads.filter(l => l.assignedTo === tech._id).length;
+                    return (
+                      <div 
+                        key={idx}
+                        className="p-5 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20 flex flex-col justify-between hover:scale-[1.01] hover:shadow-md group transition-all"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8.5 h-8.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-xs">
+                              {tech.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-gray-900 dark:text-white">
+                                {tech.name}
+                              </h4>
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold">
+                                @{tech.username}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRepToResetPassword({ id: tech._id, name: tech.name, username: tech.username });
+                                setResetPasswordInput('');
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                              title={`Reset Password for ${tech.name}`}
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRepToDelete({ id: tech._id, name: tech.name });
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 hover:text-red-650 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                              title={`Delete ${tech.name}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-gray-150/40 dark:border-slate-800/40 pt-3 mt-4 flex justify-between items-center text-[10px] font-semibold text-gray-400">
+                          <span>Active Assigned Leads:</span>
+                          <span className="bg-blue-500/15 dark:bg-blue-500/25 border border-blue-500/20 px-2 py-0.5 rounded text-blue-600 dark:text-blue-400 font-extrabold text-xs">
+                            {techLeadsCount}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          </div>
         </div>
 
         {/* Add Salesperson & Configuration Sidebar */}
         <div className="lg:col-span-1 space-y-6">
-          <Card title="Register Representative" subtitle="Create new salesperson profile accounts dynamically">
+          <Card title="Register Staff Member" subtitle="Create new salesperson or technical accounts dynamically">
             <form onSubmit={handleCreateRep} className="space-y-4">
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-xs font-semibold text-gray-750 dark:text-gray-300">
+                  Staff Role
+                </label>
+                <select
+                  value={newRepRole}
+                  onChange={(e) => setNewRepRole(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-850 py-2.5 px-3.5 text-xs bg-white dark:bg-slate-900/40 text-gray-950 dark:text-white transition-all outline-hidden focus:border-indigo-500"
+                >
+                  <option value="salesperson">Salesperson</option>
+                  <option value="technical">Technical Team Member</option>
+                </select>
+              </div>
               <Input
-                label="Salesperson Name"
+                label="Staff Name"
                 placeholder="Enter full name"
                 required
                 icon={UserPlus}

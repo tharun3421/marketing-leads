@@ -11,6 +11,7 @@ import Card from './components/UI/Card';
 // Portals
 import SalesPortal from './components/Portals/SalesPortal';
 import AdminPortal from './components/Portals/AdminPortal';
+import TechnicalPortal from './components/Portals/TechnicalPortal';
 
 export default function App() {
   const { user, logout, login, loading } = useAuth();
@@ -26,6 +27,7 @@ export default function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [selectedRole, setSelectedRole] = useState('salesperson');
 
   // Theme application
   useEffect(() => {
@@ -101,7 +103,7 @@ export default function App() {
     }
 
     setIsSubmitting(true);
-    const result = await login(cleanUsername, passwordInput);
+    const result = await login(cleanUsername, passwordInput, selectedRole);
     setIsSubmitting(false);
 
     if (result.success) {
@@ -179,6 +181,21 @@ export default function App() {
 
                   <div className="flex flex-col gap-1.5 w-full">
                     <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      Select Role
+                    </label>
+                    <select
+                      value={selectedRole}
+                      onChange={(e) => setSelectedRole(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3.5 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-950 dark:text-white transition-all outline-hidden focus:border-indigo-500"
+                    >
+                      <option value="salesperson" className="text-gray-900">Sales</option>
+                      <option value="technical" className="text-gray-900">Technical</option>
+                      <option value="admin" className="text-gray-900">Admin</option>
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 w-full">
+                    <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                       Username
                     </label>
                     <input
@@ -250,6 +267,13 @@ export default function App() {
             >
               {user.role === 'salesperson' ? (
                 <SalesPortal 
+                  notifications={notifications}
+                  setNotifications={setNotifications}
+                  onAddToast={addToast}
+                  onAddNotification={addNotification}
+                />
+              ) : user.role === 'technical' ? (
+                <TechnicalPortal 
                   notifications={notifications}
                   setNotifications={setNotifications}
                   onAddToast={addToast}

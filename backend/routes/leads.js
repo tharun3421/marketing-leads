@@ -12,10 +12,48 @@ router.get('/', protect, async (req, res) => {
     let leads;
     if (req.user.role === 'admin') {
       leads = await Lead.find({}).sort({ createdAt: -1 });
+    } else if (req.user.role === 'technical') {
+      leads = await Lead.find({ assignedTo: req.user.id }).sort({ createdAt: -1 });
     } else {
       leads = await Lead.find({ salesperson: req.user.id }).sort({ createdAt: -1 });
     }
     res.json(leads);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   PUT /api/leads/assign
+// @desc    Assign leads to a technical user (Admin only)
+// @access  Private/Admin
+router.put('/assign', protect, async (req, res) => {
+  // Enforce admin check manually since adminOnly might be in other middleware file or we can import it
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Access denied: Admin role required' });
+  }
+  const { leadIds, assignedTo } = req.body;
+
+  if (!Array.isArray(leadIds) || leadIds.length === 0) {
+    return res.status(400).json({ message: 'Invalid lead IDs provided' });
+  }
+
+  try {
+    let techName = null;
+    if (assignedTo) {
+      const User = require('../models/User');
+      const techUser = await User.findById(assignedTo);
+      if (!techUser || techUser.role !== 'technical') {
+        return res.status(400).json({ message: 'Selected user must be a technical team member' });
+      }
+      techName = techUser.name;
+    }
+
+    await Lead.updateMany(
+      { _id: { $in: leadIds } },
+      { assignedTo, assignedToName: techName }
+    );
+
+    res.json({ message: 'Leads assigned successfully', assignedToName: techName });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -51,8 +89,12 @@ router.put('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Lead record not found' });
     }
 
-    // Verify ownership (only salesperson who created it or admin can edit)
-    if (req.user.role !== 'admin' && lead.salesperson.toString() !== req.user.id.toString()) {
+    // Verify ownership or assignment (only salesperson creator, admin, or assigned technical user can edit)
+    const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
+    const isAdmin = req.user.role === 'admin';
+    const isAssignee = req.user.role === 'technical' && lead.assignedTo && lead.assignedTo.toString() === req.user.id.toString();
+
+    if (!isAdmin && !isCreator && !isAssignee) {
       return res.status(403).json({ message: 'Access denied: Cannot edit leads assigned to others' });
     }
 

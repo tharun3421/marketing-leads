@@ -154,6 +154,15 @@ const leadSchema = new mongoose.Schema({
     type: String,
     enum: ['Draft', 'Submitted to Admin'],
     default: 'Draft'
+  },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  assignedToName: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

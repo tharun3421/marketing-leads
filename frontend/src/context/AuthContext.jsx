@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, [token, user]);
 
-  const login = async (username, password) => {
+  const login = async (username, password, role) => {
     const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
     try {
@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password, role })
       });
 
       const data = await response.json();

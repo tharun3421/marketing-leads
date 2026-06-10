@@ -16,12 +16,17 @@ const generateToken = (id) => {
 // @desc    Authenticate user & get token
 // @access  Public
 router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, role } = req.body;
 
   try {
     const user = await User.findOne({ username });
 
     if (user && (await user.matchPassword(password))) {
+      // Enforce selected role verification
+      if (role && user.role !== role) {
+        return res.status(401).json({ message: `Invalid credentials for the selected role (${role})` });
+      }
+
       res.json({
         _id: user._id,
         name: user.name,
@@ -41,7 +46,7 @@ router.post('/login', async (req, res) => {
 // @desc    Register a new salesperson user
 // @access  Private/Admin
 router.post('/register', protect, adminOnly, async (req, res) => {
-  const { name, username, password } = req.body;
+  const { name, username, password, role } = req.body;
 
   try {
     const userExists = await User.findOne({ username });
@@ -50,11 +55,13 @@ router.post('/register', protect, adminOnly, async (req, res) => {
       return res.status(400).json({ message: 'Username is already taken' });
     }
 
+    const assignedRole = (role === 'technical' || role === 'salesperson') ? role : 'salesperson';
+
     const user = await User.create({
       name,
       username,
       password, // will be auto-hashed by User pre-save middleware
-      role: 'salesperson'
+      role: assignedRole
     });
 
     if (user) {
@@ -84,28 +91,43 @@ router.get('/salespersons', protect, async (req, res) => {
   }
 });
 
+// @route   GET /api/auth/technical
+// @desc    Get all technical users
+// @access  Private
+router.get('/technical', protect, async (req, res) => {
+  try {
+    const technical = await User.find({ role: 'technical' }).select('name username createdAt');
+    res.json(technical);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // @route   DELETE /api/auth/salespersons/:id
-// @desc    Delete a salesperson and their leads
+// @desc    Delete a salesperson or technical user and handle cascade
 // @access  Private/Admin
 router.delete('/salespersons/:id', protect, adminOnly, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
 
     if (!user) {
-      return res.status(404).json({ message: 'Salesperson not found' });
+      return res.status(404).json({ message: 'User not found' });
     }
 
-    if (user.role !== 'salesperson') {
-      return res.status(400).json({ message: 'Only salesperson accounts can be deleted' });
+    if (user.role === 'salesperson') {
+      // Cascade delete: Remove all leads associated with this salesperson
+      await Lead.deleteMany({ salesperson: req.params.id });
+    } else if (user.role === 'technical') {
+      // Cascade unassign: Clear assignedTo fields on all leads assigned to this technical member
+      await Lead.updateMany({ assignedTo: req.params.id }, { assignedTo: null, assignedToName: null });
+    } else {
+      return res.status(400).json({ message: 'Only salesperson and technical accounts can be deleted' });
     }
-
-    // Cascade delete: Remove all leads associated with this salesperson
-    await Lead.deleteMany({ salesperson: req.params.id });
 
     // Delete the user
     await User.findByIdAndDelete(req.params.id);
 
-    res.json({ message: 'Salesperson and all associated leads deleted successfully' });
+    res.json({ message: 'Account and associated leads/assignments updated successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -125,11 +147,11 @@ router.put('/salespersons/:id/reset-password', protect, adminOnly, async (req, r
     const user = await User.findById(req.params.id);
 
     if (!user) {
-      return res.status(404).json({ message: 'Salesperson not found' });
+      return res.status(404).json({ message: 'User not found' });
     }
 
-    if (user.role !== 'salesperson') {
-      return res.status(400).json({ message: 'Only salesperson passwords can be reset' });
+    if (user.role !== 'salesperson' && user.role !== 'technical') {
+      return res.status(400).json({ message: 'Only salesperson and technical passwords can be reset' });
     }
 
     user.password = password;
