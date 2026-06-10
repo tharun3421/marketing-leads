@@ -3,7 +3,7 @@ import useLocalStorage from './hooks/useLocalStorage';
 import ToastContainer from './components/UI/Toast';
 import DarkModeToggle from './components/UI/DarkModeToggle';
 import Button from './components/UI/Button';
-import { Lock, Eye, EyeOff } from 'lucide-react';
+import { Lock, Eye, EyeOff, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from './context/AuthContext';
 import Card from './components/UI/Card';
@@ -25,6 +25,7 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
 
   // Theme application
   useEffect(() => {
@@ -211,6 +212,15 @@ export default function App() {
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    <div className="flex justify-end mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotModal(true)}
+                        className="text-xs text-indigo-600 dark:text-indigo-405 hover:text-indigo-700 dark:hover:text-indigo-300 font-semibold cursor-pointer transition-colors"
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
                   </div>
 
                   <Button
@@ -257,6 +267,47 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Forgot Password Instructions Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in duration-200">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center shrink-0">
+                  <HelpCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Forgot Password?</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">How to request a password reset</p>
+                </div>
+              </div>
+
+              <div className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed space-y-2.5">
+                <p>
+                  To reset your password, please request a reset from your <strong>administrator</strong> directly (via email, slack, or in-person).
+                </p>
+                <p>
+                  The administrator can securely update your password from the <strong>Salesforce Directory</strong> in the Admin Dashboard.
+                </p>
+                <p>
+                  Once the administrator has updated your password, you will be able to log in immediately with your new credentials.
+                </p>
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-slate-800/40">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowForgotModal(false)}
+                >
+                  Got It
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

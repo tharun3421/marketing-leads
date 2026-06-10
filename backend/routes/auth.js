@@ -111,4 +111,34 @@ router.delete('/salespersons/:id', protect, adminOnly, async (req, res) => {
   }
 });
 
+// @route   PUT /api/auth/salespersons/:id/reset-password
+// @desc    Reset a salesperson's password (Admin only)
+// @access  Private/Admin
+router.put('/salespersons/:id/reset-password', protect, adminOnly, async (req, res) => {
+  const { password } = req.body;
+
+  if (!password || password.trim().length < 6) {
+    return res.status(400).json({ message: 'Password must be at least 6 characters long' });
+  }
+
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'Salesperson not found' });
+    }
+
+    if (user.role !== 'salesperson') {
+      return res.status(400).json({ message: 'Only salesperson passwords can be reset' });
+    }
+
+    user.password = password;
+    await user.save();
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;

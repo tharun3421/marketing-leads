@@ -21,7 +21,8 @@ import {
   LogOut,
   HelpCircle,
   Bell,
-  Trash2
+  Trash2,
+  KeyRound
 } from 'lucide-react';
 import Card from '../UI/Card';
 import Button from '../UI/Button';
@@ -53,6 +54,8 @@ export default function AdminPortal({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLead, setSelectedLead] = useState(null);
   const [repToDelete, setRepToDelete] = useState(null);
+  const [repToResetPassword, setRepToResetPassword] = useState(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState('');
 
   // Advanced filters state
   const [filterService, setFilterService] = useState('All');
@@ -267,6 +270,42 @@ export default function AdminPortal({
       onAddToast('Deletion Failed', 'Network or server error during deletion.', 'error');
     } finally {
       setRepToDelete(null);
+    }
+  };
+
+  // Handle representative password reset confirmation
+  const handleResetPasswordConfirm = async (e) => {
+    if (e) e.preventDefault();
+    if (!repToResetPassword) return;
+    const cleanPassword = resetPasswordInput;
+
+    if (!cleanPassword || cleanPassword.length < 6) {
+      onAddToast('Validation Error', 'Password must be at least 6 characters long.', 'warning');
+      return;
+    }
+
+    try {
+      const res = await authFetch(`/api/auth/salespersons/${repToResetPassword.id}/reset-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: cleanPassword })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onAddToast('Password Updated', `Successfully updated password for ${repToResetPassword.name}.`, 'success');
+        if (onAddNotification) {
+          onAddNotification(`Representative "${repToResetPassword.name}" password was reset by Admin.`, 'info');
+        }
+        setRepToResetPassword(null);
+        setResetPasswordInput('');
+      } else {
+        onAddToast('Reset Failed', data.message || 'Error resetting password.', 'error');
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      onAddToast('Reset Failed', 'Network or server error during password reset.', 'error');
     }
   };
 
@@ -1400,16 +1439,29 @@ export default function AdminPortal({
                     </div>
                     <div className="flex items-center gap-1">
                       {rep.id && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRepToDelete({ id: rep.id, name: rep.name });
-                          }}
-                          className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 hover:text-red-600 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
-                          title={`Delete ${rep.name}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRepToResetPassword({ id: rep.id, name: rep.name, username: rep.username });
+                              setResetPasswordInput('');
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            title={`Reset Password for ${rep.name}`}
+                          >
+                            <KeyRound className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRepToDelete({ id: rep.id, name: rep.name });
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 hover:text-red-600 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            title={`Delete ${rep.name}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                       <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-600 transition-colors" />
                     </div>
@@ -1567,6 +1619,64 @@ export default function AdminPortal({
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Representative Password Modal */}
+      {repToResetPassword && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in duration-200">
+            <form onSubmit={handleResetPasswordConfirm} className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center shrink-0">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">Reset Representative Password</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Change password for {repToResetPassword.name}</p>
+                </div>
+              </div>
+
+              <div className="text-xs text-gray-650 dark:text-gray-300 leading-normal">
+                Updating password for username: <code className="bg-indigo-500/10 dark:bg-indigo-500/20 px-1 py-0.5 rounded font-mono font-bold text-indigo-600 dark:text-indigo-400">{repToResetPassword.username}</code>
+              </div>
+
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter new password (min 6 chars)"
+                  required
+                  value={resetPasswordInput}
+                  onChange={(e) => setResetPasswordInput(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3.5 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white transition-all outline-hidden focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-gray-100 dark:border-slate-800/40">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setRepToResetPassword(null);
+                    setResetPasswordInput('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                >
+                  Update Password
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}
