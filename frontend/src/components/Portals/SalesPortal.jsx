@@ -252,8 +252,7 @@ export default function SalesPortal({
     const updatedLeadData = {
       ...lead,
       [statusKey]: newStatus,
-      [pendingKey]: pendingVal,
-      status: 'Draft'
+      [pendingKey]: pendingVal
     };
 
     try {

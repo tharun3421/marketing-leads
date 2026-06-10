@@ -56,11 +56,13 @@ router.put('/:id', protect, async (req, res) => {
       return res.status(403).json({ message: 'Access denied: Cannot edit leads assigned to others' });
     }
 
-    // Update fields and reset status to Draft
+    // Update fields and preserve existing status
     const updatedData = {
-      ...req.body,
-      status: 'Draft' // Reset to Draft so they can re-sync changes
+      ...req.body
     };
+
+    // Explicitly retain current status
+    updatedData.status = lead.status;
 
     // Prevent overwriting owner
     delete updatedData.salesperson;
