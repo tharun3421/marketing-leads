@@ -13,19 +13,19 @@ const sanitizeNumberFields = (body) => {
     'adBudget'
   ];
   numberFields.forEach(field => {
-    if (body[field] === '' || body[field] === undefined || body[field] === null) {
+    if (body[field] === '') {
       body[field] = 0;
-    } else {
+    } else if (body[field] !== undefined && body[field] !== null) {
       const num = Number(body[field]);
       body[field] = isNaN(num) ? 0 : num;
     }
   });
 
   // Sanitize empty strings for ObjectId and Enum fields to prevent cast/validation failures
-  if (body.assignedTo === '' || body.assignedTo === undefined) {
+  if (body.assignedTo === '') {
     body.assignedTo = null;
   }
-  if (body.assignedTeam === '' || body.assignedTeam === undefined) {
+  if (body.assignedTeam === '') {
     body.assignedTeam = null;
   }
 };
