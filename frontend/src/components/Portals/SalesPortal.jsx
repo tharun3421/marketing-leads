@@ -684,7 +684,7 @@ export default function SalesPortal({
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5">
           <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
             <Users className="w-5 h-5" />
@@ -969,14 +969,30 @@ export default function SalesPortal({
                       <div className="space-y-4">
                         {/* Header */}
                         <div>
-                          <h4 className="text-base font-bold text-gray-900 dark:text-white pr-20 truncate">{lead.clientName}</h4>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-0.5 font-medium">
+                          <h4 className="text-base font-bold text-gray-900 dark:text-white pr-20 truncate">
+                            {lead.clientId && (
+                              <span className="text-indigo-600 dark:text-indigo-400 font-bold mr-1.5">
+                                [{lead.clientId}]
+                              </span>
+                            )}
+                            {lead.clientName}
+                          </h4>
+                          <p className="text-xs text-gray-505 dark:text-gray-400 flex items-center gap-1.5 mt-0.5 font-medium">
                             {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
                           </p>
                         </div>
 
                         {/* Details grid */}
                         <div className="grid grid-cols-1 gap-1.5 text-xs text-gray-600 dark:text-gray-400 font-medium border-t border-gray-100 dark:border-slate-800/40 pt-2.5">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5 text-gray-400" />
+                            {lead.clientId && (
+                              <span className="text-indigo-650 dark:text-indigo-400 font-bold mr-1.5">
+                                [{lead.clientId}]
+                              </span>
+                            )}
+                            {new Date(lead.createdAt || lead.timestamp).toLocaleDateString()}
+                          </div>
                           <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-gray-400" /> {lead.email}</div>
                           <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" /> WhatsApp: {lead.mobileNumber}</div>
                           {lead.websiteUrl && <div className="flex items-center gap-2 truncate"><Globe className="w-3.5 h-3.5 text-gray-400" /> {lead.websiteUrl}</div>}

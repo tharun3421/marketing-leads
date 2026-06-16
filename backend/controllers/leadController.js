@@ -129,8 +129,20 @@ const createLead = async (req, res) => {
     // Sanitize numeric fields
     sanitizeNumberFields(req.body);
 
+    // Generate sequential client ID starting with 'emp' (e.g. emp001, emp002, etc.)
+    const lastLead = await Lead.findOne({ clientId: { $regex: /^emp\d+$/i } }).sort({ createdAt: -1 });
+    let nextNum = 1;
+    if (lastLead && lastLead.clientId) {
+      const match = lastLead.clientId.match(/\d+/);
+      if (match) {
+        nextNum = parseInt(match[0], 10) + 1;
+      }
+    }
+    const clientId = 'emp' + String(nextNum).padStart(3, '0');
+
     const leadData = {
       ...req.body,
+      clientId,
       salesperson: req.user.id,
       salespersonName: req.user.name,
       status: 'Draft'

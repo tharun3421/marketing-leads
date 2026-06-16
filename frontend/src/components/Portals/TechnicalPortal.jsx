@@ -94,6 +94,15 @@ export default function TechnicalPortal({
     setAdsPending(Number(lead.adsPending ?? lead.adsRequired ?? 0));
     setWebsiteStatus(lead.websiteStatus || 'Pending');
     setRemarks(lead.remarks || '');
+
+    if (window.innerWidth < 1280) {
+      setTimeout(() => {
+        const panel = document.getElementById('update-milestone-panel');
+        if (panel) {
+          panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 120);
+    }
   };
 
   const handleSaveUpdates = async (e) => {
@@ -330,7 +339,12 @@ export default function TechnicalPortal({
           {/* Card Header */}
           <div className="flex justify-between items-start gap-2">
             <div>
-              <h4 className="text-sm font-extrabold text-gray-950 dark:text-white leading-tight">
+              <h4 className="text-sm font-extrabold text-gray-955 dark:text-white leading-tight">
+                {lead.clientId && (
+                  <span className="text-indigo-600 dark:text-indigo-400 font-bold mr-1.5">
+                    [{lead.clientId}]
+                  </span>
+                )}
                 {lead.clientName}
               </h4>
               <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
@@ -346,7 +360,13 @@ export default function TechnicalPortal({
 
           {/* Contact Details & Date */}
           <div className="text-[11px] space-y-1 bg-slate-500/5 dark:bg-slate-900/30 p-2.5 rounded-xl border border-gray-200/50 dark:border-slate-800/40">
-            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium flex-wrap">
+              {lead.clientId && (
+                <>
+                  <span className="text-[10px] text-gray-400">ID:</span>
+                  <span className="text-gray-800 dark:text-gray-300 font-bold mr-2.5">[{lead.clientId}]</span>
+                </>
+              )}
               <span className="text-[10px] text-gray-400">Date:</span>
               <span className="text-gray-800 dark:text-gray-300 font-bold">{dateStr}</span>
             </div>
@@ -915,7 +935,7 @@ export default function TechnicalPortal({
         </div>
 
         {/* Update Panel */}
-        <div className="xl:col-span-1">
+        <div className="xl:col-span-1" id="update-milestone-panel">
           {editingLead ? (
             <Card title="Update Deliverables" subtitle={`Modify progress spec parameters for ${editingLead.clientName}`}>
               <form onSubmit={handleSaveUpdates} className="space-y-4 text-xs font-semibold">

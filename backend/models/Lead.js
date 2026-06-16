@@ -178,6 +178,10 @@ const leadSchema = new mongoose.Schema({
   assignedToName: {
     type: String,
     default: null
+  },
+  clientId: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true
