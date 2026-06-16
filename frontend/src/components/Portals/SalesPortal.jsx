@@ -1010,27 +1010,79 @@ export default function SalesPortal({
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                             {Number(lead.postersRequired) > 0 && (
-                              <div className="flex items-center justify-between p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
-                                <span className="font-semibold text-gray-600 dark:text-gray-400 truncate mr-2">Posters ({lead.postersRequired})</span>
-                                {renderStatusBadge(leadId, 'posters', lead.postersStatus || 'Pending')}
+                              <div className="flex flex-col gap-1.5 p-3 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-bold text-gray-700 dark:text-gray-300">Posters</span>
+                                  {renderStatusBadge(leadId, 'posters', lead.postersStatus || 'Pending')}
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] text-gray-505 dark:text-gray-400">
+                                  <span>Total: <strong>{lead.postersRequired}</strong></span>
+                                  <span>Completed: <strong className="text-emerald-600 dark:text-emerald-400">{Number(lead.postersRequired) - Number(lead.postersPending ?? 0)}</strong></span>
+                                  <span>Pending: <strong className="text-amber-600 dark:text-amber-400">{lead.postersPending ?? 0}</strong></span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+                                  <div 
+                                    className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                                    style={{ width: `${((Number(lead.postersRequired) - Number(lead.postersPending ?? 0)) / Number(lead.postersRequired)) * 100}%` }}
+                                  />
+                                </div>
                               </div>
                             )}
                             {Number(lead.videosRequired) > 0 && (
-                              <div className="flex items-center justify-between p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
-                                <span className="font-semibold text-gray-600 dark:text-gray-400 truncate mr-2">Videos ({lead.videosRequired})</span>
-                                {renderStatusBadge(leadId, 'videos', lead.videosStatus || 'Pending')}
+                              <div className="flex flex-col gap-1.5 p-3 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-bold text-gray-700 dark:text-gray-300">Videos</span>
+                                  {renderStatusBadge(leadId, 'videos', lead.videosStatus || 'Pending')}
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] text-gray-505 dark:text-gray-400">
+                                  <span>Total: <strong>{lead.videosRequired}</strong></span>
+                                  <span>Completed: <strong className="text-emerald-600 dark:text-emerald-400">{Number(lead.videosRequired) - Number(lead.videosPending ?? 0)}</strong></span>
+                                  <span>Pending: <strong className="text-amber-600 dark:text-amber-400">{lead.videosPending ?? 0}</strong></span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+                                  <div 
+                                    className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                                    style={{ width: `${((Number(lead.videosRequired) - Number(lead.videosPending ?? 0)) / Number(lead.videosRequired)) * 100}%` }}
+                                  />
+                                </div>
                               </div>
                             )}
                             {Number(lead.adsRequired) > 0 && (
-                              <div className="flex items-center justify-between p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
-                                <span className="font-semibold text-gray-600 dark:text-gray-400 truncate mr-2">Ads ({lead.adsRequired})</span>
-                                {renderStatusBadge(leadId, 'ads', lead.adsStatus || 'Pending')}
+                              <div className="flex flex-col gap-1.5 p-3 bg-gray-50/50 dark:bg-slate-955/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-bold text-gray-700 dark:text-gray-300">Ads</span>
+                                  {renderStatusBadge(leadId, 'ads', lead.adsStatus || 'Pending')}
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] text-gray-505 dark:text-gray-400">
+                                  <span>Total: <strong>{lead.adsRequired}</strong></span>
+                                  <span>Completed: <strong className="text-emerald-600 dark:text-emerald-400">{Number(lead.adsRequired) - Number(lead.adsPending ?? 0)}</strong></span>
+                                  <span>Pending: <strong className="text-amber-600 dark:text-amber-400">{lead.adsPending ?? 0}</strong></span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+                                  <div 
+                                    className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                                    style={{ width: `${((Number(lead.adsRequired) - Number(lead.adsPending ?? 0)) / Number(lead.adsRequired)) * 100}%` }}
+                                  />
+                                </div>
                               </div>
                             )}
                             {lead.websiteRequired && (
-                              <div className="flex items-center justify-between p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40 col-span-1 sm:col-span-2">
-                                <span className="font-semibold text-gray-600 dark:text-gray-400 truncate mr-2">Website ({lead.websiteType || 'Dev'})</span>
-                                {renderStatusBadge(leadId, 'website', lead.websiteStatus || 'Pending')}
+                              <div className="flex flex-col gap-1.5 p-3 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40 col-span-1 sm:col-span-2">
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="font-bold text-gray-700 dark:text-gray-300">Website ({lead.websiteType || 'Dev'})</span>
+                                  {renderStatusBadge(leadId, 'website', lead.websiteStatus || 'Pending')}
+                                </div>
+                                <div className="flex justify-between items-center text-[10px] text-gray-505 dark:text-gray-400">
+                                  <span>Total: <strong>1</strong></span>
+                                  <span>Completed: <strong className="text-emerald-600 dark:text-emerald-400">{lead.websiteStatus === 'Completed' ? 1 : 0}</strong></span>
+                                  <span>Pending: <strong className="text-amber-600 dark:text-amber-400">{lead.websiteStatus === 'Completed' ? 0 : 1}</strong></span>
+                                </div>
+                                <div className="w-full bg-gray-200 dark:bg-slate-800 h-1 rounded-full overflow-hidden">
+                                  <div 
+                                    className="bg-emerald-500 h-full rounded-full transition-all duration-500" 
+                                    style={{ width: `${lead.websiteStatus === 'Completed' ? 100 : 0}%` }}
+                                  />
+                                </div>
                               </div>
                             )}
                           </div>
@@ -1040,14 +1092,6 @@ export default function SalesPortal({
                       {/* Actions */}
                       <div className="flex flex-wrap items-center justify-between border-t border-gray-100 dark:border-slate-800/40 pt-3.5 mt-1 gap-2">
                         <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => openEditWizard(lead)}
-                            icon={Edit3}
-                          >
-                            Edit
-                          </Button>
                           <Button
                             variant="outline"
                             size="sm"

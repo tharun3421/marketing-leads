@@ -73,31 +73,6 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
                 min: { value: 0, message: 'Quantity cannot be negative' }
               })}
             />
-            {!isClientPortal && watchPosters > 0 && (
-              <div className="space-y-3 border-t border-gray-150/40 dark:border-slate-800/40 pt-3">
-                <Select
-                  label="Posters Status"
-                  placeholder="Select Status"
-                  options={statusOptions}
-                  error={errors.postersStatus?.message}
-                  {...register('postersStatus')}
-                />
-                {watchPostersStatus === 'In Progress' && (
-                  <Input
-                    label="Posters Pending Count"
-                    type="number"
-                    min="0"
-                    max={watchPosters}
-                    placeholder="Enter pending count"
-                    error={errors.postersPending?.message}
-                    {...register('postersPending', {
-                      min: { value: 0, message: 'Pending count cannot be negative' },
-                      max: { value: watchPosters, message: `Pending count cannot exceed required amount (${watchPosters})` }
-                    })}
-                  />
-                )}
-              </div>
-            )}
           </div>
 
           {/* Videos Block */}
@@ -114,31 +89,6 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
                 min: { value: 0, message: 'Quantity cannot be negative' }
               })}
             />
-            {!isClientPortal && watchVideos > 0 && (
-              <div className="space-y-3 border-t border-gray-150/40 dark:border-slate-800/40 pt-3">
-                <Select
-                  label="Videos Status"
-                  placeholder="Select Status"
-                  options={statusOptions}
-                  error={errors.videosStatus?.message}
-                  {...register('videosStatus')}
-                />
-                {watchVideosStatus === 'In Progress' && (
-                  <Input
-                    label="Videos Pending Count"
-                    type="number"
-                    min="0"
-                    max={watchVideos}
-                    placeholder="Enter pending count"
-                    error={errors.videosPending?.message}
-                    {...register('videosPending', {
-                      min: { value: 0, message: 'Pending count cannot be negative' },
-                      max: { value: watchVideos, message: `Pending count cannot exceed required amount (${watchVideos})` }
-                    })}
-                  />
-                )}
-              </div>
-            )}
           </div>
 
           {/* Ads Block */}
@@ -155,50 +105,8 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
                 min: { value: 0, message: 'Quantity cannot be negative' }
               })}
             />
-            {!isClientPortal && watchAds > 0 && (
-              <div className="space-y-3 border-t border-gray-150/40 dark:border-slate-800/40 pt-3">
-                <Select
-                  label="Ads Status"
-                  placeholder="Select Status"
-                  options={statusOptions}
-                  error={errors.adsStatus?.message}
-                  {...register('adsStatus')}
-                />
-                {watchAdsStatus === 'In Progress' && (
-                  <Input
-                    label="Ads Pending Count"
-                    type="number"
-                    min="0"
-                    max={watchAds}
-                    placeholder="Enter pending count"
-                    error={errors.adsPending?.message}
-                    {...register('adsPending', {
-                      min: { value: 0, message: 'Pending count cannot be negative' },
-                      max: { value: watchAds, message: `Pending count cannot exceed required amount (${watchAds})` }
-                    })}
-                  />
-                )}
-              </div>
-            )}
           </div>
         </div>
-
-        {!isClientPortal && watchWebsiteRequired && (
-          <div className="mb-6 p-4 bg-indigo-500/5 dark:bg-indigo-500/2 border border-indigo-500/10 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h5 className="text-sm font-semibold text-gray-900 dark:text-white">Website Project Status</h5>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Define development milestone status</p>
-            </div>
-            <div className="w-full sm:w-48">
-              <Select
-                placeholder="Select Status"
-                options={statusOptions}
-                error={errors.websiteStatus?.message}
-                {...register('websiteStatus')}
-              />
-            </div>
-          </div>
-        )}
 
         {/* Channels */}
         <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2.5">
