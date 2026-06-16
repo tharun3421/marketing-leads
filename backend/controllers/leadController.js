@@ -34,8 +34,7 @@ const getLeads = async (req, res) => {
       leads = await Lead.find({ salesperson: req.user.id }).sort({ createdAt: -1 });
     } else if (req.user.role === 'technical') {
       const query = {
-        assignedTeam: { $in: [req.user.team, 'all'] },
-        status: 'Submitted to Admin'
+        assignedTeam: { $in: [req.user.team, 'all'] }
       };
 
       if (req.user.team === 'developer') {
