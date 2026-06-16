@@ -859,7 +859,14 @@ export default function SalesPortal({
                             <td className="p-3 font-bold text-gray-900 dark:text-white">
                               {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
                             </td>
-                            <td className="p-3 text-gray-900 dark:text-white font-bold">{client.clientName}</td>
+                            <td className="p-3 text-gray-900 dark:text-white font-bold">
+                              <div>{client.clientName}</div>
+                              {client.companyName && (
+                                <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">
+                                  {client.companyName}
+                                </div>
+                              )}
+                            </td>
                             <td className="p-3 font-mono">{client.mobileNumber}</td>
                             <td className="p-3">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
