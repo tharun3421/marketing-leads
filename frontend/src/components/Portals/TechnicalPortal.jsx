@@ -163,8 +163,8 @@ export default function TechnicalPortal({
       const res = await authFetch(`/api/leads/${lead._id}`, {
         method: 'PUT',
         body: JSON.stringify({
-          assignedTo: user.id,
-          assignedToName: user.name,
+          assignedTo: user?.id,
+          assignedToName: user?.name,
           workflowStatus: 'Allocated'
         })
       });
@@ -232,7 +232,7 @@ export default function TechnicalPortal({
 
   const filteredLeads = leads.filter(lead => {
     // 0. Only show unclaimed tasks or tasks assigned to me in the main checklist
-    if (lead.assignedTo && lead.assignedTo !== user.id) {
+    if (lead.assignedTo && lead.assignedTo !== user?.id) {
       return false;
     }
 
@@ -250,6 +250,9 @@ export default function TechnicalPortal({
 
     return true;
   });
+
+  const unclaimedLeads = filteredLeads.filter(lead => !lead.assignedTo);
+  const claimedLeads = filteredLeads.filter(lead => lead.assignedTo && lead.assignedTo === user?.id);
 
   // Central Clients Management filter logic
   const filteredCentralClients = leads.filter(lead => {
@@ -296,6 +299,187 @@ export default function TechnicalPortal({
       </div>
     );
   }
+
+  const renderLeadCard = (lead, isClaimed) => {
+    const isSelected = editingLead && editingLead._id === lead._id;
+    const dateStr = new Date(lead.createdAt || lead.timestamp).toLocaleDateString();
+    
+    // Determine which deliverables to display based on user department
+    const userTeam = user?.team || 'all';
+    const showDeveloper = userTeam === 'developer' || userTeam === 'all';
+    const showDesign = userTeam === 'design' || userTeam === 'all';
+    const showAds = userTeam === 'ads' || userTeam === 'all';
+    
+    return (
+      <div 
+        key={lead._id}
+        className={`glass-card hover:shadow-lg transition-all border rounded-2xl p-5 duration-300 flex flex-col justify-between ${
+          isSelected 
+            ? 'border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-500/5 dark:bg-indigo-500/2' 
+            : 'border-indigo-500/10 hover:-translate-y-0.5'
+        }`}
+      >
+        <div className="space-y-3">
+          {/* Card Header */}
+          <div className="flex justify-between items-start gap-2">
+            <div>
+              <h4 className="text-sm font-extrabold text-gray-950 dark:text-white leading-tight">
+                {lead.clientName}
+              </h4>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
+                {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
+              </p>
+            </div>
+            {!isClaimed && (
+              <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider shrink-0 border border-amber-500/10 animate-pulse">
+                Unclaimed
+              </span>
+            )}
+          </div>
+
+          {/* Contact Details & Date */}
+          <div className="text-[11px] space-y-1 bg-slate-500/5 dark:bg-slate-900/30 p-2.5 rounded-xl border border-gray-200/50 dark:border-slate-800/40">
+            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+              <span className="text-[10px] text-gray-400">Date:</span>
+              <span className="text-gray-800 dark:text-gray-300 font-bold">{dateStr}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
+              <span className="text-[10px] text-gray-400">Salesperson:</span>
+              <span className="text-gray-800 dark:text-gray-300 font-semibold">{lead.salespersonName}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-gray-400">WhatsApp:</span>
+              <a 
+                href={`https://wa.me/${lead.mobileNumber.replace(/[^0-9]/g, '')}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-indigo-600 dark:text-indigo-400 font-mono font-bold hover:underline flex items-center gap-1"
+              >
+                {lead.mobileNumber}
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-600 px-1 py-0.2 rounded font-sans">Chat</span>
+              </a>
+            </div>
+            {lead.email && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-gray-400">Email:</span>
+                <a 
+                  href={`mailto:${lead.email}`}
+                  className="text-gray-700 dark:text-gray-300 truncate hover:underline"
+                >
+                  {lead.email}
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* Milestones / Deliverables Checklist */}
+          <div className="space-y-1.5 pt-1">
+            <h5 className="text-[10px] font-bold text-gray-450 dark:text-gray-500 uppercase tracking-wider">
+              Department Deliverables
+            </h5>
+            
+            <div className="space-y-1">
+              {/* Developer Deliverable */}
+              {showDeveloper && lead.websiteRequired && (
+                <div className="flex items-center justify-between text-xs bg-purple-500/3 dark:bg-purple-500/1 p-2 rounded-lg border border-purple-500/5">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${lead.websiteStatus === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className="font-semibold text-gray-750 dark:text-gray-300">Website:</span>
+                    <span className="text-[10px] text-gray-400 font-normal">({lead.websiteType || 'General'})</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                    lead.websiteStatus === 'Completed' 
+                      ? 'bg-emerald-500/10 text-emerald-600' 
+                      : 'bg-amber-500/10 text-amber-600'
+                  }`}>
+                    {lead.websiteStatus || 'Pending'}
+                  </span>
+                </div>
+              )}
+
+              {/* Design Deliverables */}
+              {showDesign && Number(lead.postersRequired) > 0 && (
+                <div className="flex items-center justify-between text-xs bg-indigo-500/3 dark:bg-indigo-500/1 p-2 rounded-lg border border-indigo-500/5">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${lead.postersStatus === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className="font-semibold text-gray-750 dark:text-gray-300">Posters:</span>
+                    <span className="text-[10px] text-gray-400 font-normal">({Number(lead.postersRequired) - Number(lead.postersPending ?? 0)}/{lead.postersRequired} Done)</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                    lead.postersStatus === 'Completed' 
+                      ? 'bg-emerald-500/10 text-emerald-600' 
+                      : 'bg-amber-500/10 text-amber-600'
+                  }`}>
+                    {lead.postersStatus || 'Pending'}
+                  </span>
+                </div>
+              )}
+
+              {showDesign && Number(lead.videosRequired) > 0 && (
+                <div className="flex items-center justify-between text-xs bg-blue-500/3 dark:bg-blue-500/1 p-2 rounded-lg border border-blue-500/5">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${lead.videosStatus === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className="font-semibold text-gray-750 dark:text-gray-300">Videos:</span>
+                    <span className="text-[10px] text-gray-400 font-normal">({Number(lead.videosRequired) - Number(lead.videosPending ?? 0)}/{lead.videosRequired} Done)</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                    lead.videosStatus === 'Completed' 
+                      ? 'bg-emerald-500/10 text-emerald-600' 
+                      : 'bg-amber-500/10 text-amber-600'
+                  }`}>
+                    {lead.videosStatus || 'Pending'}
+                  </span>
+                </div>
+              )}
+
+              {/* Ads Deliverables */}
+              {showAds && Number(lead.adsRequired) > 0 && (
+                <div className="flex items-center justify-between text-xs bg-pink-500/3 dark:bg-pink-500/1 p-2 rounded-lg border border-pink-500/5">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${lead.adsStatus === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <span className="font-semibold text-gray-750 dark:text-gray-300">Ads/Campaigns:</span>
+                    <span className="text-[10px] text-gray-400 font-normal">({Number(lead.adsRequired) - Number(lead.adsPending ?? 0)}/{lead.adsRequired} Done)</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                    lead.adsStatus === 'Completed' 
+                      ? 'bg-emerald-500/10 text-emerald-600' 
+                      : 'bg-amber-500/10 text-amber-600'
+                  }`}>
+                    {lead.adsStatus || 'Pending'}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Card Actions Footer */}
+        <div className="pt-4 mt-2 border-t border-gray-150/40 dark:border-slate-800/40 flex justify-end">
+          {isClaimed ? (
+            <Button
+              variant={isSelected ? "primary" : "outline"}
+              size="xs"
+              onClick={() => handleEditClick(lead)}
+              icon={Edit2}
+              className="w-full sm:w-auto"
+            >
+              Update Tasks
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="xs"
+              onClick={() => handleAcceptClick(lead)}
+              icon={CheckCircle}
+              className="w-full sm:w-auto"
+            >
+              Accept Client
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const getGridColsClass = () => {
     const team = user?.team;
@@ -551,88 +735,60 @@ export default function TechnicalPortal({
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
-                <table className="min-w-[800px] w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Details</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Intake Source</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Deliverables Status</th>
-                      <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40">
-                    {filteredLeads.map((lead, idx) => (
-                      <tr key={idx} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/2 transition-colors">
-                        <td className="p-3 font-medium text-gray-900 dark:text-white">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold">{lead.clientName}</span>
-                            {!lead.assignedTo && (
-                              <span className="bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                                Unclaimed
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-400 dark:text-gray-500">{lead.companyName} | {lead.businessCategory}</div>
-                          <div className="text-xs text-gray-450 dark:text-gray-550 mt-0.5">WhatsApp: {lead.mobileNumber}</div>
-                        </td>
-                        <td className="p-3 text-xs text-gray-500 dark:text-gray-400">
-                          <div>Salesperson: <strong className="text-gray-750 dark:text-gray-250 font-semibold">{lead.salespersonName}</strong></div>
-                          <div className="mt-0.5">{new Date(lead.createdAt || lead.timestamp).toLocaleDateString()}</div>
-                        </td>
-                        <td className="p-3 text-xs">
-                          <div className="space-y-1">
-                            {Number(lead.postersRequired) > 0 && (
-                              <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-                                <span className={`w-1.5 h-1.5 rounded-full ${lead.postersStatus === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                                <span>Posters: <strong className="text-gray-800 dark:text-gray-200">{Number(lead.postersRequired) - Number(lead.postersPending ?? 0)}/{lead.postersRequired} Comp</strong> ({lead.postersStatus})</span>
-                              </div>
-                            )}
-                            {Number(lead.videosRequired) > 0 && (
-                              <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-                                <span className={`w-1.5 h-1.5 rounded-full ${lead.videosStatus === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                                <span>Videos: <strong className="text-gray-800 dark:text-gray-200">{Number(lead.videosRequired) - Number(lead.videosPending ?? 0)}/{lead.videosRequired} Comp</strong> ({lead.videosStatus})</span>
-                              </div>
-                            )}
-                            {Number(lead.adsRequired) > 0 && (
-                              <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-                                <span className={`w-1.5 h-1.5 rounded-full ${lead.adsStatus === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                                <span>Campaigns: <strong className="text-gray-800 dark:text-gray-200">{Number(lead.adsRequired) - Number(lead.adsPending ?? 0)}/{lead.adsRequired} Comp</strong> ({lead.adsStatus})</span>
-                              </div>
-                            )}
-                            {lead.websiteRequired && (
-                              <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
-                                <span className={`w-1.5 h-1.5 rounded-full ${lead.websiteStatus === 'Completed' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                                <span>Website: <strong className="text-gray-800 dark:text-gray-200">{lead.websiteStatus === 'Completed' ? '1/1' : '0/1'} Comp</strong> ({lead.websiteStatus})</span>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          {lead.assignedTo ? (
-                            <Button
-                              variant="outline"
-                              size="xs"
-                              onClick={() => handleEditClick(lead)}
-                              icon={Edit2}
-                            >
-                              Update Tasks
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="primary"
-                              size="xs"
-                              onClick={() => handleAcceptClick(lead)}
-                              icon={CheckCircle}
-                            >
-                              Accept Client
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-6">
+                {/* Section 1: Unclaimed Pool */}
+                <div className="p-4 rounded-2xl border border-amber-500/10 bg-amber-500/2 dark:bg-amber-500/1 space-y-4">
+                  <div className="flex justify-between items-center border-b border-gray-150/40 dark:border-slate-800/40 pb-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        Unclaimed Team Tasks Pool
+                      </h3>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-405">Claim campaign briefs assigned to your department queue</p>
+                    </div>
+                    <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                      {unclaimedLeads.length} Available
+                    </span>
+                  </div>
+                  
+                  {unclaimedLeads.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-gray-200 dark:border-slate-800/60 rounded-xl bg-white/20 dark:bg-slate-900/10 text-gray-500 dark:text-gray-400">
+                      <AlertCircle className="w-8 h-8 text-gray-300 dark:text-slate-700 mx-auto mb-2 animate-pulse" />
+                      <p className="text-xs font-semibold">No unclaimed client folders in your queue.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {unclaimedLeads.map((lead) => renderLeadCard(lead, false))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 2: Active Claimed Checklist */}
+                <div className="p-4 rounded-2xl border border-emerald-500/10 bg-emerald-500/2 dark:bg-emerald-500/1 space-y-4">
+                  <div className="flex justify-between items-center border-b border-gray-150/40 dark:border-slate-800/40 pb-3">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        My Claimed Client Campaigns
+                      </h3>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-405">Your active checklist of campaign folders and spec deliverables</p>
+                    </div>
+                    <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md text-[10px] font-bold">
+                      {claimedLeads.length} Claimed
+                    </span>
+                  </div>
+
+                  {claimedLeads.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-gray-200 dark:border-slate-800/60 rounded-xl bg-white/20 dark:bg-slate-900/10 text-gray-500 dark:text-gray-400">
+                      <AlertCircle className="w-8 h-8 text-gray-300 dark:text-slate-700 mx-auto mb-2 animate-pulse" />
+                      <p className="text-xs font-semibold">You haven't claimed any client campaigns yet.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {claimedLeads.map((lead) => renderLeadCard(lead, true))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </Card>
@@ -1010,9 +1166,15 @@ export default function TechnicalPortal({
                           </span>
                         </td>
                         <td className="p-3">
-                          <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                            {teamLabels[client.assignedTeam] || 'Not Assigned'}
-                          </span>
+                          {client.assignedToName ? (
+                            <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
+                              👤 {client.assignedToName}
+                            </span>
+                          ) : (
+                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                              {teamLabels[client.assignedTeam] || 'Not Assigned'}
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );

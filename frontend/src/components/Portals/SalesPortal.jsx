@@ -875,13 +875,19 @@ export default function SalesPortal({
                               </span>
                             </td>
                             <td className="p-3">
-                              <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                                {client.assignedTeam === 'design' && 'Design Team'}
-                                {client.assignedTeam === 'developer' && 'Development Team'}
-                                {client.assignedTeam === 'ads' && 'Ads Team'}
-                                {client.assignedTeam === 'all' && 'All Teams'}
-                                {!client.assignedTeam && 'Not Assigned'}
-                              </span>
+                               {client.assignedToName ? (
+                                 <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
+                                   👤 {client.assignedToName}
+                                 </span>
+                               ) : (
+                                 <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                                   {client.assignedTeam === 'design' && 'Design Team'}
+                                   {client.assignedTeam === 'developer' && 'Development Team'}
+                                   {client.assignedTeam === 'ads' && 'Ads Team'}
+                                   {client.assignedTeam === 'all' && 'All Teams'}
+                                   {!client.assignedTeam && 'Not Assigned'}
+                                 </span>
+                               )}
                             </td>
                           </tr>
                         );

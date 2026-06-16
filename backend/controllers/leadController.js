@@ -20,6 +20,14 @@ const sanitizeNumberFields = (body) => {
       body[field] = isNaN(num) ? 0 : num;
     }
   });
+
+  // Sanitize empty strings for ObjectId and Enum fields to prevent cast/validation failures
+  if (body.assignedTo === '' || body.assignedTo === undefined) {
+    body.assignedTo = null;
+  }
+  if (body.assignedTeam === '' || body.assignedTeam === undefined) {
+    body.assignedTeam = null;
+  }
 };
 
 // @desc    Get all leads (Admin) or user-owned leads (Salesperson) or team leads (Technical)

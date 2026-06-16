@@ -1,0 +1,509 @@
+diff --git a/frontend/src/components/Portals/SalesPortal.jsx b/frontend/src/components/Portals/SalesPortal.jsx
+index b64aea1..5abcd47 100644
+--- a/frontend/src/components/Portals/SalesPortal.jsx
++++ b/frontend/src/components/Portals/SalesPortal.jsx
+@@ -21,7 +21,11 @@ import {
+   Layers,
+   IndianRupeeIcon,
+   Trash2,
+-  Bell
++  Bell,
++  Sliders,
++  User,
++  Eye,
++  EyeOff
+ } from 'lucide-react';
+ import confetti from 'canvas-confetti';
+ 
+@@ -49,24 +53,41 @@ export default function SalesPortal({
+   const { user, logout, authFetch } = useAuth();
+   const [leads, setLeads] = useState([]);
+   const [isLoadingLeads, setIsLoadingLeads] = useState(true);
++  const [selectedLeadId, setSelectedLeadId] = useState(null);
++  const [showFbPass, setShowFbPass] = useState(false);
++  const [showIgPass, setShowIgPass] = useState(false);
+ 
+   const [wizardMode, setWizardMode] = useState(null); // 'create' | 'edit' | null
+   const [editingLeadId, setEditingLeadId] = useState(null);
+   const [currentStep, setCurrentStep] = useState(0);
+   const [isSubmitting, setIsSubmitting] = useState(false);
+-  const [searchTerm, setSearchTerm] = useState('');
++  // Common filters state
++  const [filterWorkflowStatus, setFilterWorkflowStatus] = useState('All');
++  const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
+   
+   const [showNotifications, setShowNotifications] = useState(false);
+   const [deleteConfirmLead, setDeleteConfirmLead] = useState(null);
+ 
+   // Fetch leads on mount
+-  const fetchLeads = async () => {
++  const fetchLeads = async (selectFirstId = null) => {
+     setIsLoadingLeads(true);
+     try {
+       const res = await authFetch('/api/leads');
+       if (res.ok) {
+         const data = await res.json();
+         setLeads(data);
++        if (data.length > 0) {
++          if (selectFirstId) {
++            setSelectedLeadId(selectFirstId);
++          } else {
++            setSelectedLeadId(prevId => {
++              const exists = data.some(l => (l._id || l.id) === prevId);
++              return exists ? prevId : (data[0]._id || data[0].id);
++            });
++          }
++        } else {
++          setSelectedLeadId(null);
++        }
+       }
+     } catch (err) {
+       console.error('Fetch leads failed:', err);
+@@ -122,6 +143,7 @@ export default function SalesPortal({
+       startDate: '',
+       deliveryDeadline: '',
+       notes: '',
++      assignedTeam: 'developer',
+       isConfirmed: false
+     }
+   });
+@@ -131,14 +153,21 @@ export default function SalesPortal({
+   // Filter leads for this salesperson (backend already filters, but double check in frontend)
+   const salespersonLeads = leads;
+ 
+-  // Search filter
++  // Advanced filters implementation
+   const filteredLeads = salespersonLeads.filter(lead => {
+-    const searchLower = searchTerm.toLowerCase();
+-    return (
+-      (lead.clientName || '').toLowerCase().includes(searchLower) ||
+-      (lead.companyName || '').toLowerCase().includes(searchLower) ||
+-      (lead.businessCategory || '').toLowerCase().includes(searchLower)
+-    );
++    // 1. Status filter
++    if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
++      return false;
++    }
++
++    // 2. Assigned Team filter
++    if (filterAssignedTeam !== 'All') {
++      if (lead.assignedTeam !== filterAssignedTeam && lead.assignedTeam !== 'all') {
++        return false;
++      }
++    }
++
++    return true;
+   });
+ 
+   // Metrics
+@@ -184,6 +213,7 @@ export default function SalesPortal({
+       startDate: '',
+       deliveryDeadline: '',
+       notes: '',
++      assignedTeam: 'developer',
+       isConfirmed: false
+     });
+     setCurrentStep(0);
+@@ -301,6 +331,39 @@ export default function SalesPortal({
+     );
+   };
+ 
++  const handleQuickTeamChange = async (leadId, newTeam) => {
++    const lead = leads.find(l => (l._id || l.id) === leadId);
++    if (!lead) return;
++
++    const updatedLeadData = {
++      ...lead,
++      assignedTeam: newTeam || null,
++      assignedTo: null,
++      assignedToName: null,
++      workflowStatus: 'Non-Allocated'
++    };
++
++    try {
++      const res = await authFetch(`/api/leads/${leadId}`, {
++        method: 'PUT',
++        body: JSON.stringify(updatedLeadData)
++      });
++
++      if (res.ok) {
++        fetchLeads();
++        onAddToast('Route Updated', `Assigned ${lead.clientName} to ${newTeam ? newTeam.toUpperCase() : 'None'}.`, 'success');
++        if (onAddNotification) {
++          onAddNotification(`${user.name} routed client ${lead.clientName} to ${newTeam || 'none'}.`, 'update');
++        }
++      } else {
++        onAddToast('Update Error', 'Failed to update team routing.', 'error');
++      }
++    } catch (err) {
++      console.error('Quick team route update failed:', err);
++      onAddToast('Update Error', 'Failed to update team routing.', 'error');
++    }
++  };
++
+   const handleDeleteClick = (lead) => {
+     setDeleteConfirmLead(lead);
+   };
+@@ -356,7 +419,8 @@ export default function SalesPortal({
+         });
+ 
+         if (res.ok) {
+-          fetchLeads();
++          const newLead = await res.json();
++          fetchLeads(newLead._id || newLead.id);
+           onAddToast('Lead Created', `Added draft lead for ${payload.clientName}.`, 'success');
+           if (onAddNotification) {
+             onAddNotification(`New client brief folder initialized for ${payload.clientName} by salesperson ${user.name}.`, 'submission');
+@@ -377,7 +441,7 @@ export default function SalesPortal({
+         });
+ 
+         if (res.ok) {
+-          fetchLeads();
++          fetchLeads(editingLeadId);
+           onAddToast('Lead Updated', `Updated lead records for ${payload.clientName}.`, 'success');
+           if (onAddNotification) {
+             onAddNotification(`Client brief folder details modified for ${payload.clientName} by salesperson ${user.name}.`, 'update');
+@@ -463,7 +527,7 @@ export default function SalesPortal({
+     }
+   });
+ 
+-  const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
++  const activeLead = leads.find(l => (l._id || l.id) === selectedLeadId);
+ 
+   return (
+     <div className="space-y-6">
+@@ -591,155 +655,102 @@ export default function SalesPortal({
+         </div>
+       </div>
+ 
+-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+-        {/* Work Performance Chart Card */}
+-        <div className="lg:col-span-1">
+-          <Card title="My Work Performance" subtitle="Task and service completion status overview">
+-            <div className="space-y-6 pt-2">
+-              <div className="flex items-center justify-between">
+-                <div>
+-                  <p className="text-3xl font-extrabold text-gray-900 dark:text-white">{completionPercentage}%</p>
+-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-semibold">Completion Rate</p>
+-                </div>
+-                
+-                {/* SVG circular progress meter */}
+-                <div className="relative w-16 h-16">
+-                  <svg className="w-full h-full transform -rotate-90">
+-                    <circle 
+-                      cx="32" 
+-                      cy="32" 
+-                      r="26" 
+-                      className="text-gray-200 dark:text-slate-800" 
+-                      strokeWidth="5.5" 
+-                      stroke="currentColor" 
+-                      fill="transparent" 
+-                    />
+-                    <circle 
+-                      cx="32" 
+-                      cy="32" 
+-                      r="26" 
+-                      className="text-indigo-600 dark:text-indigo-400 transition-all duration-500 ease-out" 
+-                      strokeWidth="5.5" 
+-                      strokeDasharray={2 * Math.PI * 26}
+-                      strokeDashoffset={2 * Math.PI * 26 * (1 - completionPercentage / 100)}
+-                      strokeLinecap="round"
+-                      stroke="currentColor" 
+-                      fill="transparent" 
+-                    />
+-                  </svg>
+-                  <div className="absolute inset-0 flex items-center justify-center text-[10px] font-extrabold text-gray-700 dark:text-gray-300">
+-                    {completedTasks}/{totalTasks}
+-                  </div>
+-                </div>
+-              </div>
+-
+-              {/* Individual task types progress bars */}
+-              <div className="space-y-3.5 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
+-                <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+-                  Asset Status Breakdown
+-                </h4>
+-                {[
+-                  { name: 'Posters', key: 'postersRequired', statusKey: 'postersStatus' },
+-                  { name: 'Videos', key: 'videosRequired', statusKey: 'videosStatus' },
+-                  { name: 'Advertisements', key: 'adsRequired', statusKey: 'adsStatus' },
+-                  { name: 'Websites', key: 'websiteRequired', statusKey: 'websiteStatus', isBool: true }
+-                ].map(item => {
+-                  let active = 0, comp = 0;
+-                  salespersonLeads.forEach(lead => {
+-                    const req = item.isBool ? lead[item.key] : Number(lead[item.key]) > 0;
+-                    if (req) {
+-                      active++;
+-                      if (lead[item.statusKey] === 'Completed') comp++;
+-                    }
+-                  });
+-                  const rate = active > 0 ? Math.round((comp / active) * 100) : 0;
+-                  if (active === 0) return null;
+-
+-                  return (
+-                    <div key={item.name} className="space-y-1.5">
+-                      <div className="flex justify-between text-xs font-semibold text-gray-600 dark:text-gray-400">
+-                        <span>{item.name}</span>
+-                        <span>{comp}/{active} ({rate}%)</span>
+-                      </div>
+-                      <div className="w-full bg-gray-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+-                        <div 
+-                          className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
+-                          style={{ width: `${rate}%` }}
+-                        />
+-                      </div>
+-                    </div>
+-                  );
+-                })}
+-              </div>
++      {/* Client List */}
++      <div className="w-full">
++        <Card title="My Onboarded Clients" subtitle="Review, edit, and transmit client folders to the central admin sheet">
++          
++          {isLoadingLeads ? (
++            <div className="text-center py-12">
++              <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
++              <p className="text-xs text-gray-500">Retrieving campaign briefs from database...</p>
+             </div>
+-          </Card>
+-        </div>
+-
+-        {/* Client List */}
+-        <div className="lg:col-span-2">
+-          <Card title="My Onboarded Clients" subtitle="Review, edit, and transmit client folders to the central admin sheet">
+-            <div className="relative mb-5 max-w-sm">
+-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+-              <input
+-                type="text"
+-                placeholder="Search by client, company, category..."
+-                value={searchTerm}
+-                onChange={(e) => setSearchTerm(e.target.value)}
+-                className="w-full pl-10 pr-4 py-2 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
+-              />
++          ) : leads.length === 0 ? (
++            <div className="text-center py-12 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
++              <FileText className="w-10 h-10 text-gray-300 dark:text-slate-700 mx-auto mb-3" />
++              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
++                You have not registered any clients yet. Click "+ Create New Client" to start.
++              </p>
+             </div>
+-
+-            {isLoadingLeads ? (
+-              <div className="text-center py-12">
++          ) : (
++            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
++              {leads.map((lead) => {
++                const leadId = lead._id || lead.id;
++                const hasUnsavedChanges = lead.status !== 'Submitted to Admin';
++                const isSelected = selectedLeadId === leadId;
++                return (
++                  <div 
++                    key={leadId} 
++                    onClick={() => setSelectedLeadId(leadId)}
++                    className={`
++                      p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between gap-4 relative overflow-hidden glass-card cursor-pointer
++                      ${isSelected ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md' : 'hover:shadow-md'}
++                      ${lead.status === 'Submitted to Admin'
++                        ? 'border-emerald-500/15 bg-emerald-500/2 dark:bg-emerald-500/1' 
++                        : lead.status === 'Client Submitted'
++                          ? 'border-indigo-500/15 bg-indigo-500/2 dark:bg-indigo-500/1'
++                          : 'border-gray-205 dark:border-slate-800/60'
++                      }
+                 <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                 <p className="text-xs text-gray-500">Retrieving campaign briefs from database...</p>
+               </div>
+-            ) : filteredLeads.length === 0 ? (
++            ) : leads.length === 0 ? (
+               <div className="text-center py-12 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
+                 <FileText className="w-10 h-10 text-gray-300 dark:text-slate-700 mx-auto mb-3" />
+                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+-                  {salespersonLeads.length === 0 
+-                    ? 'You have not registered any clients yet. Click "+ Create New Client" to start.'
+-                    : 'No clients found matching the search query.'}
++                  You have not registered any clients yet. Click "+ Create New Client" to start.
+                 </p>
+               </div>
+             ) : (
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+-                {filteredLeads.map((lead) => {
++                {leads.map((lead) => {
+                   const leadId = lead._id || lead.id;
+                   const hasUnsavedChanges = lead.status !== 'Submitted to Admin';
++                  const isSelected = selectedLeadId === leadId;
+                   return (
+                     <div 
+                       key={leadId} 
++                      onClick={() => setSelectedLeadId(leadId)}
+                       className={`
+-                        p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between gap-4 relative overflow-hidden glass-card
++                        p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between gap-4 relative overflow-hidden glass-card cursor-pointer
++                        ${isSelected ? 'ring-2 ring-indigo-500 border-indigo-500 shadow-md' : 'hover:shadow-md'}
+                         ${lead.status === 'Submitted to Admin'
+-                          ? 'border-emerald-500/15 bg-emerald-500/2 dark:bg-emerald-500/1 hover:shadow-lg' 
++                          ? 'border-emerald-500/15 bg-emerald-500/2 dark:bg-emerald-500/1' 
+                           : lead.status === 'Client Submitted'
+-                            ? 'border-indigo-500/15 bg-indigo-500/2 dark:bg-indigo-500/1 hover:shadow-lg'
+-                            : 'border-gray-205 dark:border-slate-800/60 hover:shadow-lg'
++                            ? 'border-indigo-500/15 bg-indigo-500/2 dark:bg-indigo-500/1'
++                            : 'border-gray-205 dark:border-slate-800/60'
+                         }
+                       `}
+                     >
+                       {/* Status Banner */}
+-                      <div className="absolute top-0 right-0">
++                      <div className="absolute top-0 right-0 flex items-center gap-1.5">
+                         <span className={`
+-                          text-[9px] font-bold px-3 py-1 rounded-bl-xl border-l border-b uppercase tracking-wider
++                          text-[9px] font-bold px-2 py-1 rounded-bl-xl border-l border-b uppercase tracking-wider
+                           ${lead.status === 'Submitted to Admin'
+                             ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/10'
+-                            : lead.status === 'Client Submitted'
+-                              ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/10'
+-                              : 'bg-slate-500/10 text-slate-600 border-slate-500/10'
++                            : 'bg-slate-500/10 text-slate-650 border-slate-500/10'
+                           }
+                         `}>
+-                          {lead.status}
++                          {lead.status === 'Submitted to Admin' ? 'Synced' : 'Draft'}
++                        </span>
++                        <span className={`
++                          text-[9px] font-extrabold px-3 py-1 rounded-bl-xl border-l border-b uppercase tracking-wider
++                          ${lead.workflowStatus === 'Completed'
++                            ? 'bg-emerald-505 text-emerald-700 border-emerald-500/15 dark:bg-emerald-950/40 dark:text-emerald-300'
++                            : lead.workflowStatus === 'In Progress'
++                              ? 'bg-indigo-55 text-indigo-700 border-indigo-500/15 dark:bg-indigo-950/40 dark:text-indigo-305'
++                              : lead.workflowStatus === 'Allocated'
++                                ? 'bg-blue-55 text-blue-700 border-blue-500/15 dark:bg-blue-955/40 dark:text-blue-300'
++                                : 'bg-amber-55 text-amber-700 border-amber-550/15 dark:bg-amber-955/40 dark:text-amber-300'
++                          }
++                        `}>
++                          {lead.workflowStatus || 'Non-Allocated'}
+                         </span>
+                       </div>
+ 
+-                      <div className="space-y-4">
++                      <div className="space-y-3">
+                         {/* Header */}
+                         <div>
+-                          <h4 className="text-base font-bold text-gray-900 dark:text-white pr-20 truncate">{lead.clientName}</h4>
++                          <h4 className="text-base font-bold text-gray-900 dark:text-white pr-24 truncate">{lead.clientName}</h4>
+                           <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-0.5 font-medium">
+                             {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
+                           </p>
+@@ -747,58 +758,19 @@ export default function SalesPortal({
+ 
+                         {/* Details grid */}
+                         <div className="grid grid-cols-1 gap-1.5 text-xs text-gray-600 dark:text-gray-400 font-medium border-t border-gray-100 dark:border-slate-800/40 pt-2.5">
+-                          <div className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-gray-400" /> {lead.email}</div>
+-                          <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" /> {lead.mobileNumber}</div>
+-                          {lead.websiteUrl && <div className="flex items-center gap-2 truncate"><Globe className="w-3.5 h-3.5 text-gray-400" /> {lead.websiteUrl}</div>}
+-                          <div className="flex items-center gap-2"><Layers className="w-3.5 h-3.5 text-gray-400" /> {lead.platforms ? lead.platforms.length : 0} channels, {Number(lead.postersRequired || 0) + Number(lead.videosRequired || 0)} assets</div>
+-                          <div className="flex items-start gap-2 flex-col bg-slate-500/5 dark:bg-slate-500/2 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50 mt-1">
+-                            <div className="text-[10px] font-bold text-gray-450 dark:text-gray-500 uppercase tracking-wider mb-0.5">Budget Specifications</div>
+-                            <div className="grid grid-cols-2 w-full gap-x-2 gap-y-1 text-[11px]">
+-                              <div>Plan Amount: <strong className="text-gray-900 dark:text-white">₹{lead.planAmount || '0'}</strong></div>
+-                              <div>Advance: <strong className="text-gray-900 dark:text-white">₹{lead.advanceAmount || '0'}</strong></div>
+-                              <div>Pending: <strong className="text-amber-600 dark:text-amber-400 font-bold">₹{lead.pendingAmount || '0'}</strong></div>
+-                              <div>Ad Budget: <strong className="text-emerald-600 dark:text-emerald-450">₹{lead.adBudget || '0'}</strong></div>
+-                            </div>
+-                          </div>
+-                        </div>
+-
+-                        {/* Service status tracking dropdowns */}
+-                        <div className="border-t border-gray-100 dark:border-slate-800/40 pt-3.5 space-y-2">
+-                          <div className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+-                            Service Milestone Status (Click to update)
+-                          </div>
+-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+-                            {Number(lead.postersRequired) > 0 && (
+-                              <div className="flex items-center justify-between p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
+-                                <span className="font-semibold text-gray-600 dark:text-gray-400 truncate mr-2">Posters ({lead.postersRequired})</span>
+-                                {renderStatusBadge(leadId, 'posters', lead.postersStatus || 'Pending')}
+-                              </div>
+-                            )}
+-                            {Number(lead.videosRequired) > 0 && (
+-                              <div className="flex items-center justify-between p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
+-                                <span className="font-semibold text-gray-600 dark:text-gray-400 truncate mr-2">Videos ({lead.videosRequired})</span>
+-                                {renderStatusBadge(leadId, 'videos', lead.videosStatus || 'Pending')}
+-                              </div>
+-                            )}
+-                            {Number(lead.adsRequired) > 0 && (
+-                              <div className="flex items-center justify-between p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40">
+-                                <span className="font-semibold text-gray-600 dark:text-gray-400 truncate mr-2">Ads ({lead.adsRequired})</span>
+-                                {renderStatusBadge(leadId, 'ads', lead.adsStatus || 'Pending')}
+-                              </div>
+-                            )}
+-                            {lead.websiteRequired && (
+-                              <div className="flex items-center justify-between p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-xl border border-gray-150/40 dark:border-slate-800/40 col-span-1 sm:col-span-2">
+-                                <span className="font-semibold text-gray-600 dark:text-gray-400 truncate mr-2">Website ({lead.websiteType || 'Dev'})</span>
+-                                {renderStatusBadge(leadId, 'website', lead.websiteStatus || 'Pending')}
+-                              </div>
+-                            )}
++                          <div className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" /> WhatsApp: {lead.mobileNumber}</div>
++                          <div className="flex items-center gap-2"><Clock className="w-3.5 h-3.5 text-gray-400" /> Created: {new Date(lead.createdAt || lead.timestamp).toLocaleDateString()}</div>
++                          
++                          <div className="flex items-center gap-2 text-gray-550 dark:text-gray-300 font-bold mt-1">
++                            <User className="w-3.5 h-3.5 text-indigo-500 animate-pulse-ring rounded-full" />
++                            <span>Assignee: {lead.assignedToName || <span className="italic text-gray-400 font-normal">Unclaimed ({lead.assignedTeam === 'all' ? 'All Teams' : lead.assignedTeam ? `${lead.assignedTeam.toUpperCase()} Team` : 'None'})</span>}</span>
+                           </div>
+                         </div>
+                       </div>
+ 
+                       {/* Actions */}
+-                      <div className="flex items-center justify-between border-t border-gray-100 dark:border-slate-800/40 pt-3.5 mt-1">
+-                        <div className="flex items-center gap-2">
++                      <div className="flex flex-wrap items-center justify-between border-t border-gray-100 dark:border-slate-800/40 pt-3.5 mt-1 gap-2">
++                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                           <Button
+                             variant="secondary"
+                             size="sm"
+@@ -818,15 +790,32 @@ export default function SalesPortal({
+                           </Button>
+                         </div>
+ 
+-                        <Button
+-                          variant={hasUnsavedChanges ? "primary" : "outline"}
+-                          size="sm"
+-                          disabled={!hasUnsavedChanges}
+-                          onClick={() => handleSendToAdmin(lead)}
+-                          icon={Send}
+-                        >
+-                          {lead.status === 'Submitted to Admin' ? 'Synced' : 'Send to Admin'}
+-                        </Button>
++                        {/* Assign to Technical Team select dropdown option inside actions */}
++                        <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
++                          <select
++                            value={lead.assignedTeam || ''}
++                            onChange={(e) => handleQuickTeamChange(leadId, e.target.value)}
++                            className="text-xs font-bold rounded-xl px-2.5 py-1.5 border border-indigo-150/80 dark:border-slate-800 bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-850 outline-hidden transition-all shadow-sm"
++                          >
++                            <option value="">Assign to Technical Team...</option>
++                            <option value="design">Design Team</option>
++                            <option value="developer">Developer Team</option>
++                            <option value="ads">Ads Team</option>
++                            <option value="all">All Teams</option>
++                          </select>
++                        </div>
++
++                        <div onClick={(e) => e.stopPropagation()}>
++                          <Button
++                            variant={hasUnsavedChanges ? "primary" : "outline"}
++                            size="sm"
++                            disabled={!hasUnsavedChanges}
++                            onClick={() => handleSendToAdmin(lead)}
++                            icon={Send}
++                          >
++                            {lead.status === 'Submitted to Admin' ? 'Synced' : 'Send to Admin'}
++                          </Button>
++                        </div>
+                       </div>
+                     </div>
+                   );
+@@ -835,7 +824,6 @@ export default function SalesPortal({
+             )}
+           </Card>
+         </div>
+-      </div>
+ 
+       {/* Delete Confirmation Dialog */}
+       <AnimatePresence>
