@@ -37,6 +37,7 @@ export default function TechnicalPortal({
   onAddNotification
 }) {
   const { user, authFetch, logout } = useAuth();
+  const userId = user?.id || user?._id;
   const [leads, setLeads] = useState([]);
   const [filterWorkflowStatus, setFilterWorkflowStatus] = useState('All');
   const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
@@ -163,7 +164,7 @@ export default function TechnicalPortal({
       const res = await authFetch(`/api/leads/${lead._id}`, {
         method: 'PUT',
         body: JSON.stringify({
-          assignedTo: user?.id,
+          assignedTo: userId,
           assignedToName: user?.name,
           workflowStatus: 'Allocated'
         })
@@ -232,7 +233,8 @@ export default function TechnicalPortal({
 
   const filteredLeads = leads.filter(lead => {
     // 0. Only show unclaimed tasks or tasks assigned to me in the main checklist
-    if (lead.assignedTo && lead.assignedTo !== user?.id) {
+    const leadAssignedToId = lead.assignedTo?._id || lead.assignedTo;
+    if (leadAssignedToId && leadAssignedToId !== userId) {
       return false;
     }
 
@@ -252,7 +254,10 @@ export default function TechnicalPortal({
   });
 
   const unclaimedLeads = filteredLeads.filter(lead => !lead.assignedTo);
-  const claimedLeads = filteredLeads.filter(lead => lead.assignedTo && lead.assignedTo === user?.id);
+  const claimedLeads = filteredLeads.filter(lead => {
+    const leadAssignedToId = lead.assignedTo?._id || lead.assignedTo;
+    return leadAssignedToId && leadAssignedToId === userId;
+  });
 
   // Central Clients Management filter logic
   const filteredCentralClients = leads.filter(lead => {
@@ -666,6 +671,165 @@ export default function TechnicalPortal({
         </div>
       </div>
 
+       {/* Central Clients Section */}
+      <div className="mt-8">
+        <Card title="Clients" subtitle="Central client management roster synchronized in real-time across portals">
+          <div className="space-y-4 mb-6">
+            <div className="flex flex-col md:flex-row gap-4">
+              {/* Search */}
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="Search by client name or WhatsApp number..."
+                  value={clientSearchQuery}
+                  onChange={(e) => setClientSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="w-full md:w-44">
+                <select
+                  value={clientStatusFilter}
+                  onChange={(e) => setClientStatusFilter(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Non-Allocated">Non-Allocated</option>
+                  <option value="Allocated">Assigned to Specific Team</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+
+              {/* Team Filter */}
+              <div className="w-full md:w-44">
+                <select
+                  value={clientTeamFilter}
+                  onChange={(e) => setClientTeamFilter(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+                >
+                  <option value="All">All Teams</option>
+                  <option value="design">Design Team</option>
+                  <option value="developer">Development Team</option>
+                  <option value="ads">Ads Team</option>
+                  <option value="all">All Teams</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
+              {/* Date Filters */}
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-650 dark:text-gray-400">
+                <div className="flex items-center gap-2">
+                  <span>Timeline From:</span>
+                  <input
+                    type="date"
+                    value={clientStartDateFilter}
+                    onChange={(e) => setClientStartDateFilter(e.target.value)}
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span>To:</span>
+                  <input
+                    type="date"
+                    value={clientEndDateFilter}
+                    onChange={(e) => setClientEndDateFilter(e.target.value)}
+                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end">
+                {/* Clear Filters */}
+                {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setClientSearchQuery('');
+                      setClientStatusFilter('All');
+                      setClientTeamFilter('All');
+                      setClientStartDateFilter('');
+                      setClientEndDateFilter('');
+                    }}
+                  >
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
+                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
+                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
+                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
+                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-350 font-medium">
+                {filteredCentralClients.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
+                      No clients found matching the selected filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredCentralClients.map((client) => {
+                    const teamLabels = {
+                      'design': 'Design Team',
+                      'developer': 'Development Team',
+                      'ads': 'Ads Team',
+                      'all': 'All Teams'
+                    };
+                    return (
+                      <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
+                        <td className="p-3 font-bold text-gray-900 dark:text-white">
+                          {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
+                        </td>
+                        <td className="p-3 text-gray-900 dark:text-white font-bold">{client.clientName}</td>
+                        <td className="p-3 font-mono">{client.mobileNumber}</td>
+                        <td className="p-3">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                            client.workflowStatus === 'Completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : client.workflowStatus === 'In Progress'
+                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                : client.workflowStatus === 'Allocated'
+                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          }`}>
+                            {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {client.assignedToName ? (
+                            <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
+                              👤 {client.assignedToName}
+                            </span>
+                          ) : (
+                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                              {teamLabels[client.assignedTeam] || 'Not Assigned'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+
       {/* Main Roster & Update Workflow */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         
@@ -695,6 +859,8 @@ export default function TechnicalPortal({
                     <option value="Completed">Completed</option>
                   </select>
                 </div>
+
+                
 
                 {/* Assigned Team Filter */}
                 <div className="flex items-center gap-2">
@@ -1027,164 +1193,7 @@ export default function TechnicalPortal({
 
       </div>
 
-      {/* Central Clients Section */}
-      <div className="mt-8">
-        <Card title="Clients" subtitle="Central client management roster synchronized in real-time across portals">
-          <div className="space-y-4 mb-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-                <input
-                  type="text"
-                  placeholder="Search by client name or WhatsApp number..."
-                  value={clientSearchQuery}
-                  onChange={(e) => setClientSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <div className="w-full md:w-44">
-                <select
-                  value={clientStatusFilter}
-                  onChange={(e) => setClientStatusFilter(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Non-Allocated">Non-Allocated</option>
-                  <option value="Allocated">Assigned to Specific Team</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
-
-              {/* Team Filter */}
-              <div className="w-full md:w-44">
-                <select
-                  value={clientTeamFilter}
-                  onChange={(e) => setClientTeamFilter(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
-                >
-                  <option value="All">All Teams</option>
-                  <option value="design">Design Team</option>
-                  <option value="developer">Development Team</option>
-                  <option value="ads">Ads Team</option>
-                  <option value="all">All Teams</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
-              {/* Date Filters */}
-              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-650 dark:text-gray-400">
-                <div className="flex items-center gap-2">
-                  <span>Timeline From:</span>
-                  <input
-                    type="date"
-                    value={clientStartDateFilter}
-                    onChange={(e) => setClientStartDateFilter(e.target.value)}
-                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>To:</span>
-                  <input
-                    type="date"
-                    value={clientEndDateFilter}
-                    onChange={(e) => setClientEndDateFilter(e.target.value)}
-                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                {/* Clear Filters */}
-                {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setClientSearchQuery('');
-                      setClientStatusFilter('All');
-                      setClientTeamFilter('All');
-                      setClientStartDateFilter('');
-                      setClientEndDateFilter('');
-                    }}
-                  >
-                    Clear Filters
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-350 font-medium">
-                {filteredCentralClients.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
-                      No clients found matching the selected filters.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredCentralClients.map((client) => {
-                    const teamLabels = {
-                      'design': 'Design Team',
-                      'developer': 'Development Team',
-                      'ads': 'Ads Team',
-                      'all': 'All Teams'
-                    };
-                    return (
-                      <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
-                        <td className="p-3 font-bold text-gray-900 dark:text-white">
-                          {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
-                        </td>
-                        <td className="p-3 text-gray-900 dark:text-white font-bold">{client.clientName}</td>
-                        <td className="p-3 font-mono">{client.mobileNumber}</td>
-                        <td className="p-3">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                            client.workflowStatus === 'Completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : client.workflowStatus === 'In Progress'
-                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                : client.workflowStatus === 'Allocated'
-                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                          }`}>
-                            {getStatusLabel(client.workflowStatus, client.assignedTeam)}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          {client.assignedToName ? (
-                            <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                              👤 {client.assignedToName}
-                            </span>
-                          ) : (
-                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                              {teamLabels[client.assignedTeam] || 'Not Assigned'}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
+          
 
     </div>
   );
