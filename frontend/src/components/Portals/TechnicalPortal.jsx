@@ -207,27 +207,29 @@ export default function TechnicalPortal({
     }
   };
 
-  // Metric aggregates
-  const totalPosters = leads.reduce((acc, l) => acc + Number(l.postersRequired || 0), 0);
-  const pendingPosters = leads.reduce((acc, l) => acc + (Number(l.postersRequired) > 0 ? Number(l.postersPending ?? l.postersRequired) : 0), 0);
+  // Metric aggregates based on claimed clients only
+  const myLeads = leads.filter(l => l.assignedTo && (l.assignedTo?._id || l.assignedTo) === userId);
+
+  const totalPosters = myLeads.reduce((acc, l) => acc + Number(l.postersRequired || 0), 0);
+  const pendingPosters = myLeads.reduce((acc, l) => acc + (Number(l.postersRequired) > 0 ? Number(l.postersPending ?? l.postersRequired) : 0), 0);
   const completedPosters = totalPosters - pendingPosters;
 
-  const totalVideos = leads.reduce((acc, l) => acc + Number(l.videosRequired || 0), 0);
-  const pendingVideos = leads.reduce((acc, l) => acc + (Number(l.videosRequired) > 0 ? Number(l.videosPending ?? l.videosRequired) : 0), 0);
+  const totalVideos = myLeads.reduce((acc, l) => acc + Number(l.videosRequired || 0), 0);
+  const pendingVideos = myLeads.reduce((acc, l) => acc + (Number(l.videosRequired) > 0 ? Number(l.videosPending ?? l.videosRequired) : 0), 0);
   const completedVideos = totalVideos - pendingVideos;
 
-  const totalWebsites = leads.filter(l => l.websiteRequired).length;
-  const completedWebsites = leads.filter(l => l.websiteRequired && l.websiteStatus === 'Completed').length;
+  const totalWebsites = myLeads.filter(l => l.websiteRequired).length;
+  const completedWebsites = myLeads.filter(l => l.websiteRequired && l.websiteStatus === 'Completed').length;
   const pendingWebsites = totalWebsites - completedWebsites;
 
-  const totalCampaigns = leads.reduce((acc, l) => acc + Number(l.adsRequired || 0), 0);
-  const pendingCampaigns = leads.reduce((acc, l) => acc + (Number(l.adsRequired) > 0 ? Number(l.adsPending ?? l.adsRequired) : 0), 0);
+  const totalCampaigns = myLeads.reduce((acc, l) => acc + Number(l.adsRequired || 0), 0);
+  const pendingCampaigns = myLeads.reduce((acc, l) => acc + (Number(l.adsRequired) > 0 ? Number(l.adsPending ?? l.adsRequired) : 0), 0);
   const completedCampaigns = totalCampaigns - pendingCampaigns;
 
-  const completedProjectsCount = leads.filter(l => l.workflowStatus === 'Completed').length;
-  const inProgressProjectsCount = leads.filter(l => l.workflowStatus === 'In Progress').length;
-  const allocatedClientsCount = leads.filter(l => l.workflowStatus === 'Allocated').length;
-  const nonAllocatedClientsCount = leads.filter(l => (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated').length;
+  const completedProjectsCount = myLeads.filter(l => l.workflowStatus === 'Completed').length;
+  const inProgressProjectsCount = myLeads.filter(l => l.workflowStatus === 'In Progress').length;
+  const allocatedClientsCount = myLeads.filter(l => l.workflowStatus === 'Allocated').length;
+  const claimedClientsCount = myLeads.length;
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -630,19 +632,19 @@ export default function TechnicalPortal({
 
       {/* Workflow Status Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-rose-500/5">
-          <div className="p-3 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl">
-            <Sliders className="w-5 h-5" />
+        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5">
+          <div className="p-3 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-xl">
+            <User className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Non-Allocated</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{nonAllocatedClientsCount}</p>
+            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-405 uppercase tracking-wider">Claimed Clients</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{claimedClientsCount}</p>
           </div>
         </div>
 
         <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5">
           <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
-            <User className="w-5 h-5" />
+            <Clock className="w-5 h-5" />
           </div>
           <div>
             <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Allocated</p>
@@ -650,8 +652,8 @@ export default function TechnicalPortal({
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5">
-          <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
+        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-purple-500/5">
+          <div className="p-3 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl">
             <Layers className="w-5 h-5 animate-pulse" />
           </div>
           <div>
@@ -837,61 +839,6 @@ export default function TechnicalPortal({
         <div className="xl:col-span-2">
           <Card title="Assigned Client Campaigns" subtitle="Inspect briefs and update service milestones assigned to you">
             
-            {/* Common Filter Section */}
-            <div className="flex flex-wrap items-center gap-4 mb-6 bg-slate-500/5 dark:bg-slate-500/2 border border-gray-150/40 dark:border-slate-800/40 p-4 rounded-2xl text-xs font-semibold animate-in fade-in duration-200">
-              <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 uppercase tracking-wider">
-                <Sliders className="w-3.5 h-3.5 text-indigo-500" /> Filters:
-              </span>
-              
-              <div className="flex flex-wrap items-center gap-4 flex-1">
-                {/* Status Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold">Workflow Status:</span>
-                  <select
-                    value={filterWorkflowStatus}
-                    onChange={(e) => setFilterWorkflowStatus(e.target.value)}
-                    className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Non-Allocated">Non-Allocated</option>
-                    <option value="Allocated">Assigned to Specific Team</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-
-                
-
-                {/* Assigned Team Filter */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold">Assigned Team:</span>
-                  <select
-                    value={filterAssignedTeam}
-                    onChange={(e) => setFilterAssignedTeam(e.target.value)}
-                    className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
-                  >
-                    <option value="All">All Teams</option>
-                    <option value="design">Design Team</option>
-                    <option value="developer">Developer Team</option>
-                    <option value="ads">Ads Team</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Reset Button */}
-              {(filterWorkflowStatus !== 'All' || filterAssignedTeam !== 'All') && (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => {
-                    setFilterWorkflowStatus('All');
-                    setFilterAssignedTeam('All');
-                  }}
-                >
-                  Reset Filters
-                </Button>
-              )}
-            </div>
 
             {filteredLeads.length === 0 ? (
               <div className="text-center py-12 border border-dashed border-gray-200 dark:border-slate-805 rounded-xl bg-gray-50/20 dark:bg-slate-900/10">
