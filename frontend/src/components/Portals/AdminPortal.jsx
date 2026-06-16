@@ -2307,6 +2307,7 @@ export default function AdminPortal({
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
                 <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
                 <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
                 <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
@@ -2317,13 +2318,16 @@ export default function AdminPortal({
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
               {filteredCentralClients.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
+                  <td colSpan="6" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
                     No clients found matching the selected filters.
                   </td>
                 </tr>
               ) : (
                 filteredCentralClients.map((client) => (
                   <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
+                    <td className="p-3 font-bold text-indigo-600 dark:text-indigo-400">
+                      {client.clientId || 'N/A'}
+                    </td>
                     <td className="p-3 font-bold text-gray-900 dark:text-white">
                       {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
                     </td>

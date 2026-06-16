@@ -30,6 +30,111 @@ const sanitizeNumberFields = (body) => {
   }
 };
 
+// Helper to sync a lead to Google Sheets
+const syncLeadToGoogleSheets = async (lead) => {
+  // Get Apps Script URL from Config
+  const sheetsUrlConfig = await Config.findOne({ key: 'apps_script_url' });
+  const appsScriptUrl = sheetsUrlConfig ? sheetsUrlConfig.value : '';
+
+  if (!appsScriptUrl) {
+    throw new Error('Google Sheets URL is not configured by Administrator');
+  }
+
+  // Calculate totals, pending, completed posts/assets
+  const totalReq = Number(lead.postersRequired || 0) + Number(lead.videosRequired || 0) + Number(lead.adsRequired || 0) + (lead.websiteRequired ? 1 : 0);
+  const pendingReq = Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)) + 
+                     Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)) + 
+                     Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0)) + 
+                     (lead.websiteRequired ? (lead.websiteStatus === 'Completed' ? 0 : 1) : 0);
+  const completedReq = totalReq - pendingReq;
+
+  // Formatting summaries
+  const postersPending = Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0));
+  const postersReq = Number(lead.postersRequired || 0);
+  const postersCompleted = postersReq - postersPending;
+  const postersSummary = `Total: ${postersReq} | Pending: ${postersPending} | Completed: ${postersCompleted}`;
+
+  const videosPending = Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0));
+  const videosReq = Number(lead.videosRequired || 0);
+  const videosCompleted = videosReq - videosPending;
+  const videosSummary = `Total: ${videosReq} | Pending: ${videosPending} | Completed: ${videosCompleted}`;
+
+  const adsPending = Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0));
+  const adsReq = Number(lead.adsRequired || 0);
+  const adsCompleted = adsReq - adsPending;
+  const adsSummary = `Total: ${adsReq} | Pending: ${adsPending} | Completed: ${adsCompleted}`;
+
+  const payload = {
+    timestamp: lead.createdAt || new Date().toISOString(),
+    salespersonName: lead.salespersonName,
+    clientName: lead.clientName,
+    mobileNumber: lead.mobileNumber,
+    email: lead.email,
+    companyName: lead.companyName || '',
+    businessCategory: lead.businessCategory || '',
+    websiteUrl: lead.websiteUrl || '',
+    websiteRequired: lead.websiteRequired,
+    websiteType: lead.websiteType || '',
+    facebookId: lead.facebookId || '',
+    facebookPassword: lead.facebookPassword || '',
+    instagramId: lead.instagramId || '',
+    instagramPassword: lead.instagramPassword || '',
+    postersSummary,
+    videosSummary,
+    adsSummary,
+    websiteStatus: lead.websiteStatus || 'Pending',
+    platforms: lead.platforms,
+    brandColors: lead.brandColors,
+    targetAudience: lead.targetAudience || '',
+    competitors: lead.competitors || '',
+    planAmount: lead.planAmount || 0,
+    advanceAmount: lead.advanceAmount || 0,
+    pendingAmount: lead.pendingAmount || 0,
+    adBudget: lead.adBudget || 0,
+    startDate: lead.startDate || '',
+    deliveryDeadline: lead.deliveryDeadline || '',
+    totalPostsCount: totalReq,
+    pendingPostsCount: pendingReq,
+    completedPostsCount: completedReq,
+    notes: lead.notes || ''
+  };
+
+  // Trigger sync POST request to Apps Script Web App
+  const response = await fetch(appsScriptUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Google Sheets responded with status ${response.status}: ${response.statusText}`);
+  }
+
+  // If the body contains HTML indicating a Google sign-in/access prompt
+  if (
+    responseText.includes('Sign in - Google Accounts') || 
+    responseText.includes('You need access') || 
+    responseText.includes('request-access-icon') || 
+    responseText.includes('docs-drivelogo-text')
+  ) {
+    throw new Error('Access Denied: Please check that the Google Apps Script Web App deployment has "Who has access" set to "Anyone"');
+  }
+
+  // Check if Apps Script returned an error JSON
+  try {
+    const jsonRes = JSON.parse(responseText);
+    if (jsonRes.status === 'error') {
+      throw new Error(`Apps Script execution error: ${jsonRes.message}`);
+    }
+  } catch (jsonErr) {
+    // Response was not JSON, which is fine as long as it wasn't a Google login page
+  }
+};
+
 // @desc    Get all leads (Admin) or user-owned leads (Salesperson) or team leads (Technical)
 // @route   GET /api/leads
 // @access  Private
@@ -129,8 +234,8 @@ const createLead = async (req, res) => {
     // Sanitize numeric fields
     sanitizeNumberFields(req.body);
 
-    // Generate sequential client ID starting with 'emp' (e.g. emp001, emp002, etc.)
-    const lastLead = await Lead.findOne({ clientId: { $regex: /^emp\d+$/i } }).sort({ createdAt: -1 });
+    // Generate sequential client ID starting with 'LD' (e.g. LD001, LD002, etc.)
+    const lastLead = await Lead.findOne({ clientId: { $regex: /^LD\d+$/i } }).sort({ createdAt: -1 });
     let nextNum = 1;
     if (lastLead && lastLead.clientId) {
       const match = lastLead.clientId.match(/\d+/);
@@ -138,7 +243,7 @@ const createLead = async (req, res) => {
         nextNum = parseInt(match[0], 10) + 1;
       }
     }
-    const clientId = 'emp' + String(nextNum).padStart(3, '0');
+    const clientId = 'LD' + String(nextNum).padStart(3, '0');
 
     const leadData = {
       ...req.body,
@@ -180,6 +285,19 @@ const createLead = async (req, res) => {
     }
 
     const lead = await Lead.create(leadData);
+
+    // Auto sync to Google Sheets!
+    try {
+      await syncLeadToGoogleSheets(lead);
+      lead.status = 'Submitted to Admin';
+      await lead.save();
+    } catch (syncError) {
+      console.error('Auto Google Sheets sync failed on lead creation:', syncError.message);
+      const leadObj = lead.toObject();
+      leadObj.syncWarning = `Client ID ${clientId} created locally, but Google Sheets sync failed: ${syncError.message}`;
+      return res.status(201).json(leadObj);
+    }
+
     res.status(201).json(lead);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -300,114 +418,7 @@ const syncLead = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Get Apps Script URL from Config
-    const sheetsUrlConfig = await Config.findOne({ key: 'apps_script_url' });
-    const appsScriptUrl = sheetsUrlConfig ? sheetsUrlConfig.value : '';
-
-    if (!appsScriptUrl) {
-      return res.status(400).json({ message: 'Google Sheets URL is not configured by Administrator' });
-    }
-
-    // Calculate totals, pending, completed posts/assets
-    const totalReq = Number(lead.postersRequired || 0) + Number(lead.videosRequired || 0) + Number(lead.adsRequired || 0) + (lead.websiteRequired ? 1 : 0);
-    const pendingReq = Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)) + 
-                       Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)) + 
-                       Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0)) + 
-                       (lead.websiteRequired ? (lead.websiteStatus === 'Completed' ? 0 : 1) : 0);
-    const completedReq = totalReq - pendingReq;
-
-    // Formatting summaries
-    const postersPending = Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0));
-    const postersReq = Number(lead.postersRequired || 0);
-    const postersCompleted = postersReq - postersPending;
-    const postersSummary = `Total: ${postersReq} | Pending: ${postersPending} | Completed: ${postersCompleted}`;
-
-    const videosPending = Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0));
-    const videosReq = Number(lead.videosRequired || 0);
-    const videosCompleted = videosReq - videosPending;
-    const videosSummary = `Total: ${videosReq} | Pending: ${videosPending} | Completed: ${videosCompleted}`;
-
-    const adsPending = Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0));
-    const adsReq = Number(lead.adsRequired || 0);
-    const adsCompleted = adsReq - adsPending;
-    const adsSummary = `Total: ${adsReq} | Pending: ${adsPending} | Completed: ${adsCompleted}`;
-
-    const payload = {
-      timestamp: lead.createdAt || new Date().toISOString(),
-      salespersonName: lead.salespersonName,
-      clientName: lead.clientName,
-      mobileNumber: lead.mobileNumber,
-      email: lead.email,
-      companyName: lead.companyName || '',
-      businessCategory: lead.businessCategory || '',
-      websiteUrl: lead.websiteUrl || '',
-      websiteRequired: lead.websiteRequired,
-      websiteType: lead.websiteType || '',
-      facebookId: lead.facebookId || '',
-      facebookPassword: lead.facebookPassword || '',
-      instagramId: lead.instagramId || '',
-      instagramPassword: lead.instagramPassword || '',
-      postersSummary,
-      videosSummary,
-      adsSummary,
-      websiteStatus: lead.websiteStatus || 'Pending',
-      platforms: lead.platforms,
-      brandColors: lead.brandColors,
-      targetAudience: lead.targetAudience || '',
-      competitors: lead.competitors || '',
-      planAmount: lead.planAmount || 0,
-      advanceAmount: lead.advanceAmount || 0,
-      pendingAmount: lead.pendingAmount || 0,
-      adBudget: lead.adBudget || 0,
-      startDate: lead.startDate || '',
-      deliveryDeadline: lead.deliveryDeadline || '',
-      totalPostsCount: totalReq,
-      pendingPostsCount: pendingReq,
-      completedPostsCount: completedReq,
-      notes: lead.notes || ''
-    };
-
-    // Trigger sync POST request to Apps Script Web App
-    try {
-      const response = await fetch(appsScriptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const responseText = await response.text();
-
-      if (!response.ok) {
-        throw new Error(`Google Sheets responded with status ${response.status}: ${response.statusText}`);
-      }
-
-      // If the body contains HTML indicating a Google sign-in/access prompt
-      if (
-        responseText.includes('Sign in - Google Accounts') || 
-        responseText.includes('You need access') || 
-        responseText.includes('request-access-icon') || 
-        responseText.includes('docs-drivelogo-text')
-      ) {
-        throw new Error('Access Denied: Please check that the Google Apps Script Web App deployment has "Who has access" set to "Anyone"');
-      }
-
-      // Check if Apps Script returned an error JSON
-      try {
-        const jsonRes = JSON.parse(responseText);
-        if (jsonRes.status === 'error') {
-          throw new Error(`Apps Script execution error: ${jsonRes.message}`);
-        }
-      } catch (jsonErr) {
-        // Response was not JSON, which is fine as long as it wasn't a Google login page
-      }
-    } catch (fetchError) {
-      console.error('Fetch Google Sheets error:', fetchError);
-      return res.status(500).json({ 
-        message: `Google Sheets Sync failed: ${fetchError.message}` 
-      });
-    }
+    await syncLeadToGoogleSheets(lead);
 
     // Set lead status to Synced
     lead.status = 'Submitted to Admin';
