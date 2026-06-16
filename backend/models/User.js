@@ -22,6 +22,11 @@ const userSchema = new mongoose.Schema({
     required: true,
     enum: ['admin', 'salesperson', 'technical'],
     default: 'salesperson'
+  },
+  team: {
+    type: String,
+    enum: ['design', 'developer', 'ads', null],
+    default: null
   }
 }, {
   timestamps: true

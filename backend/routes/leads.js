@@ -12,8 +12,26 @@ router.get('/', protect, async (req, res) => {
     let leads;
     if (req.user.role === 'admin') {
       leads = await Lead.find({}).sort({ createdAt: -1 });
+    } else if (req.user.role === 'salesperson') {
+      leads = await Lead.find({ salesperson: req.user.id }).sort({ createdAt: -1 });
     } else if (req.user.role === 'technical') {
-      leads = await Lead.find({ assignedTo: req.user.id }).sort({ createdAt: -1 });
+      const query = {
+        assignedTeam: { $in: [req.user.team, 'all'] },
+        status: 'Submitted to Admin'
+      };
+
+      if (req.user.team === 'developer') {
+        query.websiteRequired = true;
+      } else if (req.user.team === 'design') {
+        query.$or = [
+          { postersRequired: { $gt: 0 } },
+          { videosRequired: { $gt: 0 } }
+        ];
+      } else if (req.user.team === 'ads') {
+        query.adsRequired = { $gt: 0 };
+      }
+
+      leads = await Lead.find(query).sort({ createdAt: -1 });
     } else {
       leads = await Lead.find({ salesperson: req.user.id }).sort({ createdAt: -1 });
     }
@@ -48,10 +66,31 @@ router.put('/assign', protect, async (req, res) => {
       techName = techUser.name;
     }
 
-    await Lead.updateMany(
-      { _id: { $in: leadIds } },
-      { assignedTo, assignedToName: techName }
-    );
+    const leadsToAssign = await Lead.find({ _id: { $in: leadIds } });
+    for (const lead of leadsToAssign) {
+      lead.assignedTo = assignedTo || null;
+      lead.assignedToName = techName;
+
+      // Recalculate workflowStatus
+      if (!lead.assignedTeam) {
+        lead.workflowStatus = 'Non-Allocated';
+      } else {
+        const activeStatuses = [];
+        if (Number(lead.postersRequired) > 0) activeStatuses.push(lead.postersStatus || 'Pending');
+        if (Number(lead.videosRequired) > 0) activeStatuses.push(lead.videosStatus || 'Pending');
+        if (Number(lead.adsRequired) > 0) activeStatuses.push(lead.adsStatus || 'Pending');
+        if (lead.websiteRequired) activeStatuses.push(lead.websiteStatus || 'Pending');
+
+        if (activeStatuses.length === 0 || activeStatuses.every(s => s === 'Completed')) {
+          lead.workflowStatus = 'Completed';
+        } else if (activeStatuses.every(s => s === 'Pending')) {
+          lead.workflowStatus = 'Allocated';
+        } else {
+          lead.workflowStatus = 'In Progress';
+        }
+      }
+      await lead.save();
+    }
 
     res.json({ message: 'Leads assigned successfully', assignedToName: techName });
   } catch (error) {
@@ -89,12 +128,14 @@ router.put('/:id', protect, async (req, res) => {
       return res.status(404).json({ message: 'Lead record not found' });
     }
 
-    // Verify ownership or assignment (only salesperson creator, admin, or assigned technical user can edit)
-    const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
     const isAdmin = req.user.role === 'admin';
-    const isAssignee = req.user.role === 'technical' && lead.assignedTo && lead.assignedTo.toString() === req.user.id.toString();
+    const isSalesperson = req.user.role === 'salesperson';
+    const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
+    const isAssignee = lead.assignedTo && lead.assignedTo.toString() === req.user.id.toString();
+    const isTeamMember = req.user.role === 'technical' && 
+      (lead.assignedTeam === req.user.team || lead.assignedTeam === 'all');
 
-    if (!isAdmin && !isCreator && !isAssignee) {
+    if (!isAdmin && !isCreator && !isSalesperson && !isAssignee && !isTeamMember) {
       return res.status(403).json({ message: 'Access denied: Cannot edit leads assigned to others' });
     }
 
@@ -109,6 +150,37 @@ router.put('/:id', protect, async (req, res) => {
     // Prevent overwriting owner
     delete updatedData.salesperson;
     delete updatedData.salespersonName;
+
+    // Calculate workflow status dynamically based on assignments and deliverables if not manually overridden
+    if (updatedData.workflowStatus === undefined) {
+      const assignedTeam = updatedData.assignedTeam !== undefined ? updatedData.assignedTeam : lead.assignedTeam;
+      let calculatedWorkflowStatus = 'Non-Allocated';
+      if (assignedTeam) {
+        const postersRequired = updatedData.postersRequired !== undefined ? updatedData.postersRequired : lead.postersRequired;
+        const postersStatus = updatedData.postersStatus !== undefined ? updatedData.postersStatus : lead.postersStatus;
+        const videosRequired = updatedData.videosRequired !== undefined ? updatedData.videosRequired : lead.videosRequired;
+        const videosStatus = updatedData.videosStatus !== undefined ? updatedData.videosStatus : lead.videosStatus;
+        const adsRequired = updatedData.adsRequired !== undefined ? updatedData.adsRequired : lead.adsRequired;
+        const adsStatus = updatedData.adsStatus !== undefined ? updatedData.adsStatus : lead.adsStatus;
+        const websiteRequired = updatedData.websiteRequired !== undefined ? updatedData.websiteRequired : lead.websiteRequired;
+        const websiteStatus = updatedData.websiteStatus !== undefined ? updatedData.websiteStatus : lead.websiteStatus;
+
+        const activeStatuses = [];
+        if (Number(postersRequired) > 0) activeStatuses.push(postersStatus || 'Pending');
+        if (Number(videosRequired) > 0) activeStatuses.push(videosStatus || 'Pending');
+        if (Number(adsRequired) > 0) activeStatuses.push(adsStatus || 'Pending');
+        if (websiteRequired) activeStatuses.push(websiteStatus || 'Pending');
+
+        if (activeStatuses.length === 0 || activeStatuses.every(s => s === 'Completed')) {
+          calculatedWorkflowStatus = 'Completed';
+        } else if (activeStatuses.every(s => s === 'Pending')) {
+          calculatedWorkflowStatus = 'Allocated';
+        } else {
+          calculatedWorkflowStatus = 'In Progress';
+        }
+      }
+      updatedData.workflowStatus = calculatedWorkflowStatus;
+    }
 
     const updatedLead = await Lead.findByIdAndUpdate(req.params.id, updatedData, { new: true });
     res.json(updatedLead);
@@ -267,6 +339,9 @@ router.post('/:id/sync', protect, async (req, res) => {
 
     // Set lead status to Synced
     lead.status = 'Submitted to Admin';
+    if (!lead.workflowStatus) {
+      lead.workflowStatus = 'Non-Allocated';
+    }
     await lead.save();
 
     res.json(lead);

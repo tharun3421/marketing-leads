@@ -26,7 +26,7 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
   return (
     <div className="space-y-6">
       {/* Salesperson Identity */}
-      <div className="grid grid-cols-1 gap-4 bg-indigo-500/5 dark:bg-indigo-500/2 border border-indigo-500/10 p-4 rounded-xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-500/5 dark:bg-indigo-500/2 border border-indigo-500/10 p-4 rounded-xl">
         {isClientPortal ? (
           <Select
             label="Assigned Sales Representative"
@@ -48,6 +48,21 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
             {...register('salespersonName', { required: 'Salesperson Name is required' })}
           />
         )}
+
+        <Select
+          label="Assign to Technical Team"
+          placeholder="Select the team responsible"
+          required
+          disabled={isReadOnlyProfile}
+          options={[
+            { value: 'design', label: 'Design Team' },
+            { value: 'developer', label: 'Developer Team' },
+            { value: 'ads', label: 'Ads Team' },
+            { value: 'all', label: 'All Teams' }
+          ]}
+          error={errors.assignedTeam?.message}
+          {...register('assignedTeam', { required: 'Technical team assignment is required' })}
+        />
       </div>
 
       {/* Client Identity & Contacts */}

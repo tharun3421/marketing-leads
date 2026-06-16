@@ -32,6 +32,7 @@ router.post('/login', async (req, res) => {
         name: user.name,
         username: user.username,
         role: user.role,
+        team: user.team,
         token: generateToken(user._id)
       });
     } else {
@@ -46,7 +47,7 @@ router.post('/login', async (req, res) => {
 // @desc    Register a new salesperson user
 // @access  Private/Admin
 router.post('/register', protect, adminOnly, async (req, res) => {
-  const { name, username, password, role } = req.body;
+  const { name, username, password, role, team } = req.body;
 
   try {
     const userExists = await User.findOne({ username });
@@ -61,7 +62,8 @@ router.post('/register', protect, adminOnly, async (req, res) => {
       name,
       username,
       password, // will be auto-hashed by User pre-save middleware
-      role: assignedRole
+      role: assignedRole,
+      team: assignedRole === 'technical' ? team : null
     });
 
     if (user) {
@@ -69,11 +71,29 @@ router.post('/register', protect, adminOnly, async (req, res) => {
         _id: user._id,
         name: user.name,
         username: user.username,
-        role: user.role
+        role: user.role,
+        team: user.team
       });
     } else {
       res.status(400).json({ message: 'Invalid user data provided' });
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// @route   GET /api/auth/me
+// @desc    Get current logged in user profile
+// @access  Private
+router.get('/me', protect, async (req, res) => {
+  try {
+    res.json({
+      _id: req.user._id,
+      name: req.user.name,
+      username: req.user.username,
+      role: req.user.role,
+      team: req.user.team
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -96,7 +116,7 @@ router.get('/salespersons', protect, async (req, res) => {
 // @access  Private
 router.get('/technical', protect, async (req, res) => {
   try {
-    const technical = await User.find({ role: 'technical' }).select('name username createdAt');
+    const technical = await User.find({ role: 'technical' }).select('name username team createdAt');
     res.json(technical);
   } catch (error) {
     res.status(500).json({ message: error.message });

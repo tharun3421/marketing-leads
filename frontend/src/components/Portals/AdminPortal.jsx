@@ -32,6 +32,17 @@ import { Input } from '../UI/Input';
 import AppsScriptGuide from '../Help/AppsScriptGuide';
 import { useAuth } from '../../context/AuthContext';
 
+const getStatusLabel = (status, team) => {
+  if (status === 'Allocated') {
+    if (team === 'developer') return 'Assigned to Developer Team';
+    if (team === 'design') return 'Assigned to Design Team';
+    if (team === 'ads') return 'Assigned to Ads Team';
+    if (team === 'all') return 'Assigned to All Teams';
+    return 'Assigned to Specific Team';
+  }
+  return status || 'Non-Allocated';
+};
+
 export default function AdminPortal({ 
   notifications = [],
   setNotifications,
@@ -50,6 +61,7 @@ export default function AdminPortal({
   const [showNotifications, setShowNotifications] = useState(false);
 
   const [selectedRep, setSelectedRep] = useState(null); // name string | 'All' | null
+  const [selectedTech, setSelectedTech] = useState(null); // tech object | null
   const [newRepName, setNewRepName] = useState('');
   const [newRepUsername, setNewRepUsername] = useState('');
   const [newRepPassword, setNewRepPassword] = useState('');
@@ -60,15 +72,21 @@ export default function AdminPortal({
   const [resetPasswordInput, setResetPasswordInput] = useState('');
   const [technicalList, setTechnicalList] = useState([]);
   const [newRepRole, setNewRepRole] = useState('salesperson');
+  const [newRepTeam, setNewRepTeam] = useState('design');
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
   const [assignToTechId, setAssignToTechId] = useState('');
   const [currentView, setCurrentView] = useState('dashboard');
 
+  // Central Clients Management filter states
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [clientStatusFilter, setClientStatusFilter] = useState('All');
+  const [clientTeamFilter, setClientTeamFilter] = useState('All');
+  const [clientStartDateFilter, setClientStartDateFilter] = useState('');
+  const [clientEndDateFilter, setClientEndDateFilter] = useState('');
+
   // Advanced filters state
-  const [filterService, setFilterService] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterWorkflowStatus, setFilterWorkflowStatus] = useState('All');
+  const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -108,6 +126,84 @@ export default function AdminPortal({
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleCentralStatusChange = async (leadId, newStatus) => {
+    try {
+      const res = await authFetch(`/api/leads/${leadId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ workflowStatus: newStatus })
+      });
+      if (res.ok) {
+        fetchData();
+        onAddToast('Status Updated', `Updated workflow status to ${newStatus}.`, 'success');
+        if (onAddNotification) {
+          onAddNotification(`Admin updated workflow status of client to ${newStatus}.`, 'update');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      onAddToast('Error', 'Failed to update client status.', 'error');
+    }
+  };
+
+  const handleCentralTeamChange = async (leadId, newTeam) => {
+    try {
+      const res = await authFetch(`/api/leads/${leadId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ 
+          assignedTeam: newTeam || null,
+          assignedTo: null,
+          assignedToName: null,
+          workflowStatus: newTeam ? 'Allocated' : 'Non-Allocated'
+        })
+      });
+      if (res.ok) {
+        fetchData();
+        onAddToast('Assignment Updated', `Updated team assignment to ${newTeam ? newTeam.toUpperCase() : 'None'}.`, 'success');
+        if (onAddNotification) {
+          onAddNotification(`Admin updated team assignment of client to ${newTeam || 'none'}.`, 'update');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      onAddToast('Error', 'Failed to update team assignment.', 'error');
+    }
+  };
+
+  // Central Clients Management filter logic
+  const filteredCentralClients = leads.filter(lead => {
+    if (clientSearchQuery) {
+      const q = clientSearchQuery.toLowerCase();
+      const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
+      const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
+      if (!nameMatch && !phoneMatch) return false;
+    }
+
+    if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
+      return false;
+    }
+
+    if (clientTeamFilter !== 'All') {
+      if (lead.assignedTeam !== clientTeamFilter && lead.assignedTeam !== 'all') {
+        return false;
+      }
+    }
+
+    if (clientStartDateFilter) {
+      const start = new Date(clientStartDateFilter);
+      start.setHours(0, 0, 0, 0);
+      const created = new Date(lead.createdAt || lead.timestamp);
+      if (created < start) return false;
+    }
+    if (clientEndDateFilter) {
+      const end = new Date(clientEndDateFilter);
+      end.setHours(23, 59, 59, 999);
+      const created = new Date(lead.createdAt || lead.timestamp);
+      if (created > end) return false;
+    }
+
+    return true;
+  });
 
   if (isLoading) {
     return (
@@ -231,7 +327,8 @@ export default function AdminPortal({
           name: cleanName,
           username: cleanUsername,
           password: cleanPassword,
-          role: newRepRole
+          role: newRepRole,
+          team: newRepRole === 'technical' ? newRepTeam : null
         })
       });
 
@@ -408,45 +505,25 @@ export default function AdminPortal({
   };
   const intakeData = getIntakeData();
 
-  // Inspect leads for a salesperson
-  const inspectedLeads = selectedRep === 'All' 
-    ? leads 
-    : leads.filter(l => l.salespersonName === selectedRep);
+  // Inspect leads for a salesperson or technical team member
+  const inspectedLeads = selectedRep 
+    ? (selectedRep === 'All' ? leads : leads.filter(l => l.salespersonName === selectedRep))
+    : (selectedTech ? leads.filter(l => l.assignedTo === selectedTech._id || l.assignedToName === selectedTech.name) : []);
 
   const filteredInspectedLeads = inspectedLeads.filter(lead => {
-    const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = (
-      (lead.clientName || '').toLowerCase().includes(searchLower) ||
-      (lead.companyName || '').toLowerCase().includes(searchLower) ||
-      (lead.businessCategory || '').toLowerCase().includes(searchLower)
-    );
+    // 1. Status filter
+    if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
+      return false;
+    }
 
-    let matchesService = true;
-    if (filterService === 'Posters') matchesService = Number(lead.postersRequired) > 0;
-    else if (filterService === 'Videos') matchesService = Number(lead.videosRequired) > 0;
-    else if (filterService === 'Ads') matchesService = Number(lead.adsRequired) > 0;
-    else if (filterService === 'Website') matchesService = lead.websiteRequired === true;
-
-    let matchesStatus = true;
-    if (filterStatus !== 'All') {
-      if (filterService === 'Posters') matchesStatus = lead.postersStatus === filterStatus;
-      else if (filterService === 'Videos') matchesStatus = lead.videosStatus === filterStatus;
-      else if (filterService === 'Ads') matchesStatus = lead.adsStatus === filterStatus;
-      else if (filterService === 'Website') matchesStatus = lead.websiteStatus === filterStatus;
-      else {
-        matchesStatus = getProjectStatus(lead) === filterStatus;
+    // 2. Assigned Team filter
+    if (filterAssignedTeam !== 'All') {
+      if (lead.assignedTeam !== filterAssignedTeam && lead.assignedTeam !== 'all') {
+        return false;
       }
     }
 
-    let matchesDate = true;
-    if (filterStartDate) {
-      matchesDate = matchesDate && lead.startDate >= filterStartDate;
-    }
-    if (filterEndDate) {
-      matchesDate = matchesDate && lead.startDate <= filterEndDate;
-    }
-
-    return matchesSearch && matchesService && matchesStatus && matchesDate;
+    return true;
   });
 
   // Export specific Salesperson's clients to CSV
@@ -530,14 +607,15 @@ export default function AdminPortal({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `leads_report_${selectedRep.replace(/\s+/g, '_')}.csv`);
+    const exportName = selectedRep ? selectedRep : (selectedTech ? selectedTech.name : 'Leads');
+    link.setAttribute('download', `leads_report_${exportName.replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // INSPECTING SPECIFIC SALESPERSON BRIEFING
-  if (selectedRep) {
+  // INSPECTING SPECIFIC SALESPERSON/TECHNICAL MEMBER BRIEFING
+  if (selectedRep || selectedTech) {
     return (
       <div className="space-y-6">
         
@@ -546,6 +624,7 @@ export default function AdminPortal({
           <button
             onClick={() => {
               setSelectedRep(null);
+              setSelectedTech(null);
               setSearchTerm('');
             }}
             className="p-2 rounded-xl border border-gray-200 dark:border-slate-800 bg-white/50 hover:bg-white/80 dark:bg-slate-950/30 dark:hover:bg-slate-950/60 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-all cursor-pointer"
@@ -553,7 +632,9 @@ export default function AdminPortal({
             <ArrowLeft className="w-4.5 h-4.5" />
           </button>
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Portfolio Inspection: {selectedRep}</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              {selectedRep ? (selectedRep === 'All' ? 'All Leads' : `Portfolio: ${selectedRep}`) : `Tasks: ${selectedTech.name}`}
+            </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Reviewing {inspectedLeads.length} total client brief records
             </p>
@@ -561,101 +642,74 @@ export default function AdminPortal({
         </div>
 
         {/* Portfolio Registry Table */}
-        <Card title={`${selectedRep}'s Clients`} subtitle="Double click or inspect any record to audit full client brief details">
-          <div className="space-y-4 mb-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-                <input
-                  type="text"
-                  placeholder="Search by client, company, category..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
-                />
-              </div>
-
-              {/* Service Filter */}
-              <div className="w-full md:w-44">
-                <select
-                  value={filterService}
-                  onChange={(e) => setFilterService(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500"
-                >
-                  <option value="All">All Services</option>
-                  <option value="Posters">Posters</option>
-                  <option value="Videos">Videos</option>
-                  <option value="Ads">Advertisements</option>
-                  <option value="Website">Websites</option>
-                </select>
-              </div>
-
+        <Card 
+          title={selectedRep ? (selectedRep === 'All' ? 'All System Clients' : `${selectedRep}'s Clients`) : `${selectedTech.name}'s Assigned Tasks`} 
+          subtitle="Double click or inspect any record to audit full client brief details"
+        >
+          {/* Common Filter Section */}
+          <div className="flex flex-wrap items-center gap-4 mb-6 bg-slate-500/5 dark:bg-slate-500/2 border border-gray-150/40 dark:border-slate-800/40 p-4 rounded-2xl text-xs font-semibold animate-in fade-in duration-200">
+            <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 uppercase tracking-wider">
+              <Sliders className="w-3.5 h-3.5 text-indigo-500" /> Filters:
+            </span>
+            
+            <div className="flex flex-wrap items-center gap-4 flex-1">
               {/* Status Filter */}
-              <div className="w-full md:w-44">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold">Workflow Status:</span>
                 <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500"
+                  value={filterWorkflowStatus}
+                  onChange={(e) => setFilterWorkflowStatus(e.target.value)}
+                  className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                 >
                   <option value="All">All Statuses</option>
-                  <option value="Pending">Pending</option>
+                  <option value="Non-Allocated">Non-Allocated</option>
+                  <option value="Allocated">Assigned to Specific Team</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Completed">Completed</option>
                 </select>
               </div>
+
+              {/* Assigned Team Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold">Assigned Team:</span>
+                <select
+                  value={filterAssignedTeam}
+                  onChange={(e) => setFilterAssignedTeam(e.target.value)}
+                  className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+                >
+                  <option value="All">All Teams</option>
+                  <option value="design">Design Team</option>
+                  <option value="developer">Developer Team</option>
+                  <option value="ads">Ads Team</option>
+                </select>
+              </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
-              {/* Date Filters */}
-              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-650 dark:text-gray-400">
-                <div className="flex items-center gap-2">
-                  <span>Timeline From:</span>
-                  <input
-                    type="date"
-                    value={filterStartDate}
-                    onChange={(e) => setFilterStartDate(e.target.value)}
-                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span>To:</span>
-                  <input
-                    type="date"
-                    value={filterEndDate}
-                    onChange={(e) => setFilterEndDate(e.target.value)}
-                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-2 justify-end">
-                {/* Reset Filters */}
-                {(filterService !== 'All' || filterStatus !== 'All' || filterStartDate || filterEndDate) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setFilterService('All');
-                      setFilterStatus('All');
-                      setFilterStartDate('');
-                      setFilterEndDate('');
-                    }}
-                  >
-                    Clear Filters
-                  </Button>
-                )}
-
+            {/* Actions Row */}
+            <div className="flex gap-2 justify-end text-xs">
+              {/* Reset Button */}
+              {(filterWorkflowStatus !== 'All' || filterAssignedTeam !== 'All') && (
                 <Button
                   variant="outline"
-                  size="sm"
-                  icon={Download}
-                  onClick={handleExportRepCSV}
-                  disabled={inspectedLeads.length === 0}
+                  size="xs"
+                  onClick={() => {
+                    setFilterWorkflowStatus('All');
+                    setFilterAssignedTeam('All');
+                  }}
                 >
-                  Export CSV Report
+                  Reset Filters
                 </Button>
-              </div>
+              )}
+
+              <Button
+                variant="outline"
+                size="xs"
+                icon={Download}
+                onClick={handleExportRepCSV}
+                disabled={inspectedLeads.length === 0}
+              >
+                Export CSV Report
+              </Button>
             </div>
           </div>
 
@@ -664,7 +718,7 @@ export default function AdminPortal({
               <Users className="w-10 h-10 text-gray-300 dark:text-slate-700 mx-auto mb-3" />
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 {inspectedLeads.length === 0 
-                  ? `${selectedRep} has not added any client records yet.` 
+                  ? `${selectedRep ? (selectedRep === 'All' ? 'System' : selectedRep) : selectedTech.name} has no client records yet.` 
                   : 'No client folders match the search query.'}
               </p>
             </div>
@@ -675,13 +729,11 @@ export default function AdminPortal({
                   <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
                     <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Contact</th>
                     <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Company & Sector</th>
-                    {selectedRep === 'All' && (
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Representative</th>
-                    )}
+                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Representative</th>
                     <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assignee</th>
                     <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Timestamp</th>
                     <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Deliverables Status</th>
-                    <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Sync Status</th>
+                    <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Workflow Status</th>
                     <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Action</th>
                   </tr>
                 </thead>
@@ -692,31 +744,41 @@ export default function AdminPortal({
                         <div>{lead.clientName}</div>
                         <div className="text-xs text-gray-400 dark:text-gray-500">{lead.email}</div>
                       </td>
-                      <td className="p-3 text-gray-600 dark:text-gray-300">
+                      <td className="p-3 text-gray-650 dark:text-gray-300">
                         <div>{lead.companyName || '—'}</div>
                         <div className="text-xs text-gray-400 dark:text-gray-500">{lead.businessCategory || '—'}</div>
                       </td>
-                      {selectedRep === 'All' && (
-                        <td className="p-3 text-sm text-indigo-600 dark:text-indigo-400 font-bold">
-                          {lead.salespersonName}
-                        </td>
-                      )}
+                      <td className="p-3 text-sm text-indigo-650 dark:text-indigo-400 font-bold">
+                        {lead.salespersonName}
+                      </td>
                       <td className="p-3 text-xs">
                         {lead.assignedToName ? (
-                          <span className="bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-2 py-0.5 font-bold text-indigo-600 dark:text-indigo-400">
-                            {lead.assignedToName}
-                          </span>
+                          <div className="space-y-1">
+                            <span className="bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-2 py-0.5 font-bold text-indigo-655 dark:text-indigo-400 block w-fit">
+                              👤 {lead.assignedToName}
+                            </span>
+                            <span className="text-[10px] text-gray-405 dark:text-gray-500 block font-semibold">
+                              Team: {lead.assignedTeam === 'design' ? 'Design' : lead.assignedTeam === 'developer' ? 'Developer' : lead.assignedTeam === 'ads' ? 'Ads' : lead.assignedTeam === 'all' ? 'All Teams' : 'General'}
+                            </span>
+                          </div>
                         ) : (
-                          <span className="text-gray-400 dark:text-gray-500 italic">Unassigned</span>
+                          <div className="space-y-1">
+                            <span className="text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 rounded-lg px-2 py-0.5 block w-fit">
+                              Queue: {lead.assignedTeam === 'design' ? 'Design' : lead.assignedTeam === 'developer' ? 'Developer' : lead.assignedTeam === 'ads' ? 'Ads' : lead.assignedTeam === 'all' ? 'All Teams' : 'General'}
+                            </span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-550 italic block font-semibold">
+                              Unclaimed
+                            </span>
+                          </div>
                         )}
                       </td>
-                      <td className="p-3 text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">
+                      <td className="p-3 text-xs text-gray-400 dark:text-gray-550 whitespace-nowrap">
                         {(lead.createdAt || lead.timestamp) ? new Date(lead.createdAt || lead.timestamp).toLocaleString() : 'N/A'}
                       </td>
                       <td className="p-3 text-xs">
                         <div className="space-y-1">
                           {Number(lead.postersRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                            <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
                               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                               <span>Posters: </span>
                               <span className="font-bold text-gray-900 dark:text-white">
@@ -725,7 +787,7 @@ export default function AdminPortal({
                             </div>
                           )}
                           {Number(lead.videosRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                            <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
                               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                               <span>Videos: </span>
                               <span className="font-bold text-gray-900 dark:text-white">
@@ -734,7 +796,7 @@ export default function AdminPortal({
                             </div>
                           )}
                           {Number(lead.adsRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                            <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
                               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                               <span>Ads: </span>
                               <span className="font-bold text-gray-900 dark:text-white">
@@ -749,15 +811,17 @@ export default function AdminPortal({
                       </td>
                       <td className="p-3 text-center">
                         <span className={`
-                          text-[10px] font-bold px-2 py-0.5 rounded-md border
-                          ${lead.status === 'Submitted to Admin'
-                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/10 dark:bg-emerald-500/5 dark:border-emerald-500/10'
-                            : lead.status === 'Client Submitted'
-                              ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/10 dark:bg-indigo-500/5 dark:border-indigo-500/10'
-                              : 'bg-slate-500/10 text-slate-600 border-slate-500/10 dark:bg-slate-500/5 dark:border-slate-500/10'
+                          text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider
+                          ${lead.workflowStatus === 'Completed'
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                            : lead.workflowStatus === 'In Progress'
+                              ? 'bg-indigo-500/10 text-indigo-655 border-indigo-500/20'
+                              : lead.workflowStatus === 'Allocated'
+                                ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
                           }
                         `}>
-                          {lead.status}
+                          {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
                         </span>
                       </td>
                       <td className="p-3 text-center">
@@ -974,6 +1038,17 @@ export default function AdminPortal({
                       </p>
                     </div>
                   )}
+
+                  {selectedLead.remarks && (
+                    <div>
+                      <h4 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-1.5">
+                        Technical Progress Updates & Remarks
+                      </h4>
+                      <p className="p-3.5 bg-indigo-500/5 dark:bg-indigo-500/2 border border-indigo-500/20 text-indigo-900 dark:text-indigo-300 rounded-xl leading-relaxed">
+                        {selectedLead.remarks}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Modal Footer */}
@@ -990,7 +1065,7 @@ export default function AdminPortal({
     );
   }
 
-  if (currentView === 'assign-tasks') {
+  if (currentView === 'assign-tasks' && false) {
     const allLeadsFiltered = leads.filter(lead => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = (
@@ -1427,16 +1502,39 @@ export default function AdminPortal({
                       Client Profile & Metadata
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 bg-gray-50 dark:bg-slate-950/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/40">
+                      <div><span className="text-gray-400">Date:</span> <span className="text-gray-900 dark:text-white">{new Date(selectedLead.createdAt || selectedLead.timestamp).toLocaleDateString()}</span></div>
                       <div><span className="text-gray-400">Client Name:</span> <strong className="text-gray-900 dark:text-white">{selectedLead.clientName}</strong></div>
-                      <div><span className="text-gray-400">Mobile Number:</span> <strong className="text-gray-900 dark:text-white">{selectedLead.mobileNumber}</strong></div>
+                      <div><span className="text-gray-400">Business Name:</span> <span className="text-gray-900 dark:text-white">{selectedLead.companyName || '—'}</span></div>
+                      <div><span className="text-gray-400">WhatsApp Number:</span> <strong className="text-gray-900 dark:text-white">{selectedLead.mobileNumber}</strong></div>
                       <div><span className="text-gray-400">Email Address:</span> <span className="text-gray-900 dark:text-white font-medium">{selectedLead.email}</span></div>
-                      <div><span className="text-gray-400">Company Name:</span> <span className="text-gray-900 dark:text-white">{selectedLead.companyName || '—'}</span></div>
                       <div><span className="text-gray-400">Business Category:</span> <span className="text-gray-900 dark:text-white">{selectedLead.businessCategory || '—'}</span></div>
                       <div><span className="text-gray-400">Website URL:</span> <a href={selectedLead.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline break-all">{selectedLead.websiteUrl || '—'}</a></div>
-                      <div><span className="text-gray-400">Website Required:</span> <strong className="text-gray-955 dark:text-white">{selectedLead.websiteRequired ? 'Yes' : 'No'}</strong></div>
+                      <div><span className="text-gray-400">Website Required:</span> <strong className="text-gray-950 dark:text-white">{selectedLead.websiteRequired ? 'Yes' : 'No'}</strong></div>
                       {selectedLead.websiteRequired && (
                         <div className="md:col-span-2"><span className="text-gray-400">Website Type:</span> <span className="text-gray-900 dark:text-white font-semibold">{selectedLead.websiteType || '—'}</span></div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Project Status & Workflows */}
+                  <div>
+                    <h4 className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2.5">
+                      Service Workflow & Assignment Details
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 bg-gray-50 dark:bg-slate-950/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/40">
+                      <div><span className="text-gray-400">Project Status:</span> <strong className="text-indigo-600 dark:text-indigo-400 uppercase">{getProjectStatus(selectedLead)}</strong></div>
+                      <div><span className="text-gray-400">Assigned Team:</span> <strong className="text-gray-900 dark:text-white uppercase">{selectedLead.assignedTeam ? `${selectedLead.assignedTeam.toUpperCase()} Team` : 'None'}</strong></div>
+                      <div><span className="text-gray-400">Assigned Specialist:</span> <span className="text-gray-900 dark:text-white font-semibold">{selectedLead.assignedToName || 'Unclaimed'}</span></div>
+                      <div><span className="text-gray-400">Acceptance Status:</span> <span className="text-gray-900 dark:text-white font-semibold">{selectedLead.assignedTo ? 'Accepted' : 'Pending Acceptance'}</span></div>
+                      <div><span className="text-gray-400">Service Types:</span> <span className="text-gray-900 dark:text-white font-semibold">
+                        {[
+                          selectedLead.websiteRequired ? 'Website' : null,
+                          Number(selectedLead.postersRequired) > 0 ? 'Posters' : null,
+                          Number(selectedLead.videosRequired) > 0 ? 'Videos' : null,
+                          Number(selectedLead.adsRequired) > 0 ? 'Ads Campaign' : null
+                        ].filter(Boolean).join(', ') || 'None'}
+                      </span></div>
+                      <div><span className="text-gray-400">Last Updated Date:</span> <span className="text-gray-900 dark:text-white font-medium">{new Date(selectedLead.updatedAt).toLocaleString()}</span></div>
                     </div>
                   </div>
 
@@ -1702,27 +1800,33 @@ export default function AdminPortal({
           </div>
         </div>
 
-        <div 
-          onClick={() => setCurrentView('assign-tasks')}
-          className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5 cursor-pointer hover:bg-blue-500/5 dark:hover:bg-blue-500/2 transition-all"
-          title="Click to assign tasks to technical team"
-        >
+        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5">
           <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
             <Sliders className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Assign Tasks</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{leads.length}</p>
+            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Assigned Tasks</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{leads.filter(l => l.assignedTo !== null).length}</p>
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-pink-500/5">
-          <div className="p-3 bg-pink-500/10 text-pink-600 dark:text-pink-400 rounded-xl">
+        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-rose-500/5">
+          <div className="p-3 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl">
             <Clock className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Pending Sync</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalPendingCount}</p>
+            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Non-Allocated</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{leads.filter(l => (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated').length}</p>
+          </div>
+        </div>
+
+        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5">
+          <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
+            <Layers className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Allocated</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{leads.filter(l => l.workflowStatus === 'Allocated').length}</p>
           </div>
         </div>
 
@@ -1731,18 +1835,8 @@ export default function AdminPortal({
             <Clock className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-gray-550 dark:text-gray-400 uppercase tracking-wider">Pending Serv.</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalPendingServices}</p>
-          </div>
-        </div>
-
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5">
-          <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
-            <Layers className="w-5 h-5" />
-          </div>
-          <div>
             <p className="text-[10px] font-bold text-gray-550 dark:text-gray-400 uppercase tracking-wider">In Progress</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalInProgressServices}</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{leads.filter(l => l.workflowStatus === 'In Progress').length}</p>
           </div>
         </div>
 
@@ -1751,8 +1845,8 @@ export default function AdminPortal({
             <CheckCircle className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-gray-550 dark:text-gray-400 uppercase tracking-wider">Completed</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalCompletedServices}</p>
+            <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Completed</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{leads.filter(l => l.workflowStatus === 'Completed').length}</p>
           </div>
         </div>
       </div>
@@ -2118,6 +2212,153 @@ export default function AdminPortal({
         </div>
       </Card>
 
+      {/* Central Clients Section */}
+      <Card title="Clients" subtitle="Central client management roster synchronized in real-time across portals">
+        <div className="space-y-4 mb-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+              <input
+                type="text"
+                placeholder="Search by client name or WhatsApp number..."
+                value={clientSearchQuery}
+                onChange={(e) => setClientSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Status Filter */}
+            <div className="w-full md:w-44">
+              <select
+                value={clientStatusFilter}
+                onChange={(e) => setClientStatusFilter(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Non-Allocated">Non-Allocated</option>
+                <option value="Allocated">Assigned to Specific Team</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
+
+            {/* Team Filter */}
+            <div className="w-full md:w-44">
+              <select
+                value={clientTeamFilter}
+                onChange={(e) => setClientTeamFilter(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+              >
+                <option value="All">All Teams</option>
+                <option value="design">Design Team</option>
+                <option value="developer">Development Team</option>
+                <option value="ads">Ads Team</option>
+                <option value="all">All Teams</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
+            {/* Date Filters */}
+            <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-600 dark:text-gray-400">
+              <div className="flex items-center gap-2">
+                <span>Timeline From:</span>
+                <input
+                  type="date"
+                  value={clientStartDateFilter}
+                  onChange={(e) => setClientStartDateFilter(e.target.value)}
+                  className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span>To:</span>
+                <input
+                  type="date"
+                  value={clientEndDateFilter}
+                  onChange={(e) => setClientEndDateFilter(e.target.value)}
+                  className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              {/* Clear Filters */}
+              {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setClientSearchQuery('');
+                    setClientStatusFilter('All');
+                    setClientTeamFilter('All');
+                    setClientStartDateFilter('');
+                    setClientEndDateFilter('');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
+              {filteredCentralClients.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
+                    No clients found matching the selected filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredCentralClients.map((client) => (
+                  <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
+                    <td className="p-3 font-bold text-gray-900 dark:text-white">
+                      {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
+                    </td>
+                    <td className="p-3 text-gray-900 dark:text-white font-bold">{client.clientName}</td>
+                    <td className="p-3 font-mono">{client.mobileNumber}</td>
+                    <td className="p-3">
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                        client.workflowStatus === 'Completed'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : client.workflowStatus === 'In Progress'
+                            ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                            : client.workflowStatus === 'Allocated'
+                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                      }`}>
+                        {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                        {client.assignedTeam === 'design' && 'Design Team'}
+                        {client.assignedTeam === 'developer' && 'Development Team'}
+                        {client.assignedTeam === 'ads' && 'Ads Team'}
+                        {client.assignedTeam === 'all' && 'All Teams'}
+                        {!client.assignedTeam && 'Not Assigned'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
       {/* Main Roster Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -2129,7 +2370,7 @@ export default function AdminPortal({
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setSelectedRep('All')}
+                onClick={() => { setSelectedRep('All'); setSelectedTech(null); }}
                 icon={Users}
               >
                 Inspect All System Leads ({leads.length})
@@ -2140,7 +2381,7 @@ export default function AdminPortal({
               {repStats.map((rep, idx) => (
                 <div 
                   key={idx}
-                  onClick={() => setSelectedRep(rep.name)}
+                  onClick={() => { setSelectedRep(rep.name); setSelectedTech(null); }}
                   className="p-5 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white/40 hover:bg-white/80 dark:bg-slate-950/20 dark:hover:bg-slate-950/40 transition-all cursor-pointer flex flex-col justify-between hover:scale-[1.01] hover:shadow-md group"
                 >
                   <div className="flex items-center justify-between">
@@ -2161,7 +2402,7 @@ export default function AdminPortal({
                               setRepToResetPassword({ id: rep.id, name: rep.name, username: rep.username });
                               setResetPasswordInput('');
                             }}
-                            className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100"
                             title={`Reset Password for ${rep.name}`}
                           >
                             <KeyRound className="w-4 h-4" />
@@ -2171,7 +2412,7 @@ export default function AdminPortal({
                               e.stopPropagation();
                               setRepToDelete({ id: rep.id, name: rep.name });
                             }}
-                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 hover:text-red-600 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 hover:text-red-650 transition-colors cursor-pointer opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100"
                             title={`Delete ${rep.name}`}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -2218,11 +2459,15 @@ export default function AdminPortal({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {technicalList.map((tech, idx) => {
-                    const techLeadsCount = leads.filter(l => l.assignedTo === tech._id).length;
+                    const techLeadsCount = leads.filter(l => l.assignedTo === tech._id || l.assignedToName === tech.name).length;
                     return (
                       <div 
                         key={idx}
-                        className="p-5 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20 flex flex-col justify-between hover:scale-[1.01] hover:shadow-md group transition-all"
+                        onClick={() => {
+                          setSelectedTech(tech);
+                          setSelectedRep(null);
+                        }}
+                        className="p-5 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white/40 dark:bg-slate-950/20 flex flex-col justify-between hover:scale-[1.01] hover:shadow-md group cursor-pointer transition-all"
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
@@ -2230,8 +2475,11 @@ export default function AdminPortal({
                               {tech.name.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <h4 className="font-bold text-gray-900 dark:text-white">
+                              <h4 className="font-bold text-gray-900 dark:text-white flex flex-wrap items-center gap-1.5">
                                 {tech.name}
+                                <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+                                  {tech.team === 'design' ? 'Design Team' : tech.team === 'developer' ? 'Developer Team' : tech.team === 'ads' ? 'Ads Team' : 'General'}
+                                </span>
                               </h4>
                               <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold">
                                 @{tech.username}
@@ -2245,7 +2493,7 @@ export default function AdminPortal({
                                 setRepToResetPassword({ id: tech._id, name: tech.name, username: tech.username });
                                 setResetPasswordInput('');
                               }}
-                              className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                              className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-500 hover:text-indigo-600 transition-colors cursor-pointer opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100"
                               title={`Reset Password for ${tech.name}`}
                             >
                               <KeyRound className="w-4 h-4" />
@@ -2255,7 +2503,7 @@ export default function AdminPortal({
                                 e.stopPropagation();
                                 setRepToDelete({ id: tech._id, name: tech.name });
                               }}
-                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 hover:text-red-650 transition-colors cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100"
+                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-500 hover:text-red-650 transition-colors cursor-pointer opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100"
                               title={`Delete ${tech.name}`}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -2289,12 +2537,30 @@ export default function AdminPortal({
                 <select
                   value={newRepRole}
                   onChange={(e) => setNewRepRole(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 dark:border-slate-850 py-2.5 px-3.5 text-xs bg-white dark:bg-slate-900/40 text-gray-950 dark:text-white transition-all outline-hidden focus:border-indigo-500"
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-850 py-2.5 px-3.5 text-xs bg-white dark:bg-slate-900/40 text-gray-955 dark:text-white transition-all outline-hidden focus:border-indigo-500"
                 >
                   <option value="salesperson">Salesperson</option>
                   <option value="technical">Technical Team Member</option>
                 </select>
               </div>
+
+              {newRepRole === 'technical' && (
+                <div className="flex flex-col gap-1.5 w-full">
+                  <label className="text-xs font-semibold text-gray-750 dark:text-gray-300">
+                    Assign to Team
+                  </label>
+                  <select
+                    value={newRepTeam}
+                    onChange={(e) => setNewRepTeam(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 dark:border-slate-850 py-2.5 px-3.5 text-xs bg-white dark:bg-slate-900/40 text-gray-955 dark:text-white transition-all outline-hidden focus:border-indigo-500 animate-in slide-in-from-top duration-155"
+                  >
+                    <option value="design">Design Team</option>
+                    <option value="developer">Developer Team</option>
+                    <option value="ads">Ads Team</option>
+                  </select>
+                </div>
+              )}
+
               <Input
                 label="Staff Name"
                 placeholder="Enter full name"

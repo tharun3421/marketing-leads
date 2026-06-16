@@ -150,10 +150,25 @@ const leadSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  remarks: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   status: {
     type: String,
     enum: ['Draft', 'Submitted to Admin'],
     default: 'Draft'
+  },
+  assignedTeam: {
+    type: String,
+    enum: ['design', 'developer', 'ads', 'all', null],
+    default: null
+  },
+  workflowStatus: {
+    type: String,
+    enum: ['Non-Allocated', 'Allocated', 'In Progress', 'Completed'],
+    default: 'Non-Allocated'
   },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,

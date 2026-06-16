@@ -15,18 +15,59 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if token and user match
-    if (token && user) {
-      localStorage.setItem('crm_token', token);
-      localStorage.setItem('crm_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('crm_token');
-      localStorage.removeItem('crm_user');
-      setUser(null);
-      setToken(null);
-    }
-    setLoading(false);
-  }, [token, user]);
+    const verifySession = async () => {
+      if (!token) {
+        localStorage.removeItem('crm_token');
+        localStorage.removeItem('crm_user');
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      
+      const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const apiUrl = rawApiUrl.endsWith('/') ? rawApiUrl.slice(0, -1) : rawApiUrl;
+      try {
+        const response = await fetch(`${apiUrl}/api/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const freshUser = {
+            id: data._id,
+            name: data.name,
+            username: data.username,
+            role: data.role,
+            team: data.team
+          };
+          setUser(freshUser);
+          localStorage.setItem('crm_token', token);
+          localStorage.setItem('crm_user', JSON.stringify(freshUser));
+        } else {
+          setUser(null);
+          setToken(null);
+          localStorage.removeItem('crm_token');
+          localStorage.removeItem('crm_user');
+        }
+      } catch (err) {
+        console.error('Failed to verify session:', err);
+        const savedUser = localStorage.getItem('crm_user');
+        if (savedUser) {
+          setUser(JSON.parse(savedUser));
+        } else {
+          setUser(null);
+          setToken(null);
+          localStorage.removeItem('crm_token');
+          localStorage.removeItem('crm_user');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    verifySession();
+  }, [token]);
 
   const login = async (username, password, role) => {
     const rawApiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -51,7 +92,8 @@ export const AuthProvider = ({ children }) => {
         id: data._id,
         name: data.name,
         username: data.username,
-        role: data.role
+        role: data.role,
+        team: data.team
       });
       
       return { success: true, user: data };
