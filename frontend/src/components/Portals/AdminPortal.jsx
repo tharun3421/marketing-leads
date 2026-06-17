@@ -204,7 +204,8 @@ export default function AdminPortal({
       const q = clientSearchQuery.toLowerCase();
       const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
       const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-      if (!nameMatch && !phoneMatch) return false;
+      const idMatch = (lead.clientId || '').toLowerCase().includes(q);
+      if (!nameMatch && !phoneMatch && !idMatch) return false;
     }
 
     if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
@@ -811,25 +812,32 @@ export default function AdminPortal({
                       </td>
                       <td className="p-3 text-xs">
                         <div className="space-y-1">
-                          {Number(lead.postersRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                              <span>Posters: </span>
-                              <span className="font-bold text-gray-900 dark:text-white">
-                                {Number(lead.postersRequired || 0) - (Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)))} Comp / {Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0))} Pend
-                              </span>
-                            </div>
+                          {/* Design Team Deliverables (Posters & Videos) */}
+                          {(!selectedTech || selectedTech.team === 'design') && (
+                            <>
+                              {Number(lead.postersRequired || 0) > 0 && (
+                                <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                  <span>Posters: </span>
+                                  <span className="font-bold text-gray-900 dark:text-white">
+                                    {Number(lead.postersRequired || 0) - (Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)))} Comp / {Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0))} Pend
+                                  </span>
+                                </div>
+                              )}
+                              {Number(lead.videosRequired || 0) > 0 && (
+                                <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                  <span>Videos: </span>
+                                  <span className="font-bold text-gray-900 dark:text-white">
+                                    {Number(lead.videosRequired || 0) - (Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)))} Comp / {Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0))} Pend
+                                  </span>
+                                </div>
+                              )}
+                            </>
                           )}
-                          {Number(lead.videosRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                              <span>Videos: </span>
-                              <span className="font-bold text-gray-900 dark:text-white">
-                                {Number(lead.videosRequired || 0) - (Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)))} Comp / {Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0))} Pend
-                              </span>
-                            </div>
-                          )}
-                          {Number(lead.adsRequired || 0) > 0 && (
+
+                          {/* Ads Team Deliverables */}
+                          {(!selectedTech || selectedTech.team === 'ads') && Number(lead.adsRequired || 0) > 0 && (
                             <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
                               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                               <span>Ads: </span>
@@ -838,9 +846,33 @@ export default function AdminPortal({
                               </span>
                             </div>
                           )}
-                          {!lead.postersRequired && !lead.videosRequired && !lead.adsRequired && (
-                            <span className="text-gray-400">—</span>
+
+                          {/* Developer Team Deliverables */}
+                          {(!selectedTech || selectedTech.team === 'developer') && lead.websiteRequired && (
+                            <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                              <span>Website: </span>
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {lead.websiteStatus === 'Completed' ? '1' : '0'} Comp / {lead.websiteStatus === 'Completed' ? '0' : '1'} Pend ({lead.websiteStatus || 'Pending'})
+                              </span>
+                            </div>
                           )}
+
+                          {/* Fallback if no deliverables are displayed for this view */}
+                          {(() => {
+                            const hasDesign = Number(lead.postersRequired || 0) > 0 || Number(lead.videosRequired || 0) > 0;
+                            const hasAds = Number(lead.adsRequired || 0) > 0;
+                            const hasDev = !!lead.websiteRequired;
+
+                            if (selectedTech) {
+                              if (selectedTech.team === 'design' && !hasDesign) return <span className="text-gray-400">—</span>;
+                              if (selectedTech.team === 'ads' && !hasAds) return <span className="text-gray-400">—</span>;
+                              if (selectedTech.team === 'developer' && !hasDev) return <span className="text-gray-400">—</span>;
+                            } else {
+                              if (!hasDesign && !hasAds && !hasDev) return <span className="text-gray-400">—</span>;
+                            }
+                            return null;
+                          })()}
                         </div>
                       </td>
                       <td className="p-3 text-center">
@@ -1448,7 +1480,7 @@ export default function AdminPortal({
                       <td className="p-3 text-xs">
                         <div className="space-y-1">
                           {Number(lead.postersRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                            <div className="flex items-center gap-1.5 text-gray-655 dark:text-gray-400 font-medium">
                               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                               <span>Posters: </span>
                               <span className="font-bold text-gray-900 dark:text-white">
@@ -1457,7 +1489,7 @@ export default function AdminPortal({
                             </div>
                           )}
                           {Number(lead.videosRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                            <div className="flex items-center gap-1.5 text-gray-655 dark:text-gray-400 font-medium">
                               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                               <span>Videos: </span>
                               <span className="font-bold text-gray-900 dark:text-white">
@@ -1466,7 +1498,7 @@ export default function AdminPortal({
                             </div>
                           )}
                           {Number(lead.adsRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                            <div className="flex items-center gap-1.5 text-gray-655 dark:text-gray-400 font-medium">
                               <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                               <span>Ads: </span>
                               <span className="font-bold text-gray-900 dark:text-white">
@@ -1474,7 +1506,16 @@ export default function AdminPortal({
                               </span>
                             </div>
                           )}
-                          {!lead.postersRequired && !lead.videosRequired && !lead.adsRequired && (
+                          {lead.websiteRequired && (
+                            <div className="flex items-center gap-1.5 text-gray-655 dark:text-gray-400 font-medium">
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                              <span>Website: </span>
+                              <span className="font-bold text-gray-900 dark:text-white">
+                                {lead.websiteStatus === 'Completed' ? '1' : '0'} Comp / {lead.websiteStatus === 'Completed' ? '0' : '1'} Pend ({lead.websiteStatus || 'Pending'})
+                              </span>
+                            </div>
+                          )}
+                          {!lead.postersRequired && !lead.videosRequired && !lead.adsRequired && !lead.websiteRequired && (
                             <span className="text-gray-400">—</span>
                           )}
                         </div>
@@ -2255,7 +2296,7 @@ export default function AdminPortal({
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
               <input
                 type="text"
-                placeholder="Search by client name or WhatsApp number..."
+                placeholder="Search by client ID, name, or WhatsApp number..."
                 value={clientSearchQuery}
                 onChange={(e) => setClientSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"

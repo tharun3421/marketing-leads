@@ -80,7 +80,7 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input
             label="Mobile Number"
-            placeholder="e.g. +1 (555) 019-2834"
+            placeholder="+91 9876543210"
             required
             disabled={isReadOnlyProfile}
             icon={Phone}
@@ -98,7 +98,6 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
             label="Email Address"
             placeholder="client@company.com"
             type="email"
-            required
             disabled={isReadOnlyProfile}
             icon={Mail}
             error={errors.email?.message}

@@ -88,7 +88,6 @@ export default function TechnicalPortal({
   const [adsStatus, setAdsStatus] = useState('Pending');
   const [adsPending, setAdsPending] = useState(0);
   const [websiteStatus, setWebsiteStatus] = useState('Pending');
-  const [remarks, setRemarks] = useState('');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -125,7 +124,6 @@ export default function TechnicalPortal({
       setAdsStatus(selectedLead.adsStatus || 'Pending');
       setAdsPending(Number(selectedLead.adsPending ?? selectedLead.adsRequired ?? 0));
       setWebsiteStatus(selectedLead.websiteStatus || 'Pending');
-      setRemarks(selectedLead.remarks || '');
     } else {
       setPostersStatus('Pending');
       setPostersPending(0);
@@ -134,7 +132,6 @@ export default function TechnicalPortal({
       setAdsStatus('Pending');
       setAdsPending(0);
       setWebsiteStatus('Pending');
-      setRemarks('');
     }
   }, [selectedLeadId, leads]);
 
@@ -159,13 +156,12 @@ export default function TechnicalPortal({
       setAdsStatus(selectedLead.adsStatus || 'Pending');
       setAdsPending(Number(selectedLead.adsPending ?? selectedLead.adsRequired ?? 0));
       setWebsiteStatus(selectedLead.websiteStatus || 'Pending');
-      setRemarks(selectedLead.remarks || '');
       onAddToast('Reset Updates', 'Updates draft reset to current database values.', 'info');
     }
   };
 
   const handleSaveUpdates = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!selectedLead) return;
 
     setIsSubmitting(true);
@@ -198,8 +194,7 @@ export default function TechnicalPortal({
         adsPending: adsPendingCount,
         websiteStatus,
         websitePending: websitePendingCount,
-        workflowStatus: calculatedWorkflowStatus,
-        remarks
+        workflowStatus: calculatedWorkflowStatus
       };
 
       const res = await authFetch(`/api/leads/${selectedLead._id}`, {
@@ -357,7 +352,8 @@ export default function TechnicalPortal({
       const q = clientSearchQuery.toLowerCase();
       const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
       const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-      if (!nameMatch && !phoneMatch) return false;
+      const idMatch = (lead.clientId || '').toLowerCase().includes(q);
+      if (!nameMatch && !phoneMatch && !idMatch) return false;
     }
 
     if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
@@ -590,7 +586,7 @@ export default function TechnicalPortal({
       </div>
 
       {/* Workflow Status Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
         <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5">
           <div className="p-3 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-xl">
             <User className="w-5 h-5" />
@@ -601,7 +597,7 @@ export default function TechnicalPortal({
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5">
+        {/* <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5">
           <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
             <Clock className="w-5 h-5" />
           </div>
@@ -609,7 +605,7 @@ export default function TechnicalPortal({
             <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Allocated</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{allocatedClientsCount}</p>
           </div>
-        </div>
+        </div> */}
 
         <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-purple-500/5">
           <div className="p-3 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl">
@@ -642,7 +638,7 @@ export default function TechnicalPortal({
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <input
                   type="text"
-                  placeholder="Search by client name or WhatsApp number..."
+                  placeholder="Search by client ID, name, or WhatsApp number..."
                   value={clientSearchQuery}
                   onChange={(e) => setClientSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
@@ -1042,21 +1038,13 @@ export default function TechnicalPortal({
                           </div>
                         </div>
 
-                        {/* Notes and Remarks */}
-                        {(lead.notes || lead.remarks) && (
+                        {/* Notes and Instructions */}
+                        {lead.notes && (
                           <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-3 md:col-span-2">
-                            {lead.notes && (
-                              <div className="text-xs space-y-1">
-                                <h5 className="font-bold text-gray-405 text-[10px] uppercase tracking-wider">Salesperson Instructions</h5>
-                                <p className="p-2.5 bg-yellow-500/5 dark:bg-yellow-550/2 border border-yellow-500/10 text-yellow-800 dark:text-yellow-300 rounded-lg leading-relaxed font-semibold">{lead.notes}</p>
-                              </div>
-                            )}
-                            {lead.remarks && (
-                              <div className="text-xs space-y-1">
-                                <h5 className="font-bold text-gray-405 text-[10px] uppercase tracking-wider">Technical Remarks</h5>
-                                <p className="p-2.5 bg-indigo-500/5 dark:bg-indigo-555/2 border border-indigo-500/10 text-indigo-800 dark:text-indigo-300 rounded-lg leading-relaxed font-semibold">{lead.remarks}</p>
-                              </div>
-                            )}
+                            <div className="text-xs space-y-1">
+                              <h5 className="font-bold text-gray-405 text-[10px] uppercase tracking-wider">Salesperson Instructions</h5>
+                              <p className="p-2.5 bg-yellow-500/5 dark:bg-yellow-550/2 border border-yellow-500/10 text-yellow-800 dark:text-yellow-300 rounded-lg leading-relaxed font-semibold">{lead.notes}</p>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1217,20 +1205,6 @@ export default function TechnicalPortal({
                                 </div>
                               </div>
                             )}
-
-                            {/* Remarks update */}
-                            <div className="flex flex-col gap-1.5 p-3 bg-gray-500/5 dark:bg-slate-955/20 border border-gray-150/40 dark:border-slate-800/40 rounded-xl">
-                              <label className="text-[10px] font-bold text-gray-455 dark:text-gray-400 uppercase tracking-wider">
-                                Progress Updates & Technical Remarks
-                              </label>
-                              <textarea
-                                rows="2"
-                                value={remarks}
-                                onChange={(e) => setRemarks(e.target.value)}
-                                placeholder="Enter details on technical progress here..."
-                                className="w-full text-xs rounded-lg border border-gray-250 dark:border-slate-800 p-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white focus:ring-1 focus:ring-indigo-500 outline-hidden leading-relaxed font-semibold"
-                              />
-                            </div>
                           </div>
 
                           {/* Submit actions */}
