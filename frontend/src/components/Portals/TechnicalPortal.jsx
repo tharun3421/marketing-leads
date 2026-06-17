@@ -24,7 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 const getStatusLabel = (status, team) => {
   if (status === 'Allocated') {
     if (team === 'developer') return 'Assigned to Developer Team';
-    if (team === 'design') return 'Assigned to Design Team';
+    if (team === 'design') return 'Assigned to Designing Team';
     if (team === 'ads') return 'Assigned to Ads Team';
     if (team === 'all') return 'Assigned to All Teams';
     return 'Assigned to Specific Team';
@@ -644,7 +644,7 @@ export default function TechnicalPortal({
                   className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                 >
                   <option value="All">All Teams</option>
-                  <option value="design">Design Team</option>
+                  <option value="design">Designing Team</option>
                   <option value="developer">Development Team</option>
                   <option value="ads">Ads Team</option>
                   <option value="all">All Teams</option>
@@ -718,7 +718,7 @@ export default function TechnicalPortal({
                 ) : (
                   filteredCentralClients.map((client) => {
                     const teamLabels = {
-                      'design': 'Design Team',
+                      'design': 'Designing Team',
                       'developer': 'Development Team',
                       'ads': 'Ads Team',
                       'all': 'All Teams'
@@ -810,7 +810,7 @@ export default function TechnicalPortal({
                     className="rounded-xl border border-gray-205 dark:border-slate-800 py-1.5 px-2.5 text-[11px] bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                   >
                     <option value="All">All Teams</option>
-                    <option value="design">Design Team</option>
+                    <option value="design">Designing Team</option>
                     <option value="developer">Developer Team</option>
                     <option value="ads">Ads Team</option>
                   </select>

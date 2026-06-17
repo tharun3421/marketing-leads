@@ -41,7 +41,7 @@ import StepReviewSubmit from '../FormSteps/StepReviewSubmit';
 const getStatusLabel = (status, team) => {
   if (status === 'Allocated') {
     if (team === 'developer') return 'Assigned to Developer Team';
-    if (team === 'design') return 'Assigned to Design Team';
+    if (team === 'design') return 'Assigned to Designing Team';
     if (team === 'ads') return 'Assigned to Ads Team';
     if (team === 'all') return 'Assigned to All Teams';
     return 'Assigned to Specific Team';
@@ -791,7 +791,7 @@ export default function SalesPortal({
                       className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                     >
                       <option value="All">All Teams</option>
-                      <option value="design">Design Team</option>
+                      <option value="design">Designing Team</option>
                       <option value="developer">Development Team</option>
                       <option value="ads">Ads Team</option>
                       <option value="all">All Teams</option>
@@ -907,7 +907,7 @@ export default function SalesPortal({
                                  </span>
                                ) : (
                                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                                   {client.assignedTeam === 'design' && 'Design Team'}
+                                   {client.assignedTeam === 'design' && 'Designing Team'}
                                    {client.assignedTeam === 'developer' && 'Development Team'}
                                    {client.assignedTeam === 'ads' && 'Ads Team'}
                                    {client.assignedTeam === 'all' && 'All Teams'}
@@ -964,7 +964,7 @@ export default function SalesPortal({
                       className="rounded-xl border border-gray-205 dark:border-slate-800 py-1.5 px-2.5 text-[11px] bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                     >
                       <option value="All">All Teams</option>
-                      <option value="design">Design Team</option>
+                      <option value="design">Designing Team</option>
                       <option value="developer">Developer Team</option>
                       <option value="ads">Ads Team</option>
                     </select>
@@ -1315,7 +1315,7 @@ export default function SalesPortal({
                             className="text-xs font-bold rounded-xl px-2.5 py-1.5 border border-indigo-150/80 dark:border-slate-800 bg-white dark:bg-slate-900 text-indigo-650 dark:text-indigo-400 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-850 outline-hidden transition-all shadow-sm"
                           >
                             <option value="">Assign to Technical Team...</option>
-                            <option value="design">Design Team</option>
+                            <option value="design">Designing Team</option>
                             <option value="developer">Developer Team</option>
                             <option value="ads">Ads Team</option>
                             <option value="all">All Teams</option>

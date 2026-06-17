@@ -35,7 +35,7 @@ import { useAuth } from '../../context/AuthContext';
 const getStatusLabel = (status, team) => {
   if (status === 'Allocated') {
     if (team === 'developer') return 'Assigned to Developer Team';
-    if (team === 'design') return 'Assigned to Design Team';
+    if (team === 'design') return 'Assigned to Designing Team';
     if (team === 'ads') return 'Assigned to Ads Team';
     if (team === 'all') return 'Assigned to All Teams';
     return 'Assigned to Specific Team';
@@ -508,7 +508,13 @@ export default function AdminPortal({
   // Inspect leads for a salesperson or technical team member
   const inspectedLeads = selectedRep 
     ? (selectedRep === 'All' ? leads : leads.filter(l => l.salespersonName === selectedRep))
-    : (selectedTech ? leads.filter(l => l.assignedTo === selectedTech._id || l.assignedToName === selectedTech.name) : []);
+    : (selectedTech ? leads.filter(l => 
+        (l.assignedDeveloper && l.assignedDeveloper.toString() === selectedTech._id.toString()) ||
+        (l.assignedDesigner && l.assignedDesigner.toString() === selectedTech._id.toString()) ||
+        (l.assignedAdSpecialist && l.assignedAdSpecialist.toString() === selectedTech._id.toString()) ||
+        (l.assignedToName && l.assignedToName.includes(selectedTech.name)) ||
+        l.assignedToName === selectedTech.name
+      ) : []);
 
   const filteredInspectedLeads = inspectedLeads.filter(lead => {
     // 1. Status filter
@@ -678,7 +684,7 @@ export default function AdminPortal({
                   className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                 >
                   <option value="All">All Teams</option>
-                  <option value="design">Design Team</option>
+                  <option value="design">Designing Team</option>
                   <option value="developer">Developer Team</option>
                   <option value="ads">Ads Team</option>
                 </select>
@@ -2251,7 +2257,7 @@ export default function AdminPortal({
                 className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
               >
                 <option value="All">All Teams</option>
-                <option value="design">Design Team</option>
+                <option value="design">Designing Team</option>
                 <option value="developer">Development Team</option>
                 <option value="ads">Ads Team</option>
                 <option value="all">All Teams</option>
@@ -2360,7 +2366,7 @@ export default function AdminPortal({
                         </span>
                       ) : (
                         <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                          {client.assignedTeam === 'design' && 'Design Team'}
+                          {client.assignedTeam === 'design' && 'Designing Team'}
                           {client.assignedTeam === 'developer' && 'Development Team'}
                           {client.assignedTeam === 'ads' && 'Ads Team'}
                           {client.assignedTeam === 'all' && 'All Teams'}
@@ -2488,14 +2494,14 @@ export default function AdminPortal({
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8.5 h-8.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-xs">
+                            <div className="w-8.5 h-8.5 rounded-full bg-blue-500/10 text-blue-600 dark:blue-400 font-bold flex items-center justify-center text-xs">
                               {tech.name.charAt(0).toUpperCase()}
                             </div>
                             <div>
                               <h4 className="font-bold text-gray-900 dark:text-white flex flex-wrap items-center gap-1.5">
                                 {tech.name}
                                 <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
-                                  {tech.team === 'design' ? 'Design Team' : tech.team === 'developer' ? 'Developer Team' : tech.team === 'ads' ? 'Ads Team' : 'General'}
+                                  {tech.team === 'design' ? 'Designing Team' : tech.team === 'developer' ? 'Development Team' : tech.team === 'ads' ? 'Ads Team' : 'General'}
                                 </span>
                               </h4>
                               <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold">
@@ -2571,7 +2577,7 @@ export default function AdminPortal({
                     onChange={(e) => setNewRepTeam(e.target.value)}
                     className="w-full rounded-xl border border-gray-200 dark:border-slate-850 py-2.5 px-3.5 text-xs bg-white dark:bg-slate-900/40 text-gray-955 dark:text-white transition-all outline-hidden focus:border-indigo-500 animate-in slide-in-from-top duration-155"
                   >
-                    <option value="design">Design Team</option>
+                    <option value="design">Designing Team</option>
                     <option value="developer">Developer Team</option>
                     <option value="ads">Ads Team</option>
                   </select>

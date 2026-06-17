@@ -178,6 +178,33 @@ const leadSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  assignedDeveloper: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  assignedDeveloperName: {
+    type: String,
+    default: null
+  },
+  assignedDesigner: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  assignedDesignerName: {
+    type: String,
+    default: null
+  },
+  assignedAdSpecialist: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  assignedAdSpecialistName: {
+    type: String,
+    default: null
+  },
   clientId: {
     type: String,
     default: null

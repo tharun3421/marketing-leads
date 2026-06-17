@@ -30,6 +30,91 @@ const sanitizeNumberFields = (body) => {
   }
 };
 
+// Helper to redact client details for technical department specialists
+const redactLeadForTechnicalUser = (lead, team) => {
+  const leadObj = lead.toObject ? lead.toObject() : lead;
+
+  // Always redact financial details for technical users
+  delete leadObj.planAmount;
+  delete leadObj.advanceAmount;
+  delete leadObj.pendingAmount;
+
+  if (team === 'developer') {
+    // Developers only see website-related requirements and data
+    delete leadObj.postersRequired;
+    delete leadObj.postersPending;
+    delete leadObj.postersStatus;
+    delete leadObj.videosRequired;
+    delete leadObj.videosPending;
+    delete leadObj.videosStatus;
+    delete leadObj.brandColors;
+
+    delete leadObj.adsRequired;
+    delete leadObj.adsPending;
+    delete leadObj.adsStatus;
+    delete leadObj.adBudget;
+    delete leadObj.facebookId;
+    delete leadObj.facebookPassword;
+    delete leadObj.instagramId;
+    delete leadObj.instagramPassword;
+    delete leadObj.platforms;
+  } else if (team === 'design') {
+    // Designing Team only sees design-related requirements
+    delete leadObj.websiteRequired;
+    delete leadObj.websiteType;
+    delete leadObj.websiteStatus;
+    delete leadObj.websitePending;
+    delete leadObj.websiteUrl;
+
+    delete leadObj.adsRequired;
+    delete leadObj.adsPending;
+    delete leadObj.adsStatus;
+    delete leadObj.adBudget;
+    delete leadObj.facebookId;
+    delete leadObj.facebookPassword;
+    delete leadObj.instagramId;
+    delete leadObj.instagramPassword;
+    delete leadObj.platforms;
+  } else if (team === 'ads') {
+    // Ads Team only sees campaign-related requirements and advertising details
+    delete leadObj.websiteRequired;
+    delete leadObj.websiteType;
+    delete leadObj.websiteStatus;
+    delete leadObj.websitePending;
+    delete leadObj.websiteUrl;
+
+    delete leadObj.postersRequired;
+    delete leadObj.postersPending;
+    delete leadObj.postersStatus;
+    delete leadObj.videosRequired;
+    delete leadObj.videosPending;
+    delete leadObj.videosStatus;
+    delete leadObj.brandColors;
+  }
+
+  return leadObj;
+};
+
+// Helper to compute summary assignee string for admin/salesperson displays
+const getAssigneeDisplay = (lead) => {
+  if (lead.assignedTeam === 'all') {
+    const dev = lead.assignedDeveloperName || 'Unclaimed';
+    const design = lead.assignedDesignerName || 'Unclaimed';
+    const ads = lead.assignedAdSpecialistName || 'Unclaimed';
+    return `Dev: ${dev} | Design: ${design} | Ads: ${ads}`;
+  }
+  if (lead.assignedTeam === 'developer') {
+    return lead.assignedDeveloperName || 'Unclaimed';
+  }
+  if (lead.assignedTeam === 'design') {
+    return lead.assignedDesignerName || 'Unclaimed';
+  }
+  if (lead.assignedTeam === 'ads') {
+    return lead.assignedAdSpecialistName || 'Unclaimed';
+  }
+  return 'Unassigned';
+};
+
 // Helper to sync a lead to Google Sheets
 const syncLeadToGoogleSheets = async (lead) => {
   // Get Apps Script URL from Config
@@ -165,7 +250,32 @@ const getLeads = async (req, res) => {
     } else {
       leads = await Lead.find({ salesperson: req.user.id }).sort({ createdAt: -1 });
     }
-    res.json(leads);
+
+    // Map and redact leads according to requester role
+    const processedLeads = leads.map(lead => {
+      const leadObj = lead.toObject();
+      if (req.user.role === 'technical') {
+        // Dynamically assign local team's assignee info to assignedTo/assignedToName
+        if (req.user.team === 'developer') {
+          leadObj.assignedTo = leadObj.assignedDeveloper || null;
+          leadObj.assignedToName = leadObj.assignedDeveloperName || null;
+        } else if (req.user.team === 'design') {
+          leadObj.assignedTo = leadObj.assignedDesigner || null;
+          leadObj.assignedToName = leadObj.assignedDesignerName || null;
+        } else if (req.user.team === 'ads') {
+          leadObj.assignedTo = leadObj.assignedAdSpecialist || null;
+          leadObj.assignedToName = leadObj.assignedAdSpecialistName || null;
+        }
+        return redactLeadForTechnicalUser(leadObj, req.user.team);
+      } else {
+        // Admin / Salesperson: set assignedTo to a default claimant if any, and set assignedToName to the display summary
+        leadObj.assignedTo = leadObj.assignedDeveloper || leadObj.assignedDesigner || leadObj.assignedAdSpecialist || null;
+        leadObj.assignedToName = getAssigneeDisplay(leadObj);
+        return leadObj;
+      }
+    });
+
+    res.json(processedLeads);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -185,19 +295,41 @@ const assignLeads = async (req, res) => {
   }
 
   try {
-    let techName = null;
+    let techUser = null;
     if (assignedTo) {
-      const techUser = await User.findById(assignedTo);
+      techUser = await User.findById(assignedTo);
       if (!techUser || techUser.role !== 'technical') {
         return res.status(400).json({ message: 'Selected user must be a technical team member' });
       }
-      techName = techUser.name;
     }
 
     const leadsToAssign = await Lead.find({ _id: { $in: leadIds } });
     for (const lead of leadsToAssign) {
-      lead.assignedTo = assignedTo || null;
-      lead.assignedToName = techName;
+      if (techUser) {
+        if (techUser.team === 'developer') {
+          lead.assignedDeveloper = techUser._id;
+          lead.assignedDeveloperName = techUser.name;
+        } else if (techUser.team === 'design') {
+          lead.assignedDesigner = techUser._id;
+          lead.assignedDesignerName = techUser.name;
+        } else if (techUser.team === 'ads') {
+          lead.assignedAdSpecialist = techUser._id;
+          lead.assignedAdSpecialistName = techUser.name;
+        }
+        // Also set legacy field for compatibility
+        lead.assignedTo = techUser._id;
+        lead.assignedToName = techUser.name;
+      } else {
+        // Unassign all departments
+        lead.assignedDeveloper = null;
+        lead.assignedDeveloperName = null;
+        lead.assignedDesigner = null;
+        lead.assignedDesignerName = null;
+        lead.assignedAdSpecialist = null;
+        lead.assignedAdSpecialistName = null;
+        lead.assignedTo = null;
+        lead.assignedToName = null;
+      }
 
       // Recalculate workflowStatus
       if (!lead.assignedTeam) {
@@ -220,7 +352,7 @@ const assignLeads = async (req, res) => {
       await lead.save();
     }
 
-    res.json({ message: 'Leads assigned successfully', assignedToName: techName });
+    res.json({ message: 'Leads assigned successfully', assignedToName: techUser ? techUser.name : null });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -235,7 +367,7 @@ const createLead = async (req, res) => {
     sanitizeNumberFields(req.body);
 
     // Generate sequential client ID starting with 'LD' (e.g. LD001, LD002, etc.)
-    const lastLead = await Lead.findOne({ clientId: { $regex: /^LD\d+$/i } }).sort({ createdAt: -1 });
+    const lastLead = await Lead.findOne({ clientId: { $regex: /^LDC\d+$/i } }).sort({ createdAt: -1 });
     let nextNum = 1;
     if (lastLead && lastLead.clientId) {
       const match = lastLead.clientId.match(/\d+/);
@@ -243,7 +375,7 @@ const createLead = async (req, res) => {
         nextNum = parseInt(match[0], 10) + 1;
       }
     }
-    const clientId = 'LD' + String(nextNum).padStart(3, '0');
+    const clientId = 'LDC' + String(nextNum).padStart(4, '0');
 
     const leadData = {
       ...req.body,
@@ -318,12 +450,28 @@ const updateLead = async (req, res) => {
     const isAdmin = req.user.role === 'admin';
     const isSalesperson = req.user.role === 'salesperson';
     const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
-    const isAssignee = lead.assignedTo && lead.assignedTo.toString() === req.user.id.toString();
+    
+    let isAssignee = false;
+    let isClaimedByOtherInDept = false;
+    if (req.user.role === 'technical') {
+      if (req.user.team === 'developer') {
+        isAssignee = lead.assignedDeveloper && lead.assignedDeveloper.toString() === req.user.id.toString();
+        isClaimedByOtherInDept = lead.assignedDeveloper && lead.assignedDeveloper.toString() !== req.user.id.toString();
+      } else if (req.user.team === 'design') {
+        isAssignee = lead.assignedDesigner && lead.assignedDesigner.toString() === req.user.id.toString();
+        isClaimedByOtherInDept = lead.assignedDesigner && lead.assignedDesigner.toString() !== req.user.id.toString();
+      } else if (req.user.team === 'ads') {
+        isAssignee = lead.assignedAdSpecialist && lead.assignedAdSpecialist.toString() === req.user.id.toString();
+        isClaimedByOtherInDept = lead.assignedAdSpecialist && lead.assignedAdSpecialist.toString() !== req.user.id.toString();
+      }
+    }
+
     const isTeamMember = req.user.role === 'technical' && 
-      (lead.assignedTeam === req.user.team || lead.assignedTeam === 'all');
+      (lead.assignedTeam === req.user.team || lead.assignedTeam === 'all') &&
+      !isClaimedByOtherInDept;
 
     if (!isAdmin && !isCreator && !isSalesperson && !isAssignee && !isTeamMember) {
-      return res.status(403).json({ message: 'Access denied: Cannot edit leads assigned to others' });
+      return res.status(403).json({ message: 'Access denied: Cannot edit leads assigned to others or already claimed by another specialist' });
     }
 
     // Sanitize numeric fields
@@ -340,6 +488,37 @@ const updateLead = async (req, res) => {
     // Prevent overwriting owner
     delete updatedData.salesperson;
     delete updatedData.salespersonName;
+
+    // Intercept technical user claim/accept actions
+    if (req.user.role === 'technical') {
+      if (req.body.assignedTo !== undefined) {
+        if (req.user.team === 'developer') {
+          updatedData.assignedDeveloper = req.body.assignedTo;
+          updatedData.assignedDeveloperName = req.body.assignedToName;
+        } else if (req.user.team === 'design') {
+          updatedData.assignedDesigner = req.body.assignedTo;
+          updatedData.assignedDesignerName = req.body.assignedToName;
+        } else if (req.user.team === 'ads') {
+          updatedData.assignedAdSpecialist = req.body.assignedTo;
+          updatedData.assignedAdSpecialistName = req.body.assignedToName;
+        }
+        // Legacy fields for backward compatibility
+        updatedData.assignedTo = req.body.assignedTo;
+        updatedData.assignedToName = req.body.assignedToName;
+      }
+    }
+
+    // Intercept team routing changes by salesperson or admin: reset all department assignees
+    if (updatedData.assignedTeam !== undefined && updatedData.assignedTeam !== lead.assignedTeam) {
+      updatedData.assignedDeveloper = null;
+      updatedData.assignedDeveloperName = null;
+      updatedData.assignedDesigner = null;
+      updatedData.assignedDesignerName = null;
+      updatedData.assignedAdSpecialist = null;
+      updatedData.assignedAdSpecialistName = null;
+      updatedData.assignedTo = null;
+      updatedData.assignedToName = null;
+    }
 
     // Calculate workflow status dynamically based on assignments and deliverables if not manually overridden
     if (updatedData.workflowStatus === undefined) {
@@ -373,7 +552,26 @@ const updateLead = async (req, res) => {
     }
 
     const updatedLead = await Lead.findByIdAndUpdate(req.params.id, updatedData, { new: true });
-    res.json(updatedLead);
+    
+    // Process response payload mapping and redaction
+    const leadObj = updatedLead.toObject();
+    if (req.user.role === 'technical') {
+      if (req.user.team === 'developer') {
+        leadObj.assignedTo = leadObj.assignedDeveloper || null;
+        leadObj.assignedToName = leadObj.assignedDeveloperName || null;
+      } else if (req.user.team === 'design') {
+        leadObj.assignedTo = leadObj.assignedDesigner || null;
+        leadObj.assignedToName = leadObj.assignedDesignerName || null;
+      } else if (req.user.team === 'ads') {
+        leadObj.assignedTo = leadObj.assignedAdSpecialist || null;
+        leadObj.assignedToName = leadObj.assignedAdSpecialistName || null;
+      }
+      res.json(redactLeadForTechnicalUser(leadObj, req.user.team));
+    } else {
+      leadObj.assignedTo = leadObj.assignedDeveloper || leadObj.assignedDesigner || leadObj.assignedAdSpecialist || null;
+      leadObj.assignedToName = getAssigneeDisplay(leadObj);
+      res.json(leadObj);
+    }
   } catch (error) {
     res.status(400).json({ message: error.message });
   }

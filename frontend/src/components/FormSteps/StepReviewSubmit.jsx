@@ -48,7 +48,7 @@ export default function StepReviewSubmit({ register, watch, errors, formValues: 
               <div><span className="text-gray-400">Category:</span> <span className="text-gray-900 dark:text-white">{formValues.businessCategory || '—'}</span></div>
               <div><span className="text-gray-400">Email:</span> <span className="text-gray-900 dark:text-white">{formValues.email || '—'}</span></div>
               <div><span className="text-gray-400">Mobile:</span> <span className="text-gray-900 dark:text-white">{formValues.mobileNumber || '—'}</span></div>
-              <div className="md:col-span-2"><span className="text-gray-400">Assigned Team:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{formValues.assignedTeam === 'design' ? 'Design Team' : formValues.assignedTeam === 'developer' ? 'Developer Team' : formValues.assignedTeam === 'ads' ? 'Ads Team' : formValues.assignedTeam === 'all' ? 'All Teams' : '—'}</span></div>
+              <div className="md:col-span-2"><span className="text-gray-400">Assigned Team:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{formValues.assignedTeam === 'design' ? 'Designing Team' : formValues.assignedTeam === 'developer' ? 'Developer Team' : formValues.assignedTeam === 'ads' ? 'Ads Team' : formValues.assignedTeam === 'all' ? 'All Teams' : '—'}</span></div>
             </div>
           </div>
 
