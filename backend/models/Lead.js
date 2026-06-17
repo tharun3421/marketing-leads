@@ -160,8 +160,7 @@ const leadSchema = new mongoose.Schema({
     default: 'Draft'
   },
   assignedTeam: {
-    type: String,
-    enum: ['design', 'developer', 'ads', 'all', null],
+    type: mongoose.Schema.Types.Mixed,
     default: null
   },
   workflowStatus: {

@@ -21,13 +21,41 @@ import Button from '../UI/Button';
 import { Input } from '../UI/Input';
 import { useAuth } from '../../context/AuthContext';
 
+const getTeamDisplayLabel = (assignedTeam) => {
+  if (!assignedTeam) return 'Not Assigned';
+  if (assignedTeam === 'all') return 'All Teams';
+  if (Array.isArray(assignedTeam)) {
+    if (assignedTeam.includes('all')) return 'All Teams';
+    if (assignedTeam.length === 0) return 'Not Assigned';
+    const names = assignedTeam.map(t => {
+      if (t === 'design') return 'Designing';
+      if (t === 'developer') return 'Developer';
+      if (t === 'ads') return 'Ads';
+      return t;
+    });
+    if (names.includes('Designing') && names.includes('Developer') && names.includes('Ads')) {
+      return 'All Teams';
+    }
+    return names.join(', ') + ' Team';
+  }
+  if (assignedTeam === 'design') return 'Designing Team';
+  if (assignedTeam === 'developer') return 'Developer Team';
+  if (assignedTeam === 'ads') return 'Ads Team';
+  return assignedTeam;
+};
+
+const hasTeamVal = (teamVal, team) => {
+  if (!teamVal) return false;
+  if (Array.isArray(teamVal)) return teamVal.includes(team) || teamVal.includes('all');
+  return teamVal === team || teamVal === 'all';
+};
+
 const getStatusLabel = (status, team) => {
   if (status === 'Allocated') {
-    if (team === 'developer') return 'Assigned to Developer Team';
-    if (team === 'design') return 'Assigned to Designing Team';
-    if (team === 'ads') return 'Assigned to Ads Team';
-    if (team === 'all') return 'Assigned to All Teams';
-    return 'Assigned to Specific Team';
+    if (!team) return 'Assigned to Specific Team';
+    const label = getTeamDisplayLabel(team);
+    if (label === 'Not Assigned') return 'Assigned to Specific Team';
+    return `Assigned to ${label}`;
   }
   return status || 'Non-Allocated';
 };
@@ -296,7 +324,7 @@ export default function TechnicalPortal({
 
     // 3. Assigned Team filter
     if (filterAssignedTeam !== 'All') {
-      if (lead.assignedTeam !== filterAssignedTeam && lead.assignedTeam !== 'all') {
+      if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
         return false;
       }
     }
@@ -337,7 +365,7 @@ export default function TechnicalPortal({
     }
 
     if (clientTeamFilter !== 'All') {
-      if (lead.assignedTeam !== clientTeamFilter && lead.assignedTeam !== 'all') {
+      if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
         return false;
       }
     }
@@ -717,12 +745,6 @@ export default function TechnicalPortal({
                   </tr>
                 ) : (
                   filteredCentralClients.map((client) => {
-                    const teamLabels = {
-                      'design': 'Designing Team',
-                      'developer': 'Development Team',
-                      'ads': 'Ads Team',
-                      'all': 'All Teams'
-                    };
                     return (
                       <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
                         <td className="p-3 font-bold text-indigo-600 dark:text-indigo-400">
@@ -760,7 +782,7 @@ export default function TechnicalPortal({
                             </span>
                           ) : (
                             <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                              {teamLabels[client.assignedTeam] || 'Not Assigned'}
+                              {getTeamDisplayLabel(client.assignedTeam)}
                             </span>
                           )}
                         </td>

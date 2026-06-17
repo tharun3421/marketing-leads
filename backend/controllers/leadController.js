@@ -95,24 +95,37 @@ const redactLeadForTechnicalUser = (lead, team) => {
   return leadObj;
 };
 
+// Helper to check if a specific team is assigned (handles both array and string values)
+const hasTeamVal = (teamVal, team) => {
+  if (!teamVal) return false;
+  if (Array.isArray(teamVal)) return teamVal.includes(team) || teamVal.includes('all');
+  return teamVal === team || teamVal === 'all';
+};
+
+const hasTeam = (lead, team) => {
+  return hasTeamVal(lead.assignedTeam, team);
+};
+
+// Compare two team assignments to check for changes
+const areTeamsEqual = (val1, val2) => {
+  const norm1 = Array.isArray(val1) ? [...val1].sort().join(',') : (val1 || '');
+  const norm2 = Array.isArray(val2) ? [...val2].sort().join(',') : (val2 || '');
+  return norm1 === norm2;
+};
+
 // Helper to compute summary assignee string for admin/salesperson displays
 const getAssigneeDisplay = (lead) => {
-  if (lead.assignedTeam === 'all') {
-    const dev = lead.assignedDeveloperName || 'Unclaimed';
-    const design = lead.assignedDesignerName || 'Unclaimed';
-    const ads = lead.assignedAdSpecialistName || 'Unclaimed';
-    return `Dev: ${dev} | Design: ${design} | Ads: ${ads}`;
+  const activeTeams = [];
+  if (hasTeam(lead, 'developer')) {
+    activeTeams.push(`Dev: ${lead.assignedDeveloperName || 'Unclaimed'}`);
   }
-  if (lead.assignedTeam === 'developer') {
-    return lead.assignedDeveloperName || 'Unclaimed';
+  if (hasTeam(lead, 'design')) {
+    activeTeams.push(`Design: ${lead.assignedDesignerName || 'Unclaimed'}`);
   }
-  if (lead.assignedTeam === 'design') {
-    return lead.assignedDesignerName || 'Unclaimed';
+  if (hasTeam(lead, 'ads')) {
+    activeTeams.push(`Ads: ${lead.assignedAdSpecialistName || 'Unclaimed'}`);
   }
-  if (lead.assignedTeam === 'ads') {
-    return lead.assignedAdSpecialistName || 'Unclaimed';
-  }
-  return 'Unassigned';
+  return activeTeams.length > 0 ? activeTeams.join(' | ') : 'Unassigned';
 };
 
 // Helper to sync a lead to Google Sheets
@@ -467,7 +480,7 @@ const updateLead = async (req, res) => {
     }
 
     const isTeamMember = req.user.role === 'technical' && 
-      (lead.assignedTeam === req.user.team || lead.assignedTeam === 'all') &&
+      hasTeam(lead, req.user.team) &&
       !isClaimedByOtherInDept;
 
     if (!isAdmin && !isCreator && !isSalesperson && !isAssignee && !isTeamMember) {
@@ -508,23 +521,37 @@ const updateLead = async (req, res) => {
       }
     }
 
-    // Intercept team routing changes by salesperson or admin: reset all department assignees
-    if (updatedData.assignedTeam !== undefined && updatedData.assignedTeam !== lead.assignedTeam) {
-      updatedData.assignedDeveloper = null;
-      updatedData.assignedDeveloperName = null;
-      updatedData.assignedDesigner = null;
-      updatedData.assignedDesignerName = null;
-      updatedData.assignedAdSpecialist = null;
-      updatedData.assignedAdSpecialistName = null;
-      updatedData.assignedTo = null;
-      updatedData.assignedToName = null;
+    // Intercept team routing changes by salesperson or admin: reset unassigned department specialists
+    if (updatedData.assignedTeam !== undefined && !areTeamsEqual(updatedData.assignedTeam, lead.assignedTeam)) {
+      if (!hasTeamVal(updatedData.assignedTeam, 'developer')) {
+        updatedData.assignedDeveloper = null;
+        updatedData.assignedDeveloperName = null;
+      }
+      if (!hasTeamVal(updatedData.assignedTeam, 'design')) {
+        updatedData.assignedDesigner = null;
+        updatedData.assignedDesignerName = null;
+      }
+      if (!hasTeamVal(updatedData.assignedTeam, 'ads')) {
+        updatedData.assignedAdSpecialist = null;
+        updatedData.assignedAdSpecialistName = null;
+      }
+      // Sync legacy fields
+      if (!updatedData.assignedDeveloper && !updatedData.assignedDesigner && !updatedData.assignedAdSpecialist) {
+        updatedData.assignedTo = null;
+        updatedData.assignedToName = null;
+      }
     }
 
     // Calculate workflow status dynamically based on assignments and deliverables if not manually overridden
     if (updatedData.workflowStatus === undefined) {
       const assignedTeam = updatedData.assignedTeam !== undefined ? updatedData.assignedTeam : lead.assignedTeam;
       let calculatedWorkflowStatus = 'Non-Allocated';
-      if (assignedTeam) {
+      const hasAnyTeam = (teamVal) => {
+        if (!teamVal) return false;
+        if (Array.isArray(teamVal)) return teamVal.length > 0;
+        return true;
+      };
+      if (hasAnyTeam(assignedTeam)) {
         const postersRequired = updatedData.postersRequired !== undefined ? updatedData.postersRequired : lead.postersRequired;
         const postersStatus = updatedData.postersStatus !== undefined ? updatedData.postersStatus : lead.postersStatus;
         const videosRequired = updatedData.videosRequired !== undefined ? updatedData.videosRequired : lead.videosRequired;
@@ -535,10 +562,16 @@ const updateLead = async (req, res) => {
         const websiteStatus = updatedData.websiteStatus !== undefined ? updatedData.websiteStatus : lead.websiteStatus;
 
         const activeStatuses = [];
-        if (Number(postersRequired) > 0) activeStatuses.push(postersStatus || 'Pending');
-        if (Number(videosRequired) > 0) activeStatuses.push(videosStatus || 'Pending');
-        if (Number(adsRequired) > 0) activeStatuses.push(adsStatus || 'Pending');
-        if (websiteRequired) activeStatuses.push(websiteStatus || 'Pending');
+        if (hasTeamVal(assignedTeam, 'design')) {
+          if (Number(postersRequired) > 0) activeStatuses.push(postersStatus || 'Pending');
+          if (Number(videosRequired) > 0) activeStatuses.push(videosStatus || 'Pending');
+        }
+        if (hasTeamVal(assignedTeam, 'ads')) {
+          if (Number(adsRequired) > 0) activeStatuses.push(adsStatus || 'Pending');
+        }
+        if (hasTeamVal(assignedTeam, 'developer')) {
+          if (websiteRequired) activeStatuses.push(websiteStatus || 'Pending');
+        }
 
         if (activeStatuses.length === 0 || activeStatuses.every(s => s === 'Completed')) {
           calculatedWorkflowStatus = 'Completed';

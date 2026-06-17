@@ -48,7 +48,27 @@ export default function StepReviewSubmit({ register, watch, errors, formValues: 
               <div><span className="text-gray-400">Category:</span> <span className="text-gray-900 dark:text-white">{formValues.businessCategory || '—'}</span></div>
               <div><span className="text-gray-400">Email:</span> <span className="text-gray-900 dark:text-white">{formValues.email || '—'}</span></div>
               <div><span className="text-gray-400">Mobile:</span> <span className="text-gray-900 dark:text-white">{formValues.mobileNumber || '—'}</span></div>
-              <div className="md:col-span-2"><span className="text-gray-400">Assigned Team:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{formValues.assignedTeam === 'design' ? 'Designing Team' : formValues.assignedTeam === 'developer' ? 'Developer Team' : formValues.assignedTeam === 'ads' ? 'Ads Team' : formValues.assignedTeam === 'all' ? 'All Teams' : '—'}</span></div>
+              <div className="md:col-span-2"><span className="text-gray-400">Assigned Team:</span> <span className="font-bold text-indigo-600 dark:text-indigo-400">{(() => {
+                const val = formValues.assignedTeam;
+                if (!val) return '—';
+                if (val === 'all') return 'All Teams';
+                if (Array.isArray(val)) {
+                  if (val.includes('all')) return 'All Teams';
+                  if (val.length === 0) return '—';
+                  const names = val.map(t => {
+                    if (t === 'design') return 'Designing';
+                    if (t === 'developer') return 'Developer';
+                    if (t === 'ads') return 'Ads';
+                    return t;
+                  });
+                  if (names.includes('Designing') && names.includes('Developer') && names.includes('Ads')) return 'All Teams';
+                  return names.join(', ') + ' Team';
+                }
+                if (val === 'design') return 'Designing Team';
+                if (val === 'developer') return 'Developer Team';
+                if (val === 'ads') return 'Ads Team';
+                return val;
+              })()}</span></div>
             </div>
           </div>
 

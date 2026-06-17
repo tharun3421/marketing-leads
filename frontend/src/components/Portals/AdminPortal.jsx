@@ -32,13 +32,41 @@ import { Input } from '../UI/Input';
 import AppsScriptGuide from '../Help/AppsScriptGuide';
 import { useAuth } from '../../context/AuthContext';
 
+const getTeamDisplayLabel = (assignedTeam) => {
+  if (!assignedTeam) return 'Not Assigned';
+  if (assignedTeam === 'all') return 'All Teams';
+  if (Array.isArray(assignedTeam)) {
+    if (assignedTeam.includes('all')) return 'All Teams';
+    if (assignedTeam.length === 0) return 'Not Assigned';
+    const names = assignedTeam.map(t => {
+      if (t === 'design') return 'Designing';
+      if (t === 'developer') return 'Developer';
+      if (t === 'ads') return 'Ads';
+      return t;
+    });
+    if (names.includes('Designing') && names.includes('Developer') && names.includes('Ads')) {
+      return 'All Teams';
+    }
+    return names.join(', ') + ' Team';
+  }
+  if (assignedTeam === 'design') return 'Designing Team';
+  if (assignedTeam === 'developer') return 'Developer Team';
+  if (assignedTeam === 'ads') return 'Ads Team';
+  return assignedTeam;
+};
+
+const hasTeamVal = (teamVal, team) => {
+  if (!teamVal) return false;
+  if (Array.isArray(teamVal)) return teamVal.includes(team) || teamVal.includes('all');
+  return teamVal === team || teamVal === 'all';
+};
+
 const getStatusLabel = (status, team) => {
   if (status === 'Allocated') {
-    if (team === 'developer') return 'Assigned to Developer Team';
-    if (team === 'design') return 'Assigned to Designing Team';
-    if (team === 'ads') return 'Assigned to Ads Team';
-    if (team === 'all') return 'Assigned to All Teams';
-    return 'Assigned to Specific Team';
+    if (!team) return 'Assigned to Specific Team';
+    const label = getTeamDisplayLabel(team);
+    if (label === 'Not Assigned') return 'Assigned to Specific Team';
+    return `Assigned to ${label}`;
   }
   return status || 'Non-Allocated';
 };
@@ -184,7 +212,7 @@ export default function AdminPortal({
     }
 
     if (clientTeamFilter !== 'All') {
-      if (lead.assignedTeam !== clientTeamFilter && lead.assignedTeam !== 'all') {
+      if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
         return false;
       }
     }
@@ -524,7 +552,7 @@ export default function AdminPortal({
 
     // 2. Assigned Team filter
     if (filterAssignedTeam !== 'All') {
-      if (lead.assignedTeam !== filterAssignedTeam && lead.assignedTeam !== 'all') {
+      if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
         return false;
       }
     }
@@ -763,16 +791,16 @@ export default function AdminPortal({
                             <span className="bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-2 py-0.5 font-bold text-indigo-655 dark:text-indigo-400 block w-fit">
                               👤 {lead.assignedToName}
                             </span>
-                            <span className="text-[10px] text-gray-405 dark:text-gray-500 block font-semibold">
-                              Team: {lead.assignedTeam === 'design' ? 'Design' : lead.assignedTeam === 'developer' ? 'Developer' : lead.assignedTeam === 'ads' ? 'Ads' : lead.assignedTeam === 'all' ? 'All Teams' : 'General'}
+                            <span className="text-[10px] text-gray-455 dark:text-gray-555 block font-semibold">
+                              Team: {getTeamDisplayLabel(lead.assignedTeam)}
                             </span>
                           </div>
                         ) : (
                           <div className="space-y-1">
                             <span className="text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 rounded-lg px-2 py-0.5 block w-fit">
-                              Queue: {lead.assignedTeam === 'design' ? 'Design' : lead.assignedTeam === 'developer' ? 'Developer' : lead.assignedTeam === 'ads' ? 'Ads' : lead.assignedTeam === 'all' ? 'All Teams' : 'General'}
+                              Queue: {getTeamDisplayLabel(lead.assignedTeam)}
                             </span>
-                            <span className="text-[10px] text-gray-400 dark:text-gray-550 italic block font-semibold">
+                            <span className="text-[10px] text-gray-400 dark:text-gray-555 italic block font-semibold">
                               Unclaimed
                             </span>
                           </div>
@@ -1529,7 +1557,7 @@ export default function AdminPortal({
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 bg-gray-50 dark:bg-slate-950/20 p-4 rounded-xl border border-gray-100 dark:border-slate-800/40">
                       <div><span className="text-gray-400">Project Status:</span> <strong className="text-indigo-600 dark:text-indigo-400 uppercase">{getProjectStatus(selectedLead)}</strong></div>
-                      <div><span className="text-gray-400">Assigned Team:</span> <strong className="text-gray-900 dark:text-white uppercase">{selectedLead.assignedTeam ? `${selectedLead.assignedTeam.toUpperCase()} Team` : 'None'}</strong></div>
+                      <div><span className="text-gray-400">Assigned Team:</span> <strong className="text-gray-900 dark:text-white uppercase">{getTeamDisplayLabel(selectedLead.assignedTeam)}</strong></div>
                       <div><span className="text-gray-400">Assigned Specialist:</span> <span className="text-gray-900 dark:text-white font-semibold">{selectedLead.assignedToName || 'Unclaimed'}</span></div>
                       <div><span className="text-gray-400">Acceptance Status:</span> <span className="text-gray-900 dark:text-white font-semibold">{selectedLead.assignedTo ? 'Accepted' : 'Pending Acceptance'}</span></div>
                       <div><span className="text-gray-400">Service Types:</span> <span className="text-gray-900 dark:text-white font-semibold">
@@ -2366,11 +2394,7 @@ export default function AdminPortal({
                         </span>
                       ) : (
                         <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                          {client.assignedTeam === 'design' && 'Designing Team'}
-                          {client.assignedTeam === 'developer' && 'Development Team'}
-                          {client.assignedTeam === 'ads' && 'Ads Team'}
-                          {client.assignedTeam === 'all' && 'All Teams'}
-                          {!client.assignedTeam && 'Not Assigned'}
+                          {getTeamDisplayLabel(client.assignedTeam)}
                         </span>
                       )}
                     </td>
