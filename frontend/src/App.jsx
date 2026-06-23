@@ -150,14 +150,6 @@ export default function App() {
 
         {/* Global Toolbar */}
         <div className="flex items-center gap-4">
-          {user && (
-            <button
-              onClick={logout}
-              className="text-xs font-bold text-gray-500 hover:text-gray-805 dark:text-gray-400 dark:hover:text-white transition-colors cursor-pointer border border-gray-205 dark:border-slate-800 rounded-xl px-3.5 py-1.5 hover:bg-gray-100 dark:hover:bg-slate-800"
-            >
-              Sign Out
-            </button>
-          )}
           <DarkModeToggle theme={theme} toggleTheme={toggleTheme} />
         </div>
       </header>

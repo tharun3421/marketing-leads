@@ -90,6 +90,7 @@ export default function TechnicalPortal({
   const [websiteStatus, setWebsiteStatus] = useState('Pending');
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [viewedClientId, setViewedClientId] = useState(null);
 
   const fetchAssignedLeads = async () => {
     setIsLoading(true);
@@ -411,9 +412,15 @@ export default function TechnicalPortal({
         )}
         <div className="space-y-1.5 pl-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setViewedClientId(leadId);
+              }}
+              className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono hover:underline cursor-pointer"
+            >
               {lead.clientId || 'N/A'}
-            </span>
+            </button>
             {!isClaimed ? (
               <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider shrink-0 border border-amber-500/10 animate-pulse">
                 Unclaimed
@@ -437,6 +444,9 @@ export default function TechnicalPortal({
           </h4>
           <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
             {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
+          </p>
+          <p className="text-[9px] text-gray-405 dark:text-gray-550 mt-1 font-semibold">
+            Created By: {lead.salespersonName}
           </p>
         </div>
       </div>
@@ -725,6 +735,7 @@ export default function TechnicalPortal({
               <thead>
                 <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
+                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
@@ -735,7 +746,7 @@ export default function TechnicalPortal({
               <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                 {filteredCentralClients.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
+                    <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
                       No clients found matching the selected filters.
                     </td>
                   </tr>
@@ -743,8 +754,16 @@ export default function TechnicalPortal({
                   filteredCentralClients.map((client) => {
                     return (
                       <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
-                        <td className="p-3 font-bold text-indigo-600 dark:text-indigo-400">
-                          {client.clientId || 'N/A'}
+                        <td className="p-3">
+                          <button
+                            onClick={() => setViewedClientId(client._id)}
+                            className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                          >
+                            {client.clientId || 'N/A'}
+                          </button>
+                        </td>
+                        <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
+                          {client.salespersonName || '—'}
                         </td>
                         <td className="p-3 font-bold text-gray-900 dark:text-white">
                           {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
@@ -908,9 +927,13 @@ export default function TechnicalPortal({
                         <div className="space-y-1">
                           <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                             {lead.clientId && (
-                              <span className="text-indigo-650 dark:text-indigo-400 font-mono font-bold">
+                              <button
+                                type="button"
+                                onClick={() => setViewedClientId(lead._id || lead.id)}
+                                className="text-indigo-650 dark:text-indigo-400 font-mono font-bold hover:underline cursor-pointer focus:outline-hidden"
+                              >
                                 [{lead.clientId}]
-                              </span>
+                              </button>
                             )}
                             {lead.clientName}
                           </h3>
@@ -1237,6 +1260,307 @@ export default function TechnicalPortal({
           </div>
         </Card>
       </div>
+
+      {/* Detailed Client Profile View Modal (Read-Only) */}
+      {viewedClientId && (() => {
+        const client = leads.find(l => (l._id || l.id) === viewedClientId);
+        if (!client) return null;
+
+        return (
+          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                      Client Profile Dossier
+                    </h3>
+                    <span className="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded font-mono">
+                      ID: {client.clientId || 'N/A'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-555 mt-1">
+                    Created by salesperson <strong className="text-indigo-655 dark:text-indigo-400">{client.salespersonName}</strong> on {new Date(client.createdAt || client.timestamp).toLocaleString()}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setViewedClientId(null)}
+                  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm text-gray-700 dark:text-gray-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  {/* Column 1 */}
+                  <div className="space-y-6">
+                    {/* Contact Info Card */}
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        1. Contact Information
+                      </h4>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase block">Client Name</span>
+                          <strong className="text-gray-900 dark:text-white">{client.clientName}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase block">Company Name</span>
+                          <span className="text-gray-900 dark:text-white font-semibold">{client.companyName || '—'}</span>
+                        </div>
+                        <div className="mt-2">
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">WhatsApp Mobile</span>
+                          <span className="font-mono text-gray-900 dark:text-white font-bold">{client.mobileNumber}</span>
+                        </div>
+                        <div className="mt-2">
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Email Address</span>
+                          <span className="text-gray-900 dark:text-white font-medium">{client.email || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Social Media Access Card */}
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        2. Social Channels Credentials
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                          <span className="text-[10px] font-bold text-gray-450 block mb-1">Facebook ID</span>
+                          <span className="font-mono text-xs text-gray-905 dark:text-white font-semibold">{client.facebookId || '—'}</span>
+                          {client.facebookPassword && (
+                            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40">
+                              <span className="text-[10px] font-bold text-gray-450 block mb-0.5">Password</span>
+                              <span className="font-mono text-xs text-rose-500 select-all font-bold">{client.facebookPassword}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                          <span className="text-[10px] font-bold text-gray-455 block mb-1">Instagram ID</span>
+                          <span className="font-mono text-xs text-gray-905 dark:text-white font-semibold">{client.instagramId || '—'}</span>
+                          {client.instagramPassword && (
+                            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40">
+                              <span className="text-[10px] font-bold text-gray-455 block mb-0.5">Password</span>
+                              <span className="font-mono text-xs text-rose-500 select-all font-bold">{client.instagramPassword}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Financials Card */}
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        3. Financial Overview
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                          <span className="text-[10px] font-bold text-gray-455 block uppercase">Plan Amount</span>
+                          <span className="text-sm font-bold text-gray-900 dark:text-white">₹{(client.planAmount || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                          <span className="text-[10px] font-bold text-gray-455 block uppercase">Advance Paid</span>
+                          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-450">₹{(client.advanceAmount || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                          <span className="text-[10px] font-bold text-gray-455 block uppercase text-indigo-650 dark:text-indigo-400">Pending Balance</span>
+                          <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">₹{(client.pendingAmount || 0).toLocaleString()}</span>
+                        </div>
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                          <span className="text-[10px] font-bold text-gray-455 block uppercase">Ad Campaign Budget</span>
+                          <span className="text-sm font-bold text-gray-900 dark:text-white">₹{(client.adBudget || 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Column 2 */}
+                  <div className="space-y-6">
+                    {/* Deliverables Card */}
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        4. Deliverables Tracking & Milestones
+                      </h4>
+                      
+                      {/* Posters */}
+                      {Number(client.postersRequired || 0) > 0 && (
+                        <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800/40 pb-2.5">
+                          <div>
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Graphic Posters</span>
+                            <span className="text-[10px] text-gray-450 font-medium">
+                              Required: {client.postersRequired} • Pending: {client.postersPending ?? (client.postersStatus === 'Completed' ? 0 : client.postersRequired)}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                            client.postersStatus === 'Completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : client.postersStatus === 'In Progress'
+                                ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                          }`}>
+                            {client.postersStatus || 'Pending'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Videos */}
+                      {Number(client.videosRequired || 0) > 0 && (
+                        <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800/40 pb-2.5">
+                          <div>
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Reels & Videos</span>
+                            <span className="text-[10px] text-gray-455 font-medium">
+                              Required: {client.videosRequired} • Pending: {client.videosPending ?? (client.videosStatus === 'Completed' ? 0 : client.videosRequired)}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                            client.videosStatus === 'Completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : client.videosStatus === 'In Progress'
+                                ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                          }`}>
+                            {client.videosStatus || 'Pending'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Ads */}
+                      {Number(client.adsRequired || 0) > 0 && (
+                        <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800/40 pb-2.5">
+                          <div>
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Ads Campaigns</span>
+                            <span className="text-[10px] text-gray-450 font-medium">
+                              Required: {client.adsRequired} • Pending: {client.adsPending ?? (client.adsStatus === 'Completed' ? 0 : client.adsRequired)}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                            client.adsStatus === 'Completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : client.adsStatus === 'In Progress'
+                                ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                          }`}>
+                            {client.adsStatus || 'Pending'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Website */}
+                      {client.websiteRequired && (
+                        <div className="flex justify-between items-center pb-1">
+                          <div>
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Website Development ({client.websiteType || 'General'})</span>
+                            <span className="text-[10px] text-gray-450 font-medium">
+                              Pending Tasks: {client.websitePending || 0}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                            client.websiteStatus === 'Completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : client.websiteStatus === 'In Progress'
+                                ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                          }`}>
+                            {client.websiteStatus || 'Pending'}
+                          </span>
+                        </div>
+                      )}
+
+                    </div>
+
+                    {/* Specifications Card */}
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        5. Campaign Specifications
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Business Category</span>
+                          <span className="text-gray-905 dark:text-white font-semibold">{client.businessCategory || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Website Link</span>
+                          {client.websiteUrl ? (
+                            <a href={client.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline break-all font-semibold block">
+                              {client.websiteUrl}
+                            </a>
+                          ) : (
+                            <span className="text-gray-450 block">—</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Start Date</span>
+                          <span className="text-gray-905 dark:text-white font-bold">{client.startDate || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Delivery Deadline</span>
+                          <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase mb-1">Brand Colors</span>
+                        <div className="flex gap-2 items-center">
+                          <span 
+                            style={{ backgroundColor: client.brandColors }}
+                            className="w-4 h-4 rounded border border-gray-250/60 block" 
+                          />
+                          <span className="text-xs font-mono text-gray-905 dark:text-white font-semibold">{client.brandColors || '—'}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Target Audience</span>
+                        <span className="text-gray-900 dark:text-white font-medium block mt-0.5">{client.targetAudience || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Key Competitors</span>
+                        <span className="text-gray-900 dark:text-white font-medium block mt-0.5">{client.competitors || '—'}</span>
+                      </div>
+                    </div>
+
+                    {/* Comments & Remarks Card */}
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        6. Notes & Internal Remarks
+                      </h4>
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Salesperson Onboarding Notes</span>
+                        <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-800/60">
+                          {client.notes || 'No notes provided.'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Internal Production Remarks</span>
+                        <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-805 font-medium">
+                          {client.remarks || 'No internal remarks.'}
+                        </p>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex justify-end p-5 border-t border-gray-100 dark:border-slate-800/80">
+                <Button
+                  onClick={() => setViewedClientId(null)}
+                  variant="outline"
+                  size="sm"
+                >
+                  Close Dossier
+                </Button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

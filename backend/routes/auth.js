@@ -8,7 +8,8 @@ const {
   getSalespersons,
   getTechnicalMembers,
   deleteUser,
-  resetUserPassword
+  resetUserPassword,
+  updateEmployee
 } = require('../controllers/authController');
 
 // @route   POST /api/auth/login
@@ -40,6 +41,11 @@ router.get('/technical', protect, getTechnicalMembers);
 // @desc    Delete a salesperson or technical user and handle cascade
 // @access  Private/Admin
 router.delete('/salespersons/:id', protect, adminOnly, deleteUser);
+
+// @route   PUT /api/auth/salespersons/:id
+// @desc    Update salesperson or technical user details (Admin only)
+// @access  Private/Admin
+router.put('/salespersons/:id', protect, adminOnly, updateEmployee);
 
 // @route   PUT /api/auth/salespersons/:id/reset-password
 // @desc    Reset a salesperson's password (Admin only)

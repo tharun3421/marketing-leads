@@ -180,6 +180,74 @@ const resetUserPassword = async (req, res) => {
   }
 };
 
+// @desc    Update salesperson or technical member details (Admin only)
+// @route   PUT /api/auth/salespersons/:id
+// @access  Private/Admin
+const updateEmployee = async (req, res) => {
+  const { name, username, role, team } = req.body;
+
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.role !== 'salesperson' && user.role !== 'technical') {
+      return res.status(400).json({ message: 'Only salesperson and technical accounts can be updated' });
+    }
+
+    // Check username uniqueness if changing username
+    if (username && username.toLowerCase() !== user.username.toLowerCase()) {
+      const usernameExists = await User.findOne({ username: username.toLowerCase() });
+      if (usernameExists) {
+        return res.status(400).json({ message: 'Username is already taken' });
+      }
+      user.username = username.toLowerCase();
+    }
+
+    const oldName = user.name;
+    if (name) user.name = name;
+    
+    // Manage roles and teams
+    if (role) {
+      user.role = (role === 'technical' || role === 'salesperson') ? role : user.role;
+    }
+    
+    if (user.role === 'technical') {
+      if (team !== undefined) {
+        user.team = ['design', 'developer', 'ads'].includes(team) ? team : null;
+      }
+    } else {
+      user.team = null;
+    }
+
+    await user.save();
+
+    // Cascade name changes to Lead records
+    if (name && name !== oldName) {
+      if (user.role === 'salesperson') {
+        await Lead.updateMany({ salesperson: user._id }, { salespersonName: name });
+      } else if (user.role === 'technical') {
+        await Lead.updateMany({ assignedTo: user._id }, { assignedToName: name });
+        await Lead.updateMany({ assignedDeveloper: user._id }, { assignedDeveloperName: name });
+        await Lead.updateMany({ assignedDesigner: user._id }, { assignedDesignerName: name });
+        await Lead.updateMany({ assignedAdSpecialist: user._id }, { assignedAdSpecialistName: name });
+      }
+    }
+
+    res.json({
+      _id: user._id,
+      name: user.name,
+      username: user.username,
+      role: user.role,
+      team: user.team
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   loginUser,
   registerUser,
@@ -187,5 +255,7 @@ module.exports = {
   getSalespersons,
   getTechnicalMembers,
   deleteUser,
-  resetUserPassword
+  resetUserPassword,
+  updateEmployee
 };
+
