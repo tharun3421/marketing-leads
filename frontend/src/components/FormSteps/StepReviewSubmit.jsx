@@ -16,18 +16,6 @@ export default function StepReviewSubmit({ register, watch, errors, formValues: 
 
   return (
     <div className="space-y-5">
-      {/* Special Instructions */}
-      <div>
-        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2.5">
-          Campaign Special Notes
-        </h4>
-        <TextArea
-          label="Notes / Special Instructions"
-          placeholder="Enter any specific requests, references, content constraints, or special notes..."
-          error={errors.notes?.message}
-          {...register('notes')}
-        />
-      </div>
 
       {/* Review Card */}
       <div className="border-t border-gray-100 dark:border-slate-800/60 pt-4">
@@ -95,13 +83,17 @@ export default function StepReviewSubmit({ register, watch, errors, formValues: 
               <div>
                 <span className="text-gray-400">Facebook:</span>{' '}
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {formValues.facebookId ? `Configured (${formValues.facebookId})` : 'Not Configured'}
+                  {formValues.facebookAccountStatus === 'New' 
+                    ? 'Create New Account' 
+                    : (formValues.facebookId ? `Existing (${formValues.facebookId})` : 'Not Configured')}
                 </span>
               </div>
               <div>
                 <span className="text-gray-400">Instagram:</span>{' '}
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {formValues.instagramId ? `Configured (${formValues.instagramId})` : 'Not Configured'}
+                  {formValues.instagramAccountStatus === 'New' 
+                    ? 'Create New Account' 
+                    : (formValues.instagramId ? `Existing (${formValues.instagramId})` : 'Not Configured')}
                 </span>
               </div>
             </div>
@@ -137,6 +129,7 @@ export default function StepReviewSubmit({ register, watch, errors, formValues: 
               <div><span className="text-gray-400">Advance Amount:</span> <span className="font-bold text-gray-900 dark:text-white">₹{formValues.advanceAmount || '0'}</span></div>
               <div><span className="text-gray-400">Pending Amount:</span> <span className="font-bold text-amber-600 dark:text-amber-400">₹{formValues.pendingAmount || '0'}</span></div>
               <div><span className="text-gray-400">Ad Budget:</span> <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{formValues.adBudget || '0'}</span></div>
+              <div><span className="text-gray-400">Ad Budget Per Day:</span> <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{formValues.adBudgetPerDay || '0'}</span></div>
               <div className="flex items-center gap-2">
                 <span className="text-gray-400">Colors:</span>
                 <span className="font-mono text-gray-900 dark:text-white">{formValues.brandColors || '—'}</span>
@@ -147,13 +140,13 @@ export default function StepReviewSubmit({ register, watch, errors, formValues: 
                   />
                 )}
               </div>
-              <div><span className="text-gray-400">Start Date:</span> <span className="text-gray-950 dark:text-white font-medium">{formValues.startDate || '—'}</span></div>
-              <div><span className="text-gray-400">Deadline:</span> <span className="text-gray-950 dark:text-white font-medium">{formValues.deliveryDeadline || '—'}</span></div>
+              <div><span className="text-gray-400">Start Date:</span> <span className="text-gray-955 dark:text-white font-medium">{formValues.startDate || '—'}</span></div>
+              <div><span className="text-gray-400">Deadline:</span> <span className="text-gray-955 dark:text-white font-medium">{formValues.deliveryDeadline || '—'}</span></div>
               <div className="md:col-span-2"><span className="text-gray-400">Competitors:</span> <span className="text-gray-900 dark:text-white">{formValues.competitors || '—'}</span></div>
               <div className="md:col-span-2 mt-1">
-                <span className="text-gray-400 block mb-1">Target Audience:</span>
+                <span className="text-gray-400 block mb-1">Target Audience ({formValues.targetAudienceRequired || 'Required'}):</span>
                 <p className="text-gray-900 dark:text-white bg-white/60 dark:bg-slate-900/40 p-2 rounded border border-gray-250/30 dark:border-slate-800/40">
-                  {formValues.targetAudience || '—'}
+                  {formValues.targetAudienceRequired === 'Not Required' ? 'Not Required' : (formValues.targetAudience || '—')}
                 </p>
               </div>
             </div>

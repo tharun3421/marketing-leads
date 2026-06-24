@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Layers, 
   Film, 
@@ -12,14 +12,19 @@ import {
   X, 
   Search, 
   User,
+  Users,
   AlertCircle,
   Mail,
-  Phone
+  Phone,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Card from '../UI/Card';
 import Button from '../UI/Button';
 import { Input } from '../UI/Input';
 import { useAuth } from '../../context/AuthContext';
+import ClientChat from '../UI/ClientChat';
 
 const getTeamDisplayLabel = (assignedTeam) => {
   if (!assignedTeam) return 'Not Assigned';
@@ -60,6 +65,28 @@ const getStatusLabel = (status, team) => {
   return status || 'Non-Allocated';
 };
 
+const checkDeadlineAlert = (deadlineStr) => {
+  if (!deadlineStr) return null;
+  const deadlineDate = new Date(deadlineStr);
+  if (isNaN(deadlineDate.getTime())) return null;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const deadline = new Date(deadlineDate);
+  deadline.setHours(0, 0, 0, 0);
+  
+  const diffTime = deadline - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) {
+    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
+  } else if (diffDays <= 3) {
+    return { type: 'approaching', label: `Due in ${diffDays}d`, color: 'bg-amber-500/10 text-amber-650 border-amber-550/25 font-bold' };
+  }
+  return null;
+};
+
 export default function TechnicalPortal({
   notifications = [],
   setNotifications,
@@ -91,6 +118,10 @@ export default function TechnicalPortal({
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewedClientId, setViewedClientId] = useState(null);
+  const [showFbPass, setShowFbPass] = useState(false);
+  const [showIgPass, setShowIgPass] = useState(false);
+  const [activeMetricsModal, setActiveMetricsModal] = useState(null);
+  const [editWorkflowStatus, setEditWorkflowStatus] = useState('Allocated');
 
   const fetchAssignedLeads = async () => {
     setIsLoading(true);
@@ -125,6 +156,7 @@ export default function TechnicalPortal({
       setAdsStatus(selectedLead.adsStatus || 'Pending');
       setAdsPending(Number(selectedLead.adsPending ?? selectedLead.adsRequired ?? 0));
       setWebsiteStatus(selectedLead.websiteStatus || 'Pending');
+      setEditWorkflowStatus(selectedLead.workflowStatus || 'Allocated');
     } else {
       setPostersStatus('Pending');
       setPostersPending(0);
@@ -133,6 +165,7 @@ export default function TechnicalPortal({
       setAdsStatus('Pending');
       setAdsPending(0);
       setWebsiteStatus('Pending');
+      setEditWorkflowStatus('Allocated');
     }
   }, [selectedLeadId, leads]);
 
@@ -157,6 +190,7 @@ export default function TechnicalPortal({
       setAdsStatus(selectedLead.adsStatus || 'Pending');
       setAdsPending(Number(selectedLead.adsPending ?? selectedLead.adsRequired ?? 0));
       setWebsiteStatus(selectedLead.websiteStatus || 'Pending');
+      setEditWorkflowStatus(selectedLead.workflowStatus || 'Allocated');
       onAddToast('Reset Updates', 'Updates draft reset to current database values.', 'info');
     }
   };
@@ -172,20 +206,6 @@ export default function TechnicalPortal({
       const adsPendingCount = adsStatus === 'Completed' ? 0 : (adsStatus === 'Pending' ? Number(selectedLead.adsRequired || 0) : Number(adsPending));
       const websitePendingCount = selectedLead.websiteRequired ? (websiteStatus === 'Completed' ? 0 : 1) : 0;
 
-      // Calculate workflow status automatically
-      const activeStatuses = [];
-      if (Number(selectedLead.postersRequired) > 0) activeStatuses.push(postersStatus);
-      if (Number(selectedLead.videosRequired) > 0) activeStatuses.push(videosStatus);
-      if (Number(selectedLead.adsRequired) > 0) activeStatuses.push(adsStatus);
-      if (selectedLead.websiteRequired) activeStatuses.push(websiteStatus);
-
-      let calculatedWorkflowStatus = 'In Progress';
-      if (activeStatuses.length === 0 || activeStatuses.every(s => s === 'Completed')) {
-        calculatedWorkflowStatus = 'Completed';
-      } else if (activeStatuses.every(s => s === 'Pending')) {
-        calculatedWorkflowStatus = 'Allocated';
-      }
-
       const updatePayload = {
         postersStatus,
         postersPending: postersPendingCount,
@@ -195,7 +215,7 @@ export default function TechnicalPortal({
         adsPending: adsPendingCount,
         websiteStatus,
         websitePending: websitePendingCount,
-        workflowStatus: calculatedWorkflowStatus
+        workflowStatus: editWorkflowStatus
       };
 
       const res = await authFetch(`/api/leads/${selectedLead._id}`, {
@@ -229,7 +249,7 @@ export default function TechnicalPortal({
         body: JSON.stringify({
           assignedTo: userId,
           assignedToName: user?.name,
-          workflowStatus: 'Allocated'
+          workflowStatus: 'In Progress'
         })
       });
 
@@ -270,69 +290,126 @@ export default function TechnicalPortal({
     }
   };
 
-  // Metric aggregates based on claimed clients only
-  const myLeads = leads.filter(l => l.assignedTo && (l.assignedTo?._id || l.assignedTo) === userId);
+  // Define teamLeads scoped to technician's department only
+  const teamLeads = useMemo(() => {
+    if (!user?.team || user?.team === 'all') return leads;
+    return leads.filter(l => hasTeamVal(l.assignedTeam, user.team));
+  }, [leads, user?.team]);
 
-  const totalPosters = myLeads.reduce((acc, l) => acc + Number(l.postersRequired || 0), 0);
-  const pendingPosters = myLeads.reduce((acc, l) => acc + (Number(l.postersRequired) > 0 ? Number(l.postersPending ?? l.postersRequired) : 0), 0);
-  const completedPosters = totalPosters - pendingPosters;
+  // Metric aggregates based on claimed clients only (within technician's department)
+  const myLeads = useMemo(() => {
+    return teamLeads.filter(l => l.assignedTo && (l.assignedTo?._id || l.assignedTo) === userId);
+  }, [teamLeads, userId]);
 
-  const totalVideos = myLeads.reduce((acc, l) => acc + Number(l.videosRequired || 0), 0);
-  const pendingVideos = myLeads.reduce((acc, l) => acc + (Number(l.videosRequired) > 0 ? Number(l.videosPending ?? l.videosRequired) : 0), 0);
-  const completedVideos = totalVideos - pendingVideos;
+  const totalPosters = useMemo(() => myLeads.reduce((acc, l) => acc + Number(l.postersRequired || 0), 0), [myLeads]);
+  const pendingPosters = useMemo(() => myLeads.reduce((acc, l) => acc + (Number(l.postersRequired) > 0 ? Number(l.postersPending ?? l.postersRequired) : 0), 0), [myLeads]);
+  const completedPosters = useMemo(() => totalPosters - pendingPosters, [totalPosters, pendingPosters]);
 
-  const totalWebsites = myLeads.filter(l => l.websiteRequired).length;
-  const completedWebsites = myLeads.filter(l => l.websiteRequired && l.websiteStatus === 'Completed').length;
-  const pendingWebsites = totalWebsites - completedWebsites;
+  const totalVideos = useMemo(() => myLeads.reduce((acc, l) => acc + Number(l.videosRequired || 0), 0), [myLeads]);
+  const pendingVideos = useMemo(() => myLeads.reduce((acc, l) => acc + (Number(l.videosRequired) > 0 ? Number(l.videosPending ?? l.videosRequired) : 0), 0), [myLeads]);
+  const completedVideos = useMemo(() => totalVideos - pendingVideos, [totalVideos, pendingVideos]);
 
-  const totalCampaigns = myLeads.reduce((acc, l) => acc + Number(l.adsRequired || 0), 0);
-  const pendingCampaigns = myLeads.reduce((acc, l) => acc + (Number(l.adsRequired) > 0 ? Number(l.adsPending ?? l.adsRequired) : 0), 0);
-  const completedCampaigns = totalCampaigns - pendingCampaigns;
+  const totalWebsites = useMemo(() => myLeads.filter(l => l.websiteRequired).length, [myLeads]);
+  const completedWebsites = useMemo(() => myLeads.filter(l => l.websiteRequired && l.websiteStatus === 'Completed').length, [myLeads]);
+  const pendingWebsites = useMemo(() => totalWebsites - completedWebsites, [totalWebsites, completedWebsites]);
 
-  const completedProjectsCount = myLeads.filter(l => l.workflowStatus === 'Completed').length;
-  const inProgressProjectsCount = myLeads.filter(l => l.workflowStatus === 'In Progress').length;
-  const allocatedClientsCount = myLeads.filter(l => l.workflowStatus === 'Allocated').length;
-  const claimedClientsCount = myLeads.length;
+  const totalCampaigns = useMemo(() => myLeads.reduce((acc, l) => acc + Number(l.adsRequired || 0), 0), [myLeads]);
+  const pendingCampaigns = useMemo(() => myLeads.reduce((acc, l) => acc + (Number(l.adsRequired) > 0 ? Number(l.adsPending ?? l.adsRequired) : 0), 0), [myLeads]);
+  const completedCampaigns = useMemo(() => totalCampaigns - pendingCampaigns, [totalCampaigns, pendingCampaigns]);
+
+  // Scope the top metrics grid counts to department tasks only via teamLeads
+  const totalClientsCount = useMemo(() => teamLeads.length, [teamLeads]);
+  const claimedClientsCount = useMemo(() => teamLeads.filter(l => l.assignedTo).length, [teamLeads]);
+  const unclaimedClientsCount = useMemo(() => teamLeads.filter(l => !l.assignedTo).length, [teamLeads]);
+  const inProgressClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'In Progress').length, [teamLeads]);
+  const pendingClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'Allocated').length, [teamLeads]);
+  const completedClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'Completed').length, [teamLeads]);
+
+  const getMetricsModalTitleAndList = () => {
+    switch (activeMetricsModal) {
+      case 'total':
+        return { title: 'Total Department Clients', list: teamLeads };
+      case 'claimed':
+        return { 
+          title: 'Claimed Department Clients', 
+          list: teamLeads.filter(l => l.assignedTo) 
+        };
+      case 'unclaimed':
+        return { 
+          title: 'Unclaimed Department Clients', 
+          list: teamLeads.filter(l => !l.assignedTo) 
+        };
+      case 'in-progress':
+        return { 
+          title: 'In-Progress Campaigns', 
+          list: teamLeads.filter(l => l.workflowStatus === 'In Progress') 
+        };
+      case 'pending':
+        return { 
+          title: 'Pending Campaigns', 
+          list: teamLeads.filter(l => l.workflowStatus === 'Allocated') 
+        };
+      case 'completed':
+        return { 
+          title: 'Completed Campaigns', 
+          list: teamLeads.filter(l => l.workflowStatus === 'Completed') 
+        };
+      default:
+        return { title: '', list: [] };
+    }
+  };
 
   const [isLoading, setIsLoading] = useState(true);
 
-  const filteredLeads = leads.filter(lead => {
-    // 0. Only show unclaimed tasks or tasks assigned to me in the main checklist
-    const leadAssignedToId = lead.assignedTo?._id || lead.assignedTo;
-    if (leadAssignedToId && leadAssignedToId !== userId) {
-      return false;
-    }
+  // Main checklist filters wrapped in useMemo, ensuring filteredLeads filters out any leads that do not belong to the technician's department
+  const filteredLeads = useMemo(() => {
+    return leads.filter(lead => {
+      // 0. Filter out any leads that do not belong to the technician's department
+      if (user?.team && user?.team !== 'all') {
+        if (!hasTeamVal(lead.assignedTeam, user.team)) {
+          return false;
+        }
+      }
 
-    // 1. Text Search Query
-    if (listSearchQuery) {
-      const q = listSearchQuery.toLowerCase();
-      const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
-      const companyMatch = (lead.companyName || '').toLowerCase().includes(q);
-      const idMatch = (lead.clientId || '').toLowerCase().includes(q);
-      const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-      if (!nameMatch && !companyMatch && !idMatch && !phoneMatch) return false;
-    }
-
-    // 2. Status filter
-    if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
-      return false;
-    }
-
-    // 3. Assigned Team filter
-    if (filterAssignedTeam !== 'All') {
-      if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
+      // Only show unclaimed tasks or tasks assigned to me in the main checklist
+      const leadAssignedToId = lead.assignedTo?._id || lead.assignedTo;
+      if (leadAssignedToId && leadAssignedToId !== userId) {
         return false;
       }
-    }
 
-    return true;
-  });
+      // 1. Text Search Query
+      if (listSearchQuery) {
+        const q = listSearchQuery.toLowerCase();
+        const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
+        const companyMatch = (lead.companyName || '').toLowerCase().includes(q);
+        const idMatch = (lead.clientId || '').toLowerCase().includes(q);
+        const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
+        if (!nameMatch && !companyMatch && !idMatch && !phoneMatch) return false;
+      }
 
-  const unclaimedLeads = filteredLeads.filter(lead => !lead.assignedTo);
-  const claimedLeads = filteredLeads.filter(lead => {
-    const leadAssignedToId = lead.assignedTo?._id || lead.assignedTo;
-    return leadAssignedToId && leadAssignedToId === userId;
-  });
+      // 2. Status filter
+      if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
+        return false;
+      }
+
+      // 3. Assigned Team filter
+      if (filterAssignedTeam !== 'All') {
+        if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [leads, user?.team, userId, listSearchQuery, filterWorkflowStatus, filterAssignedTeam]);
+
+  const unclaimedLeads = useMemo(() => filteredLeads.filter(lead => !lead.assignedTo), [filteredLeads]);
+  const claimedLeads = useMemo(() => {
+    return filteredLeads.filter(lead => {
+      const leadAssignedToId = lead.assignedTo?._id || lead.assignedTo;
+      return leadAssignedToId && leadAssignedToId === userId;
+    });
+  }, [filteredLeads, userId]);
 
   useEffect(() => {
     if (filteredLeads.length > 0) {
@@ -345,43 +422,45 @@ export default function TechnicalPortal({
     } else {
       setSelectedLeadId(null);
     }
-  }, [filteredLeads, selectedLeadId]);
+  }, [filteredLeads, claimedLeads, unclaimedLeads, selectedLeadId]);
 
-  // Central Clients Management filter logic
-  const filteredCentralClients = leads.filter(lead => {
-    if (clientSearchQuery) {
-      const q = clientSearchQuery.toLowerCase();
-      const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
-      const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-      const idMatch = (lead.clientId || '').toLowerCase().includes(q);
-      if (!nameMatch && !phoneMatch && !idMatch) return false;
-    }
+  // Central Clients Management filter logic (view all clients in the system) wrapped in useMemo
+  const filteredCentralClients = useMemo(() => {
+    return leads.filter(lead => {
+      if (clientSearchQuery) {
+        const q = clientSearchQuery.toLowerCase();
+        const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
+        const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
+        const idMatch = (lead.clientId || '').toLowerCase().includes(q);
+        if (!nameMatch && !phoneMatch && !idMatch) return false;
+      }
 
-    if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
-      return false;
-    }
-
-    if (clientTeamFilter !== 'All') {
-      if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
+      if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
         return false;
       }
-    }
 
-    if (clientStartDateFilter) {
-      const start = new Date(clientStartDateFilter);
-      start.setHours(0, 0, 0, 0);
-      const created = new Date(lead.createdAt || lead.timestamp);
-      if (created < start) return false;
-    }
-    if (clientEndDateFilter) {
-      const end = new Date(clientEndDateFilter);
-      end.setHours(23, 59, 59, 999);
-      const created = new Date(lead.createdAt || lead.timestamp);
-      if (created > end) return false;
-    }
+      if (clientTeamFilter !== 'All') {
+        if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
+          return false;
+        }
+      }
 
-    return true;
-  });
+      if (clientStartDateFilter) {
+        const start = new Date(clientStartDateFilter);
+        start.setHours(0, 0, 0, 0);
+        const created = new Date(lead.createdAt || lead.timestamp);
+        if (created < start) return false;
+      }
+      if (clientEndDateFilter) {
+        const end = new Date(clientEndDateFilter);
+        end.setHours(23, 59, 59, 999);
+        const created = new Date(lead.createdAt || lead.timestamp);
+        if (created > end) return false;
+      }
+
+      return true;
+    });
+  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientStartDateFilter, clientEndDateFilter]);
 
   if (isLoading) {
     return (
@@ -421,23 +500,36 @@ export default function TechnicalPortal({
             >
               {lead.clientId || 'N/A'}
             </button>
-            {!isClaimed ? (
-              <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider shrink-0 border border-amber-500/10 animate-pulse">
-                Unclaimed
-              </span>
-            ) : (
-              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
-                lead.workflowStatus === 'Completed'
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                  : lead.workflowStatus === 'In Progress'
-                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                    : lead.workflowStatus === 'Allocated'
-                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-              }`}>
-                {lead.workflowStatus || 'Non-Allocated'}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5">
+              {(() => {
+                const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                if (deadlineAlert) {
+                  return (
+                    <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                      {deadlineAlert.label}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+              {!isClaimed ? (
+                <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider shrink-0 border border-amber-500/10 animate-pulse">
+                  Unclaimed
+                </span>
+              ) : (
+                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
+                  lead.workflowStatus === 'Completed'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : lead.workflowStatus === 'In Progress'
+                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                      : lead.workflowStatus === 'Allocated'
+                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                }`}>
+                  {lead.workflowStatus === 'Allocated' ? 'Pending' : (lead.workflowStatus || 'Non-Allocated')}
+                </span>
+              )}
+            </div>
           </div>
           <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">
             {lead.clientName}
@@ -594,11 +686,28 @@ export default function TechnicalPortal({
           </div>
         )}
       </div>
-
       {/* Workflow Status Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5">
-          <div className="p-3 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-6">
+        {/* Total Clients Card */}
+        <div 
+          onClick={() => setActiveMetricsModal('total')}
+          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-indigo-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
+          <div className="p-2.5 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-xl">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-405 uppercase tracking-wider">Total Clients</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalClientsCount}</p>
+          </div>
+        </div>
+
+        {/* Claimed Clients Card */}
+        <div 
+          onClick={() => setActiveMetricsModal('claimed')}
+          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-blue-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
+          <div className="p-2.5 bg-blue-500/10 text-blue-650 dark:text-blue-400 rounded-xl">
             <User className="w-5 h-5" />
           </div>
           <div>
@@ -607,33 +716,59 @@ export default function TechnicalPortal({
           </div>
         </div>
 
-        {/* <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5">
-          <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
-            <Clock className="w-5 h-5" />
+        {/* Unclaimed Clients Card */}
+        <div 
+          onClick={() => setActiveMetricsModal('unclaimed')}
+          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-amber-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
+          <div className="p-2.5 bg-amber-500/10 text-amber-655 dark:text-amber-400 rounded-xl">
+            <Sliders className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Allocated</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{allocatedClientsCount}</p>
+            <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Unclaimed</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{unclaimedClientsCount}</p>
           </div>
-        </div> */}
+        </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-purple-500/5">
-          <div className="p-3 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl">
+        {/* In Progress Card */}
+        <div 
+          onClick={() => setActiveMetricsModal('in-progress')}
+          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-purple-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
+          <div className="p-2.5 bg-purple-500/10 text-purple-650 dark:text-purple-405 rounded-xl">
             <Layers className="w-5 h-5 animate-pulse" />
           </div>
           <div>
             <p className="text-[10px] font-bold text-gray-550 dark:text-gray-400 uppercase tracking-wider">In Progress</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{inProgressProjectsCount}</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{inProgressClientsCount}</p>
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-emerald-500/5">
-          <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
+        {/* Pending Card */}
+        <div 
+          onClick={() => setActiveMetricsModal('pending')}
+          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-rose-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
+          <div className="p-2.5 bg-rose-500/10 text-rose-650 dark:text-rose-455 rounded-xl">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-gray-550 dark:text-gray-400 uppercase tracking-wider">Pending</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{pendingClientsCount}</p>
+          </div>
+        </div>
+
+        {/* Completed Card */}
+        <div 
+          onClick={() => setActiveMetricsModal('completed')}
+          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-emerald-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
+          <div className="p-2.5 bg-emerald-500/10 text-emerald-655 dark:text-emerald-400 rounded-xl">
             <CheckCircle className="w-5 h-5" />
           </div>
           <div>
             <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Completed</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{completedProjectsCount}</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{completedClientsCount}</p>
           </div>
         </div>
       </div>
@@ -730,7 +865,7 @@ export default function TechnicalPortal({
             </div>
           </div>
 
-          <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+          <div className="overflow-auto max-h-[380px] border border-gray-100 dark:border-slate-800/60 rounded-xl scrollbar-thin">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
@@ -1014,7 +1149,20 @@ export default function TechnicalPortal({
                             </div>
                             <div className="flex justify-between items-center text-[11px] pt-1 border-t border-gray-100 dark:border-slate-805/40">
                               <span>Start: <strong>{lead.startDate || '—'}</strong></span>
-                              <span>Deadline: <strong className="text-rose-500 font-bold">{lead.deliveryDeadline || '—'}</strong></span>
+                              <span className="flex items-center gap-1.5">
+                                Deadline: <strong className="text-rose-500 font-bold">{lead.deliveryDeadline || '—'}</strong>
+                                {(() => {
+                                  const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                                  if (deadlineAlert) {
+                                    return (
+                                      <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                        {deadlineAlert.label}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1096,6 +1244,19 @@ export default function TechnicalPortal({
                       ) : (
                         <form onSubmit={handleSaveUpdates} className="space-y-4">
                           <div className="grid grid-cols-1 gap-4 max-h-[300px] overflow-y-auto pr-1">
+                            {/* Workflow Status manual selector */}
+                            <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
+                              <label className="text-xs font-bold text-gray-900 dark:text-white block">Workflow Status</label>
+                              <select
+                                value={editWorkflowStatus}
+                                onChange={(e) => setEditWorkflowStatus(e.target.value)}
+                                className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                              >
+                                <option value="Allocated">Pending</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Completed">Completed</option>
+                              </select>
+                            </div>
                             {/* Posters update */}
                             {Number(lead.postersRequired) > 0 && (
                               <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
@@ -1253,6 +1414,11 @@ export default function TechnicalPortal({
                         </form>
                       )}
                     </div>
+                    {/* Client Chat panel inside details view */}
+                    <div className="border-t border-gray-200/50 dark:border-slate-800/40 pt-4">
+                      <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider mb-2">Collaboration Chat</h4>
+                      <ClientChat leadId={leadId} />
+                    </div>
                   </div>
                 );
               })()}
@@ -1268,7 +1434,7 @@ export default function TechnicalPortal({
 
         return (
           <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
               {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                 <div>
@@ -1294,10 +1460,10 @@ export default function TechnicalPortal({
 
               {/* Modal Content */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm text-gray-700 dark:text-gray-300">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   
-                  {/* Column 1 */}
-                  <div className="space-y-6">
+                  {/* Left Column: Client Details Forms (2/3 width) */}
+                  <div className="lg:col-span-2 space-y-6">
                     {/* Contact Info Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
@@ -1333,9 +1499,20 @@ export default function TechnicalPortal({
                           <span className="text-[10px] font-bold text-gray-450 block mb-1">Facebook ID</span>
                           <span className="font-mono text-xs text-gray-905 dark:text-white font-semibold">{client.facebookId || '—'}</span>
                           {client.facebookPassword && (
-                            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40">
-                              <span className="text-[10px] font-bold text-gray-450 block mb-0.5">Password</span>
-                              <span className="font-mono text-xs text-rose-500 select-all font-bold">{client.facebookPassword}</span>
+                            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40 flex items-center justify-between gap-2">
+                              <div>
+                                <span className="text-[10px] font-bold text-gray-450 block mb-0.5">Password</span>
+                                <span className="font-mono text-xs text-rose-500 select-all font-bold">
+                                  {showFbPass ? client.facebookPassword : '••••••••'}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setShowFbPass(!showFbPass)}
+                                className="text-gray-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors p-1"
+                              >
+                                {showFbPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1343,44 +1520,44 @@ export default function TechnicalPortal({
                           <span className="text-[10px] font-bold text-gray-455 block mb-1">Instagram ID</span>
                           <span className="font-mono text-xs text-gray-905 dark:text-white font-semibold">{client.instagramId || '—'}</span>
                           {client.instagramPassword && (
-                            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40">
-                              <span className="text-[10px] font-bold text-gray-455 block mb-0.5">Password</span>
-                              <span className="font-mono text-xs text-rose-500 select-all font-bold">{client.instagramPassword}</span>
+                            <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40 flex items-center justify-between gap-2">
+                              <div>
+                                <span className="text-[10px] font-bold text-gray-455 block mb-0.5">Password</span>
+                                <span className="font-mono text-xs text-rose-500 select-all font-bold">
+                                  {showIgPass ? client.instagramPassword : '••••••••'}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setShowIgPass(!showIgPass)}
+                                className="text-gray-400 hover:text-indigo-655 dark:hover:text-indigo-400 transition-colors p-1"
+                              >
+                                {showIgPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </button>
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
-
-                    {/* Financials Card */}
-                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        3. Financial Overview
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                          <span className="text-[10px] font-bold text-gray-455 block uppercase">Plan Amount</span>
-                          <span className="text-sm font-bold text-gray-900 dark:text-white">₹{(client.planAmount || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                          <span className="text-[10px] font-bold text-gray-455 block uppercase">Advance Paid</span>
-                          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-450">₹{(client.advanceAmount || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                          <span className="text-[10px] font-bold text-gray-455 block uppercase text-indigo-650 dark:text-indigo-400">Pending Balance</span>
-                          <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">₹{(client.pendingAmount || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                          <span className="text-[10px] font-bold text-gray-455 block uppercase">Ad Campaign Budget</span>
-                          <span className="text-sm font-bold text-gray-900 dark:text-white">₹{(client.adBudget || 0).toLocaleString()}</span>
+                    {/* Financials Card - Ads Team Only (Since Technical role cannot see payments) */}
+                    {(user?.team === 'ads' || user?.team === 'all') && (
+                      <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          3. Financial Overview
+                        </h4>
+                        <div className="grid grid-cols-1 gap-4">
+                          <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                            <span className="text-[10px] font-bold text-gray-455 block uppercase">Ad Campaign Budget</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                              ₹{(client.adBudget || 0).toLocaleString()}
+                              {client.adBudgetPerDay > 0 && ` (₹${client.adBudgetPerDay.toLocaleString()}/day)`}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
-                  </div>
 
-                  {/* Column 2 */}
-                  <div className="space-y-6">
                     {/* Deliverables Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
@@ -1499,7 +1676,20 @@ export default function TechnicalPortal({
                         </div>
                         <div>
                           <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Delivery Deadline</span>
-                          <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
+                            {(() => {
+                              const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
+                              if (deadlineAlert) {
+                                return (
+                                  <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                    {deadlineAlert.label}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                         </div>
                       </div>
                       <div>
@@ -1543,6 +1733,16 @@ export default function TechnicalPortal({
 
                   </div>
 
+                  {/* Right Column: Shared Communication Chat (1/3 width) */}
+                  <div className="space-y-6 lg:col-span-1 flex flex-col justify-between">
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 flex-1 flex flex-col">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
+                        6. Shared Communication Chat
+                      </h4>
+                      <ClientChat leadId={client._id || client.id} />
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
@@ -1561,6 +1761,125 @@ export default function TechnicalPortal({
           </div>
         );
       })()}
+
+      {/* Metrics List Modal */}
+      <AnimatePresence>
+        {activeMetricsModal && (() => {
+          const { title, list } = getMetricsModalTitleAndList();
+          return (
+            <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+              >
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
+                  <div>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
+                    <p className="text-xs text-gray-400 dark:text-gray-555 mt-0.5">Showing {list.length} matching client briefs</p>
+                  </div>
+                  <button 
+                    onClick={() => setActiveMetricsModal(null)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal Content - Table */}
+                <div className="p-6 overflow-y-auto flex-1">
+                  {list.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 dark:text-gray-500">
+                      No client records match this category.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Workflow Status</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
+                          {list.map((client) => (
+                            <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
+                              <td className="p-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMetricsModal(null);
+                                    setViewedClientId(client._id || client.id);
+                                  }}
+                                  className="font-bold text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer"
+                                >
+                                  {client.clientId || 'N/A'}
+                                </button>
+                              </td>
+                              <td className="p-3 text-gray-900 dark:text-white font-bold">
+                                <div>{client.clientName}</div>
+                                {client.companyName && (
+                                  <div className="text-xs text-gray-405 dark:text-gray-550 font-normal mt-0.5">
+                                    {client.companyName}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3 font-mono">{client.mobileNumber}</td>
+                              <td className="p-3">
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                  client.workflowStatus === 'Completed'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    : client.workflowStatus === 'In Progress'
+                                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                      : client.workflowStatus === 'Allocated'
+                                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                }`}>
+                                  {client.workflowStatus === 'Allocated' ? 'Pending' : (client.workflowStatus || 'Non-Allocated')}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                {client.assignedToName ? (
+                                  <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
+                                    👤 {client.assignedToName}
+                                  </span>
+                                ) : (
+                                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                                    Unclaimed ({getTeamDisplayLabel(client.assignedTeam)})
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-xs text-gray-500 font-semibold">{client.salespersonName}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="flex justify-end p-5 border-t border-gray-100 dark:border-slate-800/80">
+                  <Button
+                    onClick={() => setActiveMetricsModal(null)}
+                    variant="outline"
+                    size="sm"
+                  >
+                    Close
+                  </Button>
+                </div>
+
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
 
     </div>
   );

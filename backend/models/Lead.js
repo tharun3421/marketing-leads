@@ -207,7 +207,38 @@ const leadSchema = new mongoose.Schema({
   clientId: {
     type: String,
     default: null
-  }
+  },
+  adBudgetPerDay: {
+    type: Number,
+    default: 0
+  },
+  facebookAccountStatus: {
+    type: String,
+    enum: ['Existing', 'New'],
+    default: 'Existing'
+  },
+  instagramAccountStatus: {
+    type: String,
+    enum: ['Existing', 'New'],
+    default: 'Existing'
+  },
+  targetAudienceRequired: {
+    type: String,
+    enum: ['Required', 'Not Required'],
+    default: 'Required'
+  },
+  communications: [{
+    sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    senderName: { type: String, required: true },
+    senderRole: { type: String, required: true },
+    category: { type: String, enum: ['Work Notes', 'Customer Notes'], required: true },
+    message: { type: String, required: true },
+    replyTo: {
+      senderName: String,
+      message: String
+    },
+    timestamp: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true
 });

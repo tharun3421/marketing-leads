@@ -1,5 +1,6 @@
 import React from 'react';
 import { Input, Checkbox, TextArea, Select } from '../UI/Input';
+import { motion } from 'framer-motion';
 import { 
   FileImage, 
   Video, 
@@ -24,6 +25,7 @@ const platformOptions = [
 
 export default function StepRequirementsBrief({ register, errors, setValue, watch, isClientPortal = false, isReadOnlyProfile = false }) {
   const watchPlatforms = watch('platforms') || [];
+  const watchTargetAudienceRequired = watch('targetAudienceRequired') || 'Required';
   const watchBrandColor = watch('brandColors') || '#6366f1';
   
   const watchPosters = Number(watch('postersRequired') || 0);
@@ -166,13 +168,35 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
           />
         </div>
 
-        <TextArea
+        <Select
           label="Target Audience"
-          placeholder="Describe the demographics, behaviors, and core interests of the client's target audience..."
           disabled={isReadOnlyProfile}
-          error={errors.targetAudience?.message}
-          {...register('targetAudience')}
+          options={[
+            { value: 'Required', label: 'Required' },
+            { value: 'Not Required', label: 'Not Required' }
+          ]}
+          {...register('targetAudienceRequired')}
         />
+
+        {watchTargetAudienceRequired === 'Required' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <TextArea
+              label="Target Audience Description"
+              placeholder="Describe the demographics, behaviors, and core interests of the client's target audience..."
+              required={watchTargetAudienceRequired === 'Required'}
+              disabled={isReadOnlyProfile}
+              error={errors.targetAudience?.message}
+              {...register('targetAudience', {
+                required: watchTargetAudienceRequired === 'Required' ? 'Target audience description is required' : false
+              })}
+            />
+          </motion.div>
+        )}
       </div>
 
       {/* Financials & Timeline */}
@@ -234,6 +258,19 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
           />
 
           <Input
+            label="Ad Budget Per Day (INR)"
+            type="number"
+            min="0"
+            placeholder="e.g. 500"
+            icon={IndianRupeeIcon}
+            disabled={isReadOnlyProfile}
+            error={errors.adBudgetPerDay?.message}
+            {...register('adBudgetPerDay', { 
+              min: { value: 0, message: 'Budget per day cannot be negative' }
+            })}
+          />
+
+          <Input
             label="Project Start Date"
             type="date"
             icon={CalendarRange}
@@ -251,6 +288,21 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
             {...register('deliveryDeadline')}
           />
         </div>
+      </div>
+
+      {/* Special Notes (moved from step 3) */}
+      <div className="space-y-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
+        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+          Campaign Special Notes
+        </h4>
+        <TextArea
+          label="Notes / Special Instructions"
+          placeholder="Enter any specific requests, references, content constraints, or special notes..."
+          disabled={isReadOnlyProfile}
+          error={errors.notes?.message}
+          icon={Notebook}
+          {...register('notes')}
+        />
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Users, 
   UserPlus, 
@@ -32,6 +32,7 @@ import Button from '../UI/Button';
 import { Input } from '../UI/Input';
 import AppsScriptGuide from '../Help/AppsScriptGuide';
 import { useAuth } from '../../context/AuthContext';
+import ClientChat from '../UI/ClientChat';
 
 const getTeamDisplayLabel = (assignedTeam) => {
   if (!assignedTeam) return 'Not Assigned';
@@ -70,6 +71,36 @@ const getStatusLabel = (status, team) => {
     return `Assigned to ${label}`;
   }
   return status || 'Non-Allocated';
+};
+
+const checkDeadlineAlert = (deadlineStr) => {
+  if (!deadlineStr) return null;
+  const deadlineDate = new Date(deadlineStr);
+  if (isNaN(deadlineDate.getTime())) return null;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const deadline = new Date(deadlineDate);
+  deadline.setHours(0, 0, 0, 0);
+  
+  const diffTime = deadline - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) {
+    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
+  } else if (diffDays <= 3) {
+    return { type: 'approaching', label: `Due in ${diffDays}d`, color: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
+  }
+  return null;
+};
+
+const getPaymentStatus = (lead) => {
+  const plan = Number(lead.planAmount || 0);
+  const advance = Number(lead.advanceAmount || 0);
+  if (plan > 0 && advance >= plan) return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+  if (advance > 0 && advance < plan) return { label: 'Partial', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
+  return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
 };
 
 export default function AdminPortal({ 
@@ -219,51 +250,44 @@ export default function AdminPortal({
   };
 
   // Central Clients Management filter logic
-  const filteredCentralClients = leads.filter(lead => {
-    if (clientSearchQuery) {
-      const q = clientSearchQuery.toLowerCase();
-      const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
-      const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-      const idMatch = (lead.clientId || '').toLowerCase().includes(q);
-      if (!nameMatch && !phoneMatch && !idMatch) return false;
-    }
+  const filteredCentralClients = useMemo(() => {
+    const q = clientSearchQuery.toLowerCase().trim();
+    return leads.filter(lead => {
+      if (q) {
+        const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
+        const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
+        const idMatch = (lead.clientId || '').toLowerCase().includes(q);
+        if (!nameMatch && !phoneMatch && !idMatch) return false;
+      }
 
-    if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
-      return false;
-    }
-
-    if (clientTeamFilter !== 'All') {
-      if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
+      if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
         return false;
       }
-    }
 
-    if (clientStartDateFilter) {
-      const start = new Date(clientStartDateFilter);
-      start.setHours(0, 0, 0, 0);
-      const created = new Date(lead.createdAt || lead.timestamp);
-      if (created < start) return false;
-    }
-    if (clientEndDateFilter) {
-      const end = new Date(clientEndDateFilter);
-      end.setHours(23, 59, 59, 999);
-      const created = new Date(lead.createdAt || lead.timestamp);
-      if (created > end) return false;
-    }
+      if (clientTeamFilter !== 'All') {
+        if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
+          return false;
+        }
+      }
 
-    return true;
-  });
+      if (clientStartDateFilter) {
+        const start = new Date(clientStartDateFilter);
+        start.setHours(0, 0, 0, 0);
+        const created = new Date(lead.createdAt || lead.timestamp);
+        if (created < start) return false;
+      }
+      if (clientEndDateFilter) {
+        const end = new Date(clientEndDateFilter);
+        end.setHours(23, 59, 59, 999);
+        const created = new Date(lead.createdAt || lead.timestamp);
+        if (created > end) return false;
+      }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center text-gray-905 dark:text-white">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm font-semibold">Loading administration data...</span>
-        </div>
-      </div>
-    );
-  }
+      return true;
+    });
+  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientStartDateFilter, clientEndDateFilter]);
+
+
 
   // Global derived overall status helper
   const getProjectStatus = (lead) => {
@@ -555,31 +579,52 @@ export default function AdminPortal({
   const intakeData = getIntakeData();
 
   // Inspect leads for a salesperson or technical team member
-  const inspectedLeads = selectedRep 
-    ? (selectedRep === 'All' ? leads : leads.filter(l => l.salespersonName === selectedRep))
-    : (selectedTech ? leads.filter(l => 
-        (l.assignedDeveloper && l.assignedDeveloper.toString() === selectedTech._id.toString()) ||
-        (l.assignedDesigner && l.assignedDesigner.toString() === selectedTech._id.toString()) ||
-        (l.assignedAdSpecialist && l.assignedAdSpecialist.toString() === selectedTech._id.toString()) ||
-        (l.assignedToName && l.assignedToName.includes(selectedTech.name)) ||
-        l.assignedToName === selectedTech.name
-      ) : []);
-
-  const filteredInspectedLeads = inspectedLeads.filter(lead => {
-    // 1. Status filter
-    if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
-      return false;
+  const inspectedLeads = useMemo(() => {
+    if (selectedRep) {
+      return selectedRep === 'All' ? leads : leads.filter(l => l.salespersonName === selectedRep);
     }
+    if (selectedTech) {
+      const techIdStr = selectedTech._id?.toString() || selectedTech.id?.toString();
+      const techName = selectedTech.name;
+      return leads.filter(l => 
+        (l.assignedDeveloper && l.assignedDeveloper.toString() === techIdStr) ||
+        (l.assignedDesigner && l.assignedDesigner.toString() === techIdStr) ||
+        (l.assignedAdSpecialist && l.assignedAdSpecialist.toString() === techIdStr) ||
+        (l.assignedToName && l.assignedToName.includes(techName)) ||
+        l.assignedToName === techName
+      );
+    }
+    return [];
+  }, [leads, selectedRep, selectedTech]);
 
-    // 2. Assigned Team filter
-    if (filterAssignedTeam !== 'All') {
-      if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
+  const filteredInspectedLeads = useMemo(() => {
+    return inspectedLeads.filter(lead => {
+      // 1. Status filter
+      if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
         return false;
       }
-    }
 
-    return true;
-  });
+      // 2. Assigned Team filter
+      if (filterAssignedTeam !== 'All') {
+        if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [inspectedLeads, filterWorkflowStatus, filterAssignedTeam]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center text-gray-905 dark:text-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-semibold">Loading administration data...</span>
+        </div>
+      </div>
+    );
+  }
 
   // Export specific Salesperson's clients to CSV
   const handleExportRepCSV = () => {
@@ -809,8 +854,29 @@ export default function AdminPortal({
                         </button>
                       </td>
                       <td className="p-3 font-medium text-gray-900 dark:text-white">
-                        <div>{lead.clientName}</div>
-                        <div className="text-xs text-gray-400 dark:text-gray-500">{lead.email}</div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{lead.clientName}</span>
+                          {(() => {
+                            const badge = getPaymentStatus(lead);
+                            return (
+                              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                                {badge.label}
+                              </span>
+                            );
+                          })()}
+                          {(() => {
+                            const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                            if (deadlineAlert) {
+                              return (
+                                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                  {deadlineAlert.label}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                        <div className="text-xs text-gray-400 dark:text-gray-555">{lead.email}</div>
                       </td>
                       <td className="p-3 text-gray-650 dark:text-gray-300">
                         <div>{lead.companyName || '—'}</div>
@@ -1912,7 +1978,7 @@ const handleClientFieldChange = (field, value) => {
           </div>
         </div>
 
-        <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+        <div className="overflow-auto max-h-[380px] border border-gray-100 dark:border-slate-800/60 rounded-xl scrollbar-thin">
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
@@ -1951,7 +2017,28 @@ const handleClientFieldChange = (field, value) => {
                       {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
                     </td>
                     <td className="p-3 text-gray-900 dark:text-white font-bold">
-                      <div>{client.clientName}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{client.clientName}</span>
+                        {(() => {
+                          const badge = getPaymentStatus(client);
+                          return (
+                            <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                              {badge.label}
+                            </span>
+                          );
+                        })()}
+                        {(() => {
+                          const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
+                          if (deadlineAlert) {
+                            return (
+                              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                {deadlineAlert.label}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                       {client.companyName && (
                         <div className="text-xs text-gray-400 dark:text-gray-555 font-normal mt-0.5">
                           {client.companyName}
@@ -2440,7 +2527,7 @@ const handleClientFieldChange = (field, value) => {
 
         return (
           <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
               {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                 <div>
@@ -2479,10 +2566,10 @@ const handleClientFieldChange = (field, value) => {
                 }} 
                 className="flex-1 overflow-y-auto p-6 space-y-6"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   
-                  {/* Column 1 */}
-                  <div className="space-y-6">
+                  {/* Left Column: Form Details (2/3 width) */}
+                  <div className="lg:col-span-2 space-y-6">
                     {/* Contact Info Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
@@ -2533,7 +2620,18 @@ const handleClientFieldChange = (field, value) => {
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
                         2. Social Channels Credentials
                       </h4>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">FB Page Status</label>
+                          <select 
+                            value={editedClientFields.facebookAccountStatus ?? client.facebookAccountStatus ?? 'Existing'}
+                            onChange={(e) => handleClientFieldChange('facebookAccountStatus', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          >
+                            <option value="Existing">Existing Account</option>
+                            <option value="New">Create New Account</option>
+                          </select>
+                        </div>
                         <div className="space-y-2">
                           <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Facebook ID</label>
                           <input 
@@ -2553,7 +2651,18 @@ const handleClientFieldChange = (field, value) => {
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">IG Page Status</label>
+                          <select 
+                            value={editedClientFields.instagramAccountStatus ?? client.instagramAccountStatus ?? 'Existing'}
+                            onChange={(e) => handleClientFieldChange('instagramAccountStatus', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          >
+                            <option value="Existing">Existing Account</option>
+                            <option value="New">Create New Account</option>
+                          </select>
+                        </div>
                         <div className="space-y-2">
                           <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Instagram ID</label>
                           <input 
@@ -2623,13 +2732,20 @@ const handleClientFieldChange = (field, value) => {
                             className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                           />
                         </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Ad Budget/Day (₹)</label>
+                          <input 
+                            type="number" 
+                            min="0"
+                            value={editedClientFields.adBudgetPerDay ?? client.adBudgetPerDay ?? 0}
+                            onChange={(e) => handleClientFieldChange('adBudgetPerDay', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                  </div>
 
-                  {/* Column 2 */}
-                  <div className="space-y-6">
                     {/* Deliverables Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
@@ -2860,14 +2976,27 @@ const handleClientFieldChange = (field, value) => {
                           />
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Target Audience</label>
-                        <input 
-                          type="text" 
-                          value={editedClientFields.targetAudience ?? client.targetAudience ?? ''}
-                          onChange={(e) => handleClientFieldChange('targetAudience', e.target.value)}
-                          className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
-                        />
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="space-y-2 col-span-1">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase font-semibold">Audience Status</label>
+                          <select 
+                            value={editedClientFields.targetAudienceRequired ?? client.targetAudienceRequired ?? 'Required'}
+                            onChange={(e) => handleClientFieldChange('targetAudienceRequired', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          >
+                            <option value="Required">Required</option>
+                            <option value="Not Required">Not Required</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2 col-span-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Target Audience Description</label>
+                          <input 
+                            type="text" 
+                            value={editedClientFields.targetAudience ?? client.targetAudience ?? ''}
+                            onChange={(e) => handleClientFieldChange('targetAudience', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Key Competitors</label>
@@ -2907,6 +3036,16 @@ const handleClientFieldChange = (field, value) => {
 
                   </div>
 
+                  {/* Right Column: Collaboration Chat (1/3 width) */}
+                  <div className="space-y-6 lg:col-span-1 flex flex-col justify-between">
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-805 flex-1 flex flex-col">
+                      <h4 className="text-xs font-bold text-indigo-650 dark:text-indigo-400 uppercase tracking-wider mb-2">
+                        Collaboration Chat
+                      </h4>
+                      <ClientChat leadId={client._id || client.id} />
+                    </div>
+                  </div>
+ 
                 </div>
 
                 {/* Footer Buttons */}

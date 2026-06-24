@@ -20,6 +20,8 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
   const [showFbPass, setShowFbPass] = useState(false);
   const [showIgPass, setShowIgPass] = useState(false);
   const watchWebsiteRequired = watch('websiteRequired');
+  const watchFbStatus = watch('facebookAccountStatus') || 'Existing';
+  const watchIgStatus = watch('instagramAccountStatus') || 'Existing';
   
   const salespersonOptions = salespersonsList.map(name => ({ value: name, label: name }));
 
@@ -158,7 +160,7 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
           />
         </div>
 
-        {/* Website Type Input */}
+        {/* Website Type Dropdown */}
         {watchWebsiteRequired && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
@@ -166,15 +168,23 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <Input
+            <Select
               label="Type of Website Required"
-              placeholder="e.g. E-commerce store, landing page, corporate website"
+              placeholder="Select website type"
               required
               disabled={isReadOnlyProfile}
-              icon={Globe}
+              options={[
+                { value: 'E-commerce Store', label: 'E-commerce Store' },
+                { value: 'Landing Page', label: 'Landing Page' },
+                { value: 'Corporate Website', label: 'Corporate Website' },
+                { value: 'Blog / Content Website', label: 'Blog / Content Website' },
+                { value: 'Portfolio Website', label: 'Portfolio Website' },
+                { value: 'Custom Application', label: 'Custom Application' },
+                { value: 'Other', label: 'Other' }
+              ]}
               error={errors.websiteType?.message}
               {...register('websiteType', { 
-                required: watchWebsiteRequired ? 'Please specify what type of website is required' : false 
+                required: watchWebsiteRequired ? 'Please select the type of website required' : false 
               })}
             />
           </motion.div>
@@ -199,32 +209,57 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
               <span className="w-1.5 h-1.5 rounded-full bg-blue-600" /> Facebook Access
             </h5>
             
-            <Input
-              label="Facebook ID / Email"
-              placeholder="Facebook identifier"
+            <Select
+              label="Facebook Account Status"
               disabled={isReadOnlyProfile}
-              error={errors.facebookId?.message}
-              {...register('facebookId')}
+              options={[
+                { value: 'Existing', label: 'Existing Account' },
+                { value: 'New', label: 'Create New Account' }
+              ]}
+              {...register('facebookAccountStatus')}
             />
 
-            <div className="relative">
-              <Input
-                label="Facebook Password"
-                placeholder="••••••••"
-                disabled={isReadOnlyProfile}
-                type={showFbPass ? 'text' : 'password'}
-                error={errors.facebookPassword?.message}
-                {...register('facebookPassword')}
-              />
-              <button
-                type="button"
-                onClick={() => setShowFbPass(!showFbPass)}
-                disabled={isReadOnlyProfile}
-                className="absolute right-3.5 top-[34px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+            {watchFbStatus === 'Existing' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="space-y-3 overflow-hidden"
               >
-                {showFbPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
+                <Input
+                  label="Facebook ID / Email"
+                  placeholder="Facebook identifier"
+                  required={watchFbStatus === 'Existing'}
+                  disabled={isReadOnlyProfile}
+                  error={errors.facebookId?.message}
+                  {...register('facebookId', {
+                    required: watchFbStatus === 'Existing' ? 'Facebook ID is required for existing accounts' : false
+                  })}
+                />
+
+                <div className="relative">
+                  <Input
+                    label="Facebook Password"
+                    placeholder="••••••••"
+                    required={watchFbStatus === 'Existing'}
+                    disabled={isReadOnlyProfile}
+                    type={showFbPass ? 'text' : 'password'}
+                    error={errors.facebookPassword?.message}
+                    {...register('facebookPassword', {
+                      required: watchFbStatus === 'Existing' ? 'Facebook password is required for existing accounts' : false
+                    })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowFbPass(!showFbPass)}
+                    disabled={isReadOnlyProfile}
+                    className="absolute right-3.5 top-[34px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                  >
+                    {showFbPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </motion.div>
+            )}
           </div>
 
           {/* Instagram */}
@@ -233,35 +268,60 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
               <span className="w-1.5 h-1.5 rounded-full bg-pink-500" /> Instagram Access
             </h5>
             
-            <Input
-              label="Instagram ID / Username"
-              placeholder="@username"
+            <Select
+              label="Instagram Account Status"
               disabled={isReadOnlyProfile}
-              error={errors.instagramId?.message}
-              {...register('instagramId')}
+              options={[
+                { value: 'Existing', label: 'Existing Account' },
+                { value: 'New', label: 'Create New Account' }
+              ]}
+              {...register('instagramAccountStatus')}
             />
 
-            <div className="relative">
-              <Input
-                label="Instagram Password"
-                placeholder="••••••••"
-                disabled={isReadOnlyProfile}
-                type={showIgPass ? 'text' : 'password'}
-                error={errors.instagramPassword?.message}
-                {...register('instagramPassword')}
-              />
-              <button
-                type="button"
-                onClick={() => setShowIgPass(!showIgPass)}
-                disabled={isReadOnlyProfile}
-                className="absolute right-3.5 top-[34px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+            {watchIgStatus === 'Existing' && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="space-y-3 overflow-hidden"
               >
-                {showIgPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+                <Input
+                  label="Instagram ID / Username"
+                  placeholder="@username"
+                  required={watchIgStatus === 'Existing'}
+                  disabled={isReadOnlyProfile}
+                  error={errors.instagramId?.message}
+                  {...register('instagramId', {
+                    required: watchIgStatus === 'Existing' ? 'Instagram ID is required for existing accounts' : false
+                  })}
+                />
+
+                <div className="relative">
+                  <Input
+                    label="Instagram Password"
+                    placeholder="••••••••"
+                    required={watchIgStatus === 'Existing'}
+                    disabled={isReadOnlyProfile}
+                    type={showIgPass ? 'text' : 'password'}
+                    error={errors.instagramPassword?.message}
+                    {...register('instagramPassword', {
+                      required: watchIgStatus === 'Existing' ? 'Instagram password is required for existing accounts' : false
+                    })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowIgPass(!showIgPass)}
+                    disabled={isReadOnlyProfile}
+                    className="absolute right-3.5 top-[34px] text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                  >
+                    {showIgPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </motion.div>
+            )}
           </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
 }

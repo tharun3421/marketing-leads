@@ -3,17 +3,24 @@ const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const {
   getLeads,
+  getLeadById,
   assignLeads,
   createLead,
   updateLead,
   deleteLead,
-  syncLead
+  syncLead,
+  addLeadMessage
 } = require('../controllers/leadController');
 
 // @route   GET /api/leads
 // @desc    Get all leads (Admin) or user-owned leads (Salesperson) or team leads (Technical)
 // @access  Private
 router.get('/', protect, getLeads);
+
+// @route   GET /api/leads/:id
+// @desc    Get a single lead by ID
+// @access  Private
+router.get('/:id', protect, getLeadById);
 
 // @route   PUT /api/leads/assign
 // @desc    Assign leads to a technical user (Admin only)
@@ -39,5 +46,10 @@ router.delete('/:id', protect, deleteLead);
 // @desc    Sync lead details to Google Sheets Web App URL
 // @access  Private
 router.post('/:id/sync', protect, syncLead);
+
+// @route   POST /api/leads/:id/messages
+// @desc    Add a communication message
+// @access  Private
+router.post('/:id/messages', protect, addLeadMessage);
 
 module.exports = router;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -39,6 +39,7 @@ import { useAuth } from '../../context/AuthContext';
 import StepProfileAccess from '../FormSteps/StepProfileAccess';
 import StepRequirementsBrief from '../FormSteps/StepRequirementsBrief';
 import StepReviewSubmit from '../FormSteps/StepReviewSubmit';
+import ClientChat from '../UI/ClientChat';
 
 const getTeamDisplayLabel = (assignedTeam) => {
   if (!assignedTeam) return 'Not Assigned';
@@ -219,6 +220,28 @@ const STEPS_META = [
   { title: 'Review & Submit Brief', desc: 'Final review of details and special instructions' }
 ];
 
+const checkDeadlineAlert = (deadlineStr) => {
+  if (!deadlineStr) return null;
+  const deadlineDate = new Date(deadlineStr);
+  if (isNaN(deadlineDate.getTime())) return null;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const deadline = new Date(deadlineDate);
+  deadline.setHours(0, 0, 0, 0);
+  
+  const diffTime = deadline - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 0) {
+    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
+  } else if (diffDays <= 3) {
+    return { type: 'approaching', label: `Due in ${diffDays}d`, color: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
+  }
+  return null;
+};
+
 export default function SalesPortal({ 
   notifications = [],
   setNotifications,
@@ -226,6 +249,7 @@ export default function SalesPortal({
   onAddNotification
 }) {
   const { user, logout, authFetch } = useAuth();
+  const userId = user?.id || user?._id;
   const [leads, setLeads] = useState([]);
   const [isLoadingLeads, setIsLoadingLeads] = useState(true);
 
@@ -237,7 +261,7 @@ export default function SalesPortal({
   const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
   
   const [showNotifications, setShowNotifications] = useState(false);
-  const [deleteConfirmLead, setDeleteConfirmLead] = useState(null);
+  const [activeMetricsModal, setActiveMetricsModal] = useState(null);
 
   // Central Clients Management filter states
   const [clientSearchQuery, setClientSearchQuery] = useState('');
@@ -322,35 +346,42 @@ export default function SalesPortal({
 
   const formValues = watch();
 
-  // Filter leads for this salesperson (backend already filters, but double check in frontend)
-  const salespersonLeads = leads;
+  // Filter leads for this salesperson (backend returns all leads now, so filter to own leads on frontend)
+  const salespersonLeads = useMemo(() => {
+    return leads.filter(l => {
+      const leadSalespersonId = l.salesperson?._id || l.salesperson;
+      return leadSalespersonId && leadSalespersonId.toString() === userId?.toString();
+    });
+  }, [leads, userId]);
 
   // Advanced filters implementation
-  const filteredLeads = salespersonLeads.filter(lead => {
-    // 1. List Search Query (name, company name, ID, or WhatsApp number)
-    if (listSearchQuery) {
-      const q = listSearchQuery.toLowerCase();
-      const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
-      const companyMatch = (lead.companyName || '').toLowerCase().includes(q);
-      const idMatch = (lead.clientId || '').toLowerCase().includes(q);
-      const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-      if (!nameMatch && !companyMatch && !idMatch && !phoneMatch) return false;
-    }
+  const filteredLeads = useMemo(() => {
+    const q = listSearchQuery.toLowerCase().trim();
+    return salespersonLeads.filter(lead => {
+      // 1. List Search Query (name, company name, ID, or WhatsApp number)
+      if (q) {
+        const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
+        const companyMatch = (lead.companyName || '').toLowerCase().includes(q);
+        const idMatch = (lead.clientId || '').toLowerCase().includes(q);
+        const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
+        if (!nameMatch && !companyMatch && !idMatch && !phoneMatch) return false;
+      }
 
-    // 2. Status filter
-    if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
-      return false;
-    }
-
-    // 3. Assigned Team filter
-    if (filterAssignedTeam !== 'All') {
-      if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
+      // 2. Status filter
+      if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
         return false;
       }
-    }
 
-    return true;
-  });
+      // 3. Assigned Team filter
+      if (filterAssignedTeam !== 'All') {
+        if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [salespersonLeads, listSearchQuery, filterWorkflowStatus, filterAssignedTeam]);
 
   useEffect(() => {
     if (filteredLeads.length > 0) {
@@ -364,45 +395,47 @@ export default function SalesPortal({
   }, [filteredLeads, selectedLeadId]);
 
   // Central Clients Management filter logic
-  const filteredCentralClients = leads.filter(lead => {
-    if (clientSearchQuery) {
-      const q = clientSearchQuery.toLowerCase();
-      const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
-      const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-      const idMatch = (lead.clientId || '').toLowerCase().includes(q);
-      if (!nameMatch && !phoneMatch && !idMatch) return false;
-    }
+  const filteredCentralClients = useMemo(() => {
+    const q = clientSearchQuery.toLowerCase().trim();
+    return leads.filter(lead => {
+      if (q) {
+        const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
+        const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
+        const idMatch = (lead.clientId || '').toLowerCase().includes(q);
+        if (!nameMatch && !phoneMatch && !idMatch) return false;
+      }
 
-    if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
-      return false;
-    }
-
-    if (clientTeamFilter !== 'All') {
-      if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
+      if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
         return false;
       }
-    }
 
-    if (clientStartDateFilter) {
-      const start = new Date(clientStartDateFilter);
-      start.setHours(0, 0, 0, 0);
-      const created = new Date(lead.createdAt || lead.timestamp);
-      if (created < start) return false;
-    }
-    if (clientEndDateFilter) {
-      const end = new Date(clientEndDateFilter);
-      end.setHours(23, 59, 59, 999);
-      const created = new Date(lead.createdAt || lead.timestamp);
-      if (created > end) return false;
-    }
+      if (clientTeamFilter !== 'All') {
+        if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
+          return false;
+        }
+      }
 
-    return true;
-  });
+      if (clientStartDateFilter) {
+        const start = new Date(clientStartDateFilter);
+        start.setHours(0, 0, 0, 0);
+        const created = new Date(lead.createdAt || lead.timestamp);
+        if (created < start) return false;
+      }
+      if (clientEndDateFilter) {
+        const end = new Date(clientEndDateFilter);
+        end.setHours(23, 59, 59, 999);
+        const created = new Date(lead.createdAt || lead.timestamp);
+        if (created > end) return false;
+      }
+
+      return true;
+    });
+  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientStartDateFilter, clientEndDateFilter]);
 
   // Metrics
   const totalMyClients = salespersonLeads.length;
-  const pendingSendCount = salespersonLeads.filter(l => l.status !== 'Submitted to Admin').length;
-  const adminSubmittedCount = salespersonLeads.filter(l => l.status === 'Submitted to Admin').length;
+  const pendingSendCount = useMemo(() => salespersonLeads.filter(l => l.status !== 'Submitted to Admin').length, [salespersonLeads]);
+  const adminSubmittedCount = useMemo(() => salespersonLeads.filter(l => l.status === 'Submitted to Admin').length, [salespersonLeads]);
 
   const editingLead = leads.find(l => (l._id || l.id) === editingLeadId);
   const isReadOnlyProfile = wizardMode === 'edit' && editingLead && (editingLead.status === 'Client Submitted' || editingLead.status === 'Submitted to Admin');
@@ -465,9 +498,9 @@ export default function SalesPortal({
 
   const handleNextStep = async () => {
     const fieldsToValidate = [
-      ['salespersonName', 'clientName', 'websiteUrl', 'websiteRequired', 'websiteType', 'mobileNumber', 'email', 'facebookId', 'facebookPassword', 'instagramId', 'instagramPassword'],
-      ['postersRequired', 'videosRequired', 'adsRequired', 'platforms', 'brandColors', 'competitors', 'adBudget', 'startDate', 'deliveryDeadline'],
-      ['notes']
+      ['salespersonName', 'clientName', 'websiteUrl', 'websiteRequired', 'websiteType', 'mobileNumber', 'email', 'facebookId', 'facebookPassword', 'instagramId', 'instagramPassword', 'facebookAccountStatus', 'instagramAccountStatus'],
+      ['postersRequired', 'videosRequired', 'adsRequired', 'platforms', 'brandColors', 'competitors', 'adBudget', 'startDate', 'deliveryDeadline', 'notes', 'adBudgetPerDay', 'targetAudienceRequired', 'targetAudience'],
+      ['isConfirmed']
     ];
 
     const isStepValid = await trigger(fieldsToValidate[currentStep]);
@@ -630,32 +663,7 @@ export default function SalesPortal({
     }
   };
 
-  const handleDeleteClick = (lead) => {
-    setDeleteConfirmLead(lead);
-  };
-
-  const confirmDeleteLead = async () => {
-    if (!deleteConfirmLead) return;
-    const leadId = deleteConfirmLead._id || deleteConfirmLead.id;
-    try {
-      const res = await authFetch(`/api/leads/${leadId}`, {
-        method: 'DELETE'
-      });
-
-      if (res.ok) {
-        fetchLeads();
-        onAddToast('Lead Deleted', `Removed client brief record for ${deleteConfirmLead.clientName}.`, 'info');
-        if (onAddNotification) {
-          onAddNotification(`Client folder for ${deleteConfirmLead.clientName} was deleted by ${user.name}.`, 'update');
-        }
-      }
-    } catch (err) {
-      console.error('Delete lead failed:', err);
-      onAddToast('Delete Error', 'Failed to delete lead from database.', 'error');
-    } finally {
-      setDeleteConfirmLead(null);
-    }
-  };
+  // Client deletion has been removed from the Sales Portal
 
   // Submit/Update lead wizard data
   const handleWizardSubmit = async (data) => {
@@ -750,6 +758,25 @@ export default function SalesPortal({
     if (activeStatuses.every(s => s === 'Completed')) return 'Completed';
     if (activeStatuses.every(s => s === 'Pending')) return 'Pending';
     return 'In Progress';
+  };
+
+  const getMetricsModalTitleAndList = () => {
+    switch (activeMetricsModal) {
+      case 'total':
+        return { title: 'Total Clients', list: leads };
+      case 'non-allocated':
+        return { title: 'Non-Allocated Clients', list: leads.filter(l => (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated') };
+      case 'allocated':
+        return { title: 'Allocated Clients', list: leads.filter(l => l.workflowStatus === 'Allocated') };
+      case 'pending':
+        return { title: 'Pending Clients/Tasks', list: leads.filter(l => getProjectStatus(l) === 'Pending') };
+      case 'in-progress':
+        return { title: 'In-Progress Clients/Tasks', list: leads.filter(l => getProjectStatus(l) === 'In Progress') };
+      case 'completed':
+        return { title: 'Completed Clients/Tasks', list: leads.filter(l => getProjectStatus(l) === 'Completed') };
+      default:
+        return { title: '', list: [] };
+    }
   };
 
   const completedProjectsCount = salespersonLeads.filter(l => getProjectStatus(l) === 'Completed').length;
@@ -866,8 +893,11 @@ export default function SalesPortal({
       </div>
 
       {/* Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div 
+          onClick={() => setActiveMetricsModal('total')}
+          className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
           <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
             <Users className="w-5 h-5" />
           </div>
@@ -877,7 +907,10 @@ export default function SalesPortal({
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-amber-500/5">
+        <div 
+          onClick={() => setActiveMetricsModal('non-allocated')}
+          className="glass-card p-4 rounded-xl flex items-center gap-4 border border-amber-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
           <div className="p-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl">
             <Sliders className="w-5 h-5" />
           </div>
@@ -887,7 +920,10 @@ export default function SalesPortal({
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5">
+        <div 
+          onClick={() => setActiveMetricsModal('allocated')}
+          className="glass-card p-4 rounded-xl flex items-center gap-4 border border-blue-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
           <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-xl">
             <User className="w-5 h-5" />
           </div>
@@ -897,7 +933,23 @@ export default function SalesPortal({
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5">
+        <div 
+          onClick={() => setActiveMetricsModal('pending')}
+          className="glass-card p-4 rounded-xl flex items-center gap-4 border border-rose-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
+          <div className="p-3 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-xl">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Pending</p>
+            <p className="text-2xl font-bold text-gray-900 dark:text-white mt-0.5">{pendingProjectsCount}</p>
+          </div>
+        </div>
+
+        <div 
+          onClick={() => setActiveMetricsModal('in-progress')}
+          className="glass-card p-4 rounded-xl flex items-center gap-4 border border-indigo-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
           <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl">
             <Layers className="w-5 h-5 animate-pulse" />
           </div>
@@ -907,7 +959,10 @@ export default function SalesPortal({
           </div>
         </div>
 
-        <div className="glass-card p-4 rounded-xl flex items-center gap-4 border border-emerald-500/5">
+        <div 
+          onClick={() => setActiveMetricsModal('completed')}
+          className="glass-card p-4 rounded-xl flex items-center gap-4 border border-emerald-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
+        >
           <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-xl">
             <CheckCircle className="w-5 h-5" />
           </div>
@@ -1010,7 +1065,7 @@ export default function SalesPortal({
                 </div>
               </div>
 
-              <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+              <div className="overflow-auto max-h-[380px] border border-gray-100 dark:border-slate-800/60 rounded-xl scrollbar-thin">
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
@@ -1177,17 +1232,30 @@ export default function SalesPortal({
                               >
                                 {lead.clientId || 'N/A'}
                               </button>
-                              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
-                                lead.workflowStatus === 'Completed'
-                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                  : lead.workflowStatus === 'In Progress'
-                                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                    : lead.workflowStatus === 'Allocated'
-                                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                              }`}>
-                                {lead.workflowStatus || 'Non-Allocated'}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {(() => {
+                                  const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                                  if (deadlineAlert) {
+                                    return (
+                                      <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                        {deadlineAlert.label}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
+                                  lead.workflowStatus === 'Completed'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    : lead.workflowStatus === 'In Progress'
+                                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                      : lead.workflowStatus === 'Allocated'
+                                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                }`}>
+                                  {lead.workflowStatus || 'Non-Allocated'}
+                                </span>
+                              </div>
                             </div>
                             <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">
                               {lead.clientName}
@@ -1420,7 +1488,7 @@ export default function SalesPortal({
                           <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-2.5 md:col-span-2">
                             <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider">Project Specifications</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                              <div className="space-y-1.5">
+                              <div className="space-y-1.5 col-span-1 sm:col-span-2">
                                 <div className="flex items-center gap-1.5"><span className="text-gray-400">Brand Colors:</span> <strong>{lead.brandColors || '—'}</strong>
                                   {lead.brandColors && (
                                     <span className="w-3.5 h-3.5 rounded-full border border-gray-205" style={{ backgroundColor: lead.brandColors }} />
@@ -1428,13 +1496,21 @@ export default function SalesPortal({
                                 </div>
                                 <div><span className="text-gray-400">Competitors:</span> <strong>{lead.competitors || '—'}</strong></div>
                                 <div><span className="text-gray-400">Start Date:</span> <strong>{lead.startDate || '—'}</strong></div>
-                                <div><span className="text-gray-400">Deadline:</span> <strong>{lead.deliveryDeadline || '—'}</strong></div>
-                              </div>
-                              <div className="space-y-1.5">
-                                <div><span className="text-gray-400">Plan Amount:</span> <strong className="text-gray-800 dark:text-gray-200 font-semibold">₹{lead.planAmount || '0'}</strong></div>
-                                <div><span className="text-gray-400">Advance Paid:</span> <strong className="text-gray-800 dark:text-gray-200 font-semibold">₹{lead.advanceAmount || '0'}</strong></div>
-                                <div><span className="text-gray-400">Pending Bal:</span> <strong className="text-amber-500 font-bold">₹{lead.pendingAmount || '0'}</strong></div>
-                                <div><span className="text-gray-400">Ad Budget:</span> <strong className="text-emerald-500 font-bold">₹{lead.adBudget || '0'}</strong></div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-gray-400">Deadline:</span>
+                                  <strong>{lead.deliveryDeadline || '—'}</strong>
+                                  {(() => {
+                                    const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                                    if (deadlineAlert) {
+                                      return (
+                                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                          {deadlineAlert.label}
+                                        </span>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                </div>
                               </div>
                               {lead.targetAudience && (
                                 <div className="col-span-1 sm:col-span-2 bg-gray-500/5 p-2 rounded-lg text-[11px] leading-relaxed">
@@ -1444,7 +1520,7 @@ export default function SalesPortal({
                               )}
                               {lead.platforms && lead.platforms.length > 0 && (
                                 <div className="col-span-1 sm:col-span-2">
-                                  <span className="text-[10px] font-bold text-gray-450 uppercase tracking-wider mb-1 block">Platforms</span>
+                                  <span className="text-[10px] font-bold text-gray-455 uppercase tracking-wider mb-1 block">Platforms</span>
                                   <div className="flex flex-wrap gap-1">
                                     {lead.platforms.map((p, idx) => (
                                       <span key={idx} className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-indigo-500/5">{p}</span>
@@ -1479,20 +1555,16 @@ export default function SalesPortal({
                           <User className="w-4 h-4 text-indigo-500 animate-pulse" />
                           <span>Assignee: {lead.assignedToName ? <strong className="text-indigo-650 dark:text-indigo-400">{lead.assignedToName}</strong> : <span className="italic text-gray-400 font-normal">Unclaimed ({getTeamDisplayLabel(lead.assignedTeam)})</span>}</span>
                         </div>
+
+                        {/* Client Chat panel inside details view */}
+                        <div className="border-t border-gray-200/50 dark:border-slate-800/40 pt-4">
+                          <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wider mb-2">Collaboration Chat</h4>
+                          <ClientChat leadId={leadId} />
+                        </div>
                       </div>
 
                       {/* Actions Footer */}
-                      <div className="flex items-center justify-between border-t border-gray-200/50 dark:border-slate-800/40 pt-4 mt-2 gap-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteClick(lead)}
-                          className="hover:!text-red-500 hover:!border-red-500/30 hover:!bg-red-500/5 text-gray-400 dark:text-gray-500 cursor-pointer"
-                          title="Delete Client"
-                        >
-                          <Trash2 className="w-4.5 h-4.5" />
-                        </Button>
-
+                      <div className="flex items-center justify-end border-t border-gray-200/50 dark:border-slate-800/40 pt-4 mt-2 gap-3">
                         <div className="flex items-center">
                           <TeamMultiSelectDropdown
                             assignedTeam={lead.assignedTeam}
@@ -1507,57 +1579,118 @@ export default function SalesPortal({
             </div>
           )}
         </Card>
+      </div>
 
-         
-        </div>
-
-      {/* Delete Confirmation Dialog */}
+               {/* Metrics List Modal */}
       <AnimatePresence>
-        {deleteConfirmLead && (
-          <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-xs flex items-center justify-center p-4 z-150">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-850 p-6 rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden"
-            >
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-red-500/10 text-red-600 rounded-full flex items-center justify-center shrink-0">
-                    <Trash2 className="w-5 h-5" />
-                  </div>
+        {activeMetricsModal && (() => {
+          const { title, list } = getMetricsModalTitleAndList();
+          return (
+            <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+              >
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                   <div>
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white">Delete Client Brief Folder?</h3>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">This action is irreversible and deletes the local DB record.</p>
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Showing {list.length} matching client briefs</p>
                   </div>
+                  <button 
+                    onClick={() => setActiveMetricsModal(null)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-650 dark:hover:text-gray-250 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
 
-                <p className="text-xs text-gray-600 dark:text-gray-300 leading-normal">
-                  Are you sure you want to permanently delete the onboarding brief database file for <strong className="text-gray-900 dark:text-white font-semibold">{deleteConfirmLead.clientName}</strong>?
-                </p>
-
-                <div className="flex justify-end gap-2.5 pt-2 border-t border-gray-100 dark:border-slate-800/40">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDeleteConfirmLead(null)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    className="!bg-red-600 hover:!bg-red-700 !border-red-600 hover:!border-red-700 text-white"
-                    onClick={confirmDeleteLead}
-                  >
-                    Delete Folder
-                  </Button>
+                {/* Modal Content - Table */}
+                <div className="p-6 overflow-y-auto flex-1">
+                  {list.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 dark:text-gray-500">
+                      No client records match this category.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+                      <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Workflow Status</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
+                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
+                          {list.map((client) => (
+                            <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
+                              <td className="p-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMetricsModal(null);
+                                    setViewedClientId(client._id || client.id);
+                                  }}
+                                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                                >
+                                  {client.clientId || 'N/A'}
+                                </button>
+                              </td>
+                              <td className="p-3 text-gray-900 dark:text-white font-bold">
+                                <div>{client.clientName}</div>
+                                {client.companyName && (
+                                  <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">
+                                    {client.companyName}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3 font-mono">{client.mobileNumber}</td>
+                              <td className="p-3">
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                  client.workflowStatus === 'Completed'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    : client.workflowStatus === 'In Progress'
+                                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                      : client.workflowStatus === 'Allocated'
+                                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                }`}>
+                                  {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                                </span>
+                              </td>
+                              <td className="p-3 text-xs">
+                                {client.assignedToName ? (
+                                  <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 w-max">
+                                    👤 {client.assignedToName}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-700 dark:text-slate-350 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full font-bold">
+                                    {getTeamDisplayLabel(client.assignedTeam)}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
+                                {client.salespersonName}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
+
+
 
       {/* Reusable Form Wizard Modal Overlay */}
       <AnimatePresence>
@@ -1688,7 +1821,7 @@ export default function SalesPortal({
 
         return (
           <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
               {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                 <div>
@@ -1714,10 +1847,10 @@ export default function SalesPortal({
 
               {/* Modal Content */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm text-gray-700 dark:text-gray-300">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   
-                  {/* Column 1 */}
-                  <div className="space-y-6">
+                  {/* Left Column: Client Details Forms (2/3 width) */}
+                  <div className="lg:col-span-2 space-y-6">
                     {/* Contact Info Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
@@ -1725,19 +1858,19 @@ export default function SalesPortal({
                       </h4>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                         <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase block">Client Name</span>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Client Name</span>
                           <strong className="text-gray-900 dark:text-white">{client.clientName}</strong>
                         </div>
                         <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase block">Company Name</span>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Company Name</span>
                           <span className="text-gray-900 dark:text-white font-semibold">{client.companyName || '—'}</span>
                         </div>
                         <div className="mt-2">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">WhatsApp Mobile</span>
+                          <span className="text-[10px] font-bold text-gray-400 block uppercase">WhatsApp Mobile</span>
                           <span className="font-mono text-gray-900 dark:text-white font-bold">{client.mobileNumber}</span>
                         </div>
                         <div className="mt-2">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Email Address</span>
+                          <span className="text-[10px] font-bold text-gray-400 block uppercase">Email Address</span>
                           <span className="text-gray-900 dark:text-white font-medium">{client.email || '—'}</span>
                         </div>
                       </div>
@@ -1754,7 +1887,7 @@ export default function SalesPortal({
                           <span className="font-mono text-xs text-gray-900 dark:text-white font-semibold">{client.facebookId || '—'}</span>
                           {client.facebookPassword && (
                             <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40">
-                              <span className="text-[10px] font-bold text-gray-450 block mb-0.5">Password</span>
+                              <span className="text-[10px] font-bold text-gray-455 block mb-0.5">Password</span>
                               <span className="font-mono text-xs text-rose-500 select-all font-bold">{client.facebookPassword}</span>
                             </div>
                           )}
@@ -1772,39 +1905,11 @@ export default function SalesPortal({
                       </div>
                     </div>
 
-                    {/* Financials Card */}
-                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        3. Financial Overview
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                          <span className="text-[10px] font-bold text-gray-450 block uppercase">Plan Amount</span>
-                          <span className="text-sm font-bold text-gray-900 dark:text-white">₹{(client.planAmount || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                          <span className="text-[10px] font-bold text-gray-455 block uppercase">Advance Paid</span>
-                          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-450">₹{(client.advanceAmount || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                          <span className="text-[10px] font-bold text-gray-450 block uppercase text-indigo-650 dark:text-indigo-400">Pending Balance</span>
-                          <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">₹{(client.pendingAmount || 0).toLocaleString()}</span>
-                        </div>
-                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                          <span className="text-[10px] font-bold text-gray-455 block uppercase">Ad Campaign Budget</span>
-                          <span className="text-sm font-bold text-gray-900 dark:text-white">₹{(client.adBudget || 0).toLocaleString()}</span>
-                        </div>
-                      </div>
-                    </div>
 
-                  </div>
-
-                  {/* Column 2 */}
-                  <div className="space-y-6">
                     {/* Deliverables Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        4. Deliverables Tracking & Milestones
+                        3. Deliverables Tracking & Milestones
                       </h4>
                       
                       {/* Posters */}
@@ -1812,7 +1917,7 @@ export default function SalesPortal({
                         <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800/40 pb-2.5">
                           <div>
                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Graphic Posters</span>
-                            <span className="text-[10px] text-gray-450 font-medium">
+                            <span className="text-[10px] text-gray-455 font-medium">
                               Required: {client.postersRequired} • Pending: {client.postersPending ?? (client.postersStatus === 'Completed' ? 0 : client.postersRequired)}
                             </span>
                           </div>
@@ -1854,7 +1959,7 @@ export default function SalesPortal({
                         <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800/40 pb-2.5">
                           <div>
                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Ads Campaigns</span>
-                            <span className="text-[10px] text-gray-450 font-medium">
+                            <span className="text-[10px] text-gray-455 font-medium">
                               Required: {client.adsRequired} • Pending: {client.adsPending ?? (client.adsStatus === 'Completed' ? 0 : client.adsRequired)}
                             </span>
                           </div>
@@ -1875,7 +1980,7 @@ export default function SalesPortal({
                         <div className="flex justify-between items-center pb-1">
                           <div>
                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Website Development ({client.websiteType || 'General'})</span>
-                            <span className="text-[10px] text-gray-450 font-medium">
+                            <span className="text-[10px] text-gray-455 font-medium">
                               Pending Tasks: {client.websitePending || 0}
                             </span>
                           </div>
@@ -1890,13 +1995,12 @@ export default function SalesPortal({
                           </span>
                         </div>
                       )}
-
                     </div>
 
                     {/* Specifications Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        5. Campaign Specifications
+                        4. Campaign Specifications
                       </h4>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -1904,7 +2008,7 @@ export default function SalesPortal({
                           <span className="text-gray-905 dark:text-white font-semibold">{client.businessCategory || '—'}</span>
                         </div>
                         <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Website Link</span>
+                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Website Link</span>
                           {client.websiteUrl ? (
                             <a href={client.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline break-all font-semibold block">
                               {client.websiteUrl}
@@ -1914,16 +2018,29 @@ export default function SalesPortal({
                           )}
                         </div>
                         <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Start Date</span>
+                          <span className="text-[10px] font-bold text-gray-400 block uppercase">Start Date</span>
                           <span className="text-gray-905 dark:text-white font-bold">{client.startDate || '—'}</span>
                         </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Delivery Deadline</span>
-                          <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold text-gray-400 block uppercase">Delivery Deadline</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
+                            {(() => {
+                              const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
+                              if (deadlineAlert) {
+                                return (
+                                  <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                    {deadlineAlert.label}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                         </div>
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase mb-1">Brand Colors</span>
+                        <span className="text-[10px] font-bold text-gray-400 block uppercase mb-1">Brand Colors</span>
                         <div className="flex gap-2 items-center">
                           <span 
                             style={{ backgroundColor: client.brandColors }}
@@ -1933,11 +2050,11 @@ export default function SalesPortal({
                         </div>
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Target Audience</span>
+                        <span className="text-[10px] font-bold text-gray-400 block uppercase">Target Audience</span>
                         <span className="text-gray-900 dark:text-white font-medium block mt-0.5">{client.targetAudience || '—'}</span>
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Key Competitors</span>
+                        <span className="text-[10px] font-bold text-gray-400 block uppercase">Key Competitors</span>
                         <span className="text-gray-900 dark:text-white font-medium block mt-0.5">{client.competitors || '—'}</span>
                       </div>
                     </div>
@@ -1945,7 +2062,7 @@ export default function SalesPortal({
                     {/* Comments & Remarks Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        6. Notes & Internal Remarks
+                        5. Notes & Internal Remarks
                       </h4>
                       <div>
                         <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Salesperson Onboarding Notes</span>
@@ -1960,9 +2077,17 @@ export default function SalesPortal({
                         </p>
                       </div>
                     </div>
-
                   </div>
 
+                {/* Right Column: Shared Communication Chat (1/3 width) */}
+                <div className="space-y-6 lg:col-span-1 flex flex-col justify-between">
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 flex-1 flex flex-col">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
+                        6. Shared Communication Chat
+                      </h4>
+                      <ClientChat leadId={client._id || client.id} />
+                    </div>
+                  </div>
                 </div>
               </div>
 

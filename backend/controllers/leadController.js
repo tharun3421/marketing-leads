@@ -10,7 +10,7 @@ const sanitizeNumberFields = (body) => {
     'adsRequired', 'adsPending',
     'websitePending', 'planAmount',
     'advanceAmount', 'pendingAmount',
-    'adBudget'
+    'adBudget', 'adBudgetPerDay'
   ];
   numberFields.forEach(field => {
     if (body[field] === '') {
@@ -53,6 +53,7 @@ const redactLeadForTechnicalUser = (lead, team) => {
     delete leadObj.adsPending;
     delete leadObj.adsStatus;
     delete leadObj.adBudget;
+    delete leadObj.adBudgetPerDay;
     delete leadObj.facebookId;
     delete leadObj.facebookPassword;
     delete leadObj.instagramId;
@@ -70,6 +71,7 @@ const redactLeadForTechnicalUser = (lead, team) => {
     delete leadObj.adsPending;
     delete leadObj.adsStatus;
     delete leadObj.adBudget;
+    delete leadObj.adBudgetPerDay;
     delete leadObj.facebookId;
     delete leadObj.facebookPassword;
     delete leadObj.instagramId;
@@ -93,6 +95,46 @@ const redactLeadForTechnicalUser = (lead, team) => {
   }
 
   return leadObj;
+};
+
+const redactLeadForRole = (lead, user) => {
+  const leadObj = lead.toObject ? lead.toObject() : lead;
+
+  // 1. Hide payment details for non-admins
+  if (user.role !== 'admin') {
+    delete leadObj.planAmount;
+    delete leadObj.advanceAmount;
+    delete leadObj.pendingAmount;
+  }
+
+  // 2. Hide ad budget details for non-admin and non-ads-team users
+  const isAdsTeam = user.role === 'technical' && user.team === 'ads';
+  const isAdmin = user.role === 'admin';
+  if (!isAdmin && !isAdsTeam) {
+    delete leadObj.adBudget;
+    delete leadObj.adBudgetPerDay;
+  }
+
+  // 3. Apply technical specific redactions
+  if (user.role === 'technical') {
+    // Dynamically assign local team's assignee info to assignedTo/assignedToName
+    if (user.team === 'developer') {
+      leadObj.assignedTo = leadObj.assignedDeveloper || null;
+      leadObj.assignedToName = leadObj.assignedDeveloperName || null;
+    } else if (user.team === 'design') {
+      leadObj.assignedTo = leadObj.assignedDesigner || null;
+      leadObj.assignedToName = leadObj.assignedDesignerName || null;
+    } else if (user.team === 'ads') {
+      leadObj.assignedTo = leadObj.assignedAdSpecialist || null;
+      leadObj.assignedToName = leadObj.assignedAdSpecialistName || null;
+    }
+    return redactLeadForTechnicalUser(leadObj, user.team);
+  } else {
+    // Admin / Salesperson: set assignedTo to a default claimant if any, and set assignedToName to the display summary
+    leadObj.assignedTo = leadObj.assignedDeveloper || leadObj.assignedDesigner || leadObj.assignedAdSpecialist || null;
+    leadObj.assignedToName = getAssigneeDisplay(leadObj);
+    return leadObj;
+  }
 };
 
 // Helper to check if a specific team is assigned (handles both array and string values)
@@ -175,20 +217,24 @@ const syncLeadToGoogleSheets = async (lead) => {
     websiteType: lead.websiteType || '',
     facebookId: lead.facebookId || '',
     facebookPassword: lead.facebookPassword || '',
+    facebookAccountStatus: lead.facebookAccountStatus || 'Existing',
     instagramId: lead.instagramId || '',
     instagramPassword: lead.instagramPassword || '',
+    instagramAccountStatus: lead.instagramAccountStatus || 'Existing',
     postersSummary,
     videosSummary,
     adsSummary,
     websiteStatus: lead.websiteStatus || 'Pending',
     platforms: lead.platforms,
     brandColors: lead.brandColors,
+    targetAudienceRequired: lead.targetAudienceRequired || 'Required',
     targetAudience: lead.targetAudience || '',
     competitors: lead.competitors || '',
     planAmount: lead.planAmount || 0,
     advanceAmount: lead.advanceAmount || 0,
     pendingAmount: lead.pendingAmount || 0,
     adBudget: lead.adBudget || 0,
+    adBudgetPerDay: lead.adBudgetPerDay || 0,
     startDate: lead.startDate || '',
     deliveryDeadline: lead.deliveryDeadline || '',
     totalPostsCount: totalReq,
@@ -238,55 +284,10 @@ const syncLeadToGoogleSheets = async (lead) => {
 // @access  Private
 const getLeads = async (req, res) => {
   try {
-    let leads;
-    if (req.user.role === 'admin') {
-      leads = await Lead.find({}).sort({ createdAt: -1 });
-    } else if (req.user.role === 'salesperson') {
-      leads = await Lead.find({ salesperson: req.user.id }).sort({ createdAt: -1 });
-    } else if (req.user.role === 'technical') {
-      const query = {
-        assignedTeam: { $in: [req.user.team, 'all'] }
-      };
-
-      if (req.user.team === 'developer') {
-        query.websiteRequired = true;
-      } else if (req.user.team === 'design') {
-        query.$or = [
-          { postersRequired: { $gt: 0 } },
-          { videosRequired: { $gt: 0 } }
-        ];
-      } else if (req.user.team === 'ads') {
-        query.adsRequired = { $gt: 0 };
-      }
-
-      leads = await Lead.find(query).sort({ createdAt: -1 });
-    } else {
-      leads = await Lead.find({ salesperson: req.user.id }).sort({ createdAt: -1 });
-    }
+    const leads = await Lead.find({}).sort({ createdAt: -1 });
 
     // Map and redact leads according to requester role
-    const processedLeads = leads.map(lead => {
-      const leadObj = lead.toObject();
-      if (req.user.role === 'technical') {
-        // Dynamically assign local team's assignee info to assignedTo/assignedToName
-        if (req.user.team === 'developer') {
-          leadObj.assignedTo = leadObj.assignedDeveloper || null;
-          leadObj.assignedToName = leadObj.assignedDeveloperName || null;
-        } else if (req.user.team === 'design') {
-          leadObj.assignedTo = leadObj.assignedDesigner || null;
-          leadObj.assignedToName = leadObj.assignedDesignerName || null;
-        } else if (req.user.team === 'ads') {
-          leadObj.assignedTo = leadObj.assignedAdSpecialist || null;
-          leadObj.assignedToName = leadObj.assignedAdSpecialistName || null;
-        }
-        return redactLeadForTechnicalUser(leadObj, req.user.team);
-      } else {
-        // Admin / Salesperson: set assignedTo to a default claimant if any, and set assignedToName to the display summary
-        leadObj.assignedTo = leadObj.assignedDeveloper || leadObj.assignedDesigner || leadObj.assignedAdSpecialist || null;
-        leadObj.assignedToName = getAssigneeDisplay(leadObj);
-        return leadObj;
-      }
-    });
+    const processedLeads = leads.map(lead => redactLeadForRole(lead, req.user));
 
     res.json(processedLeads);
   } catch (error) {
@@ -587,24 +588,7 @@ const updateLead = async (req, res) => {
     const updatedLead = await Lead.findByIdAndUpdate(req.params.id, updatedData, { new: true });
     
     // Process response payload mapping and redaction
-    const leadObj = updatedLead.toObject();
-    if (req.user.role === 'technical') {
-      if (req.user.team === 'developer') {
-        leadObj.assignedTo = leadObj.assignedDeveloper || null;
-        leadObj.assignedToName = leadObj.assignedDeveloperName || null;
-      } else if (req.user.team === 'design') {
-        leadObj.assignedTo = leadObj.assignedDesigner || null;
-        leadObj.assignedToName = leadObj.assignedDesignerName || null;
-      } else if (req.user.team === 'ads') {
-        leadObj.assignedTo = leadObj.assignedAdSpecialist || null;
-        leadObj.assignedToName = leadObj.assignedAdSpecialistName || null;
-      }
-      res.json(redactLeadForTechnicalUser(leadObj, req.user.team));
-    } else {
-      leadObj.assignedTo = leadObj.assignedDeveloper || leadObj.assignedDesigner || leadObj.assignedAdSpecialist || null;
-      leadObj.assignedToName = getAssigneeDisplay(leadObj);
-      res.json(leadObj);
-    }
+    res.json(redactLeadForRole(updatedLead, req.user));
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -664,11 +648,98 @@ const syncLead = async (req, res) => {
   }
 };
 
+// @desc    Get a single lead by ID
+// @route   GET /api/leads/:id
+// @access  Private
+const getLeadById = async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead record not found' });
+    }
+
+    const isAdmin = req.user.role === 'admin';
+    const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
+    const isTeamMember = req.user.role === 'technical' && hasTeam(lead, req.user.team);
+
+    if (!isAdmin && !isCreator && req.user.role !== 'salesperson' && !isTeamMember) {
+      return res.status(403).json({ message: 'Access denied: You do not have access to this client brief' });
+    }
+
+    res.json(redactLeadForRole(lead, req.user));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Add a message to lead communications
+// @route   POST /api/leads/:id/messages
+// @access  Private
+const addLeadMessage = async (req, res) => {
+  const { category, message, replyTo } = req.body;
+  if (!category || !message) {
+    return res.status(400).json({ message: 'Category and message text are required' });
+  }
+  if (!['Work Notes', 'Customer Notes'].includes(category)) {
+    return res.status(400).json({ message: 'Invalid category' });
+  }
+
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead record not found' });
+    }
+
+    const isAdmin = req.user.role === 'admin';
+    const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
+    const isTeamMember = req.user.role === 'technical' && hasTeam(lead, req.user.team);
+
+    if (!isAdmin && !isCreator && !isTeamMember) {
+      return res.status(403).json({ message: 'Access denied: You do not have access to this client brief' });
+    }
+
+    const roleLabel = req.user.role === 'admin' 
+      ? 'Admin' 
+      : req.user.role === 'salesperson' 
+        ? 'Salesperson' 
+        : req.user.team === 'ads'
+          ? 'Ads Team'
+          : req.user.team === 'design'
+            ? 'Design Team'
+            : 'Developer Team';
+
+    const newMessage = {
+      sender: req.user.id,
+      senderName: req.user.name,
+      senderRole: roleLabel,
+      category,
+      message,
+      timestamp: new Date()
+    };
+
+    if (replyTo && replyTo.senderName && replyTo.message) {
+      newMessage.replyTo = {
+        senderName: replyTo.senderName,
+        message: replyTo.message
+      };
+    }
+
+    lead.communications.push(newMessage);
+    await lead.save();
+
+    res.status(201).json(redactLeadForRole(lead, req.user));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   getLeads,
+  getLeadById,
   assignLeads,
   createLead,
   updateLead,
   deleteLead,
-  syncLead
+  syncLead,
+  addLeadMessage
 };
