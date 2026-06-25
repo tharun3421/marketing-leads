@@ -14,7 +14,7 @@ import AdminPortal from './components/Portals/AdminPortal';
 import TechnicalPortal from './components/Portals/TechnicalPortal';
 
 export default function App() {
-  const { user, logout, login, loading } = useAuth();
+  const { user, logout, login, loading, authFetch } = useAuth();
   const [theme, setTheme] = useLocalStorage('theme_v2', 'light');
   const [toasts, setToasts] = useState([]);
   
@@ -45,28 +45,35 @@ export default function App() {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
-  // Auto-prune notifications older than 12 hours
-  useEffect(() => {
-    const pruneNotifications = () => {
-      const TWELVE_HOURS = 12 * 60 * 60 * 1000;
-      const cutoff = Date.now() - TWELVE_HOURS;
-      setNotifications(prev => {
-        if (!Array.isArray(prev)) return [];
-        const filtered = prev.filter(n => {
-          if (!n.timestamp) return false;
-          return new Date(n.timestamp).getTime() > cutoff;
-        });
-        if (filtered.length !== prev.length) {
-          return filtered;
-        }
-        return prev;
-      });
-    };
+  // Fetch notifications from server
+  const fetchNotifications = async () => {
+    if (!user) return;
+    try {
+      const res = await authFetch('/api/notifications');
+      if (res.ok) {
+        const data = await res.json();
+        const lastRead = Number(localStorage.getItem('crm_notifications_last_read') || 0);
+        const mapped = data.map(n => ({
+          id: n._id || n.id,
+          message: n.message,
+          type: n.type || 'info',
+          timestamp: n.timestamp || n.createdAt,
+          unread: new Date(n.timestamp || n.createdAt).getTime() > lastRead
+        }));
+        setNotifications(mapped);
+      }
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
+    }
+  };
 
-    pruneNotifications();
-    const interval = setInterval(pruneNotifications, 60000); // Check every minute
+  // Poll notifications from server when user is logged in
+  useEffect(() => {
+    if (!user) return;
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 5000);
     return () => clearInterval(interval);
-  }, [setNotifications]);
+  }, [user]);
 
   // Toast System Actions
   const addToast = (title, message, type = 'info') => {
@@ -83,15 +90,17 @@ export default function App() {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   };
 
-  const addNotification = (message, type = 'info') => {
-    const newNotif = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-      message,
-      type,
-      timestamp: new Date().toISOString(),
-      unread: true
-    };
-    setNotifications(prev => [newNotif, ...prev]);
+  const addNotification = async (message, type = 'info') => {
+    try {
+      await authFetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, type })
+      });
+      fetchNotifications();
+    } catch (err) {
+      console.error('Error posting notification:', err);
+    }
   };
 
   const handleLoginSubmit = async (e) => {

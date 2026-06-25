@@ -20,6 +20,7 @@ app.use(express.json());
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/leads', require('./routes/leads'));
 app.use('/api/config', require('./routes/config'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // Simple health check route
 app.get('/', (req, res) => {

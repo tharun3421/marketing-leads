@@ -244,18 +244,6 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
             {...register('pendingAmount')}
           />
 
-          <Input
-            label="Ad Budget (INR)"
-            type="number"
-            min="0"
-            placeholder="e.g. 5000"
-            icon={IndianRupeeIcon}
-            disabled={isReadOnlyProfile}
-            error={errors.adBudget?.message}
-            {...register('adBudget', { 
-              min: { value: 0, message: 'Budget cannot be negative' }
-            })}
-          />
 
           <Input
             label="Ad Budget Per Day (INR)"

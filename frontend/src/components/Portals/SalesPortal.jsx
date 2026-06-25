@@ -242,6 +242,25 @@ const checkDeadlineAlert = (deadlineStr) => {
   return null;
 };
 
+const getPaymentStatus = (lead) => {
+  // If the backend pre-calculated and sent lead.paymentStatus, use it!
+  if (lead.paymentStatus) {
+    if (lead.paymentStatus === 'Paid') {
+      return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+    }
+    if (lead.paymentStatus === 'Partial') {
+      return { label: 'Partial', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
+    }
+    return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
+  }
+  // Fallback to local calculation if fields exist
+  const plan = Number(lead.planAmount || 0);
+  const advance = Number(lead.advanceAmount || 0);
+  if (plan > 0 && advance >= plan) return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+  if (advance > 0 && advance < plan) return { label: 'Partial', color: 'bg-amber-500/10 text-amber-605 dark:text-amber-400 border border-amber-500/20' };
+  return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
+};
+
 export default function SalesPortal({ 
   notifications = [],
   setNotifications,
@@ -277,9 +296,14 @@ export default function SalesPortal({
   const [showIgPass, setShowIgPass] = useState(false);
   const [viewedClientId, setViewedClientId] = useState(null);
 
+  const isFirstLoadRef = React.useRef(true);
+
   // Fetch leads on mount
   const fetchLeads = async () => {
-    setIsLoadingLeads(true);
+    const isFirst = isFirstLoadRef.current;
+    if (isFirst) {
+      setIsLoadingLeads(true);
+    }
     try {
       const res = await authFetch('/api/leads');
       if (res.ok) {
@@ -289,12 +313,17 @@ export default function SalesPortal({
     } catch (err) {
       console.error('Fetch leads failed:', err);
     } finally {
-      setIsLoadingLeads(false);
+      if (isFirst) {
+        setIsLoadingLeads(false);
+        isFirstLoadRef.current = false;
+      }
     }
   };
 
   useEffect(() => {
     fetchLeads();
+    const interval = setInterval(fetchLeads, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   // Form setup for wizard
@@ -358,13 +387,18 @@ export default function SalesPortal({
   const filteredLeads = useMemo(() => {
     const q = listSearchQuery.toLowerCase().trim();
     return salespersonLeads.filter(lead => {
-      // 1. List Search Query (name, company name, ID, or WhatsApp number)
+      // 1. List Search Query (name, company name, ID, or WhatsApp number, created by, assigned to)
       if (q) {
         const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
         const companyMatch = (lead.companyName || '').toLowerCase().includes(q);
         const idMatch = (lead.clientId || '').toLowerCase().includes(q);
         const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-        if (!nameMatch && !companyMatch && !idMatch && !phoneMatch) return false;
+        const createdByMatch = (lead.salespersonName || '').toLowerCase().includes(q);
+        const assignedToName = lead.assignedToName || '';
+        const assignedTeamLabel = getTeamDisplayLabel(lead.assignedTeam);
+        const assignedToMatch = assignedToName.toLowerCase().includes(q) || assignedTeamLabel.toLowerCase().includes(q);
+
+        if (!nameMatch && !companyMatch && !idMatch && !phoneMatch && !createdByMatch && !assignedToMatch) return false;
       }
 
       // 2. Status filter
@@ -402,7 +436,13 @@ export default function SalesPortal({
         const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
         const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
         const idMatch = (lead.clientId || '').toLowerCase().includes(q);
-        if (!nameMatch && !phoneMatch && !idMatch) return false;
+        const createdByMatch = (lead.salespersonName || '').toLowerCase().includes(q);
+        const businessMatch = (lead.companyName || '').toLowerCase().includes(q);
+        const assignedToName = lead.assignedToName || '';
+        const assignedTeamLabel = getTeamDisplayLabel(lead.assignedTeam);
+        const assignedToMatch = assignedToName.toLowerCase().includes(q) || assignedTeamLabel.toLowerCase().includes(q);
+
+        if (!nameMatch && !phoneMatch && !idMatch && !createdByMatch && !businessMatch && !assignedToMatch) return false;
       }
 
       if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
@@ -556,12 +596,12 @@ export default function SalesPortal({
         fetchLeads();
         onAddToast('Status Updated', `Updated ${service} status to ${newStatus} for ${lead.clientName}.`, 'success');
         
-        if (onAddNotification) {
-          onAddNotification(`${user.name} updated ${service} status to "${newStatus}" for client ${lead.clientName}.`, 'update');
-          if (newStatus === 'Completed') {
-            onAddNotification(`Milestone reached: ${service} assets are fully completed for client ${lead.clientName}.`, 'completion');
-          }
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`${user.name} updated ${service} status to "${newStatus}" for client ${lead.clientName}.`, 'update');
+        //   if (newStatus === 'Completed') {
+        //     onAddNotification(`Milestone reached: ${service} assets are fully completed for client ${lead.clientName}.`, 'completion');
+        //   }
+        // }
       }
     } catch (err) {
       console.error('Quick status update failed:', err);
@@ -608,9 +648,9 @@ export default function SalesPortal({
         fetchLeads();
         const displayTeam = getTeamDisplayLabel(newTeam);
         onAddToast('Route Updated', `Assigned ${lead.clientName} to ${displayTeam}.`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`${user.name} routed client ${lead.clientName} to ${displayTeam}.`, 'update');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`${user.name} routed client ${lead.clientName} to ${displayTeam}.`, 'update');
+        // }
       } else {
         onAddToast('Update Error', 'Failed to update team routing.', 'error');
       }
@@ -634,9 +674,9 @@ export default function SalesPortal({
       if (res.ok) {
         fetchLeads();
         onAddToast('Assignment Updated', `Updated team assignment to ${newTeam ? newTeam.toUpperCase() : 'None'}.`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`Salesperson updated team assignment of client to ${newTeam || 'none'}.`, 'update');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`Salesperson updated team assignment of client to ${newTeam || 'none'}.`, 'update');
+        // }
       }
     } catch (err) {
       console.error(err);
@@ -653,9 +693,9 @@ export default function SalesPortal({
       if (res.ok) {
         fetchLeads();
         onAddToast('Status Updated', `Updated workflow status to ${newStatus}.`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`Salesperson updated workflow status of client to ${newStatus}.`, 'update');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`Salesperson updated workflow status of client to ${newStatus}.`, 'update');
+        // }
       }
     } catch (err) {
       console.error(err);
@@ -697,14 +737,14 @@ export default function SalesPortal({
           fetchLeads();
           if (resData.syncWarning) {
             onAddToast('Created with Warning', resData.syncWarning, 'warning');
-            if (onAddNotification) {
-              onAddNotification(`New client brief folder initialized for ${payload.clientName} by salesperson ${user.name} (Google Sheets sync failed).`, 'submission');
-            }
+            // if (onAddNotification) {
+            //   onAddNotification(`New client brief folder initialized for ${payload.clientName} by salesperson ${user.name} (Google Sheets sync failed).`, 'submission');
+            // }
           } else {
             onAddToast('Lead Created', `Successfully created client brief for ${payload.clientName} and synced to Google Sheets.`, 'success');
-            if (onAddNotification) {
-              onAddNotification(`New client brief folder initialized and synced to Google Sheets for ${payload.clientName} by salesperson ${user.name}.`, 'submission');
-            }
+            // if (onAddNotification) {
+            //   onAddNotification(`New client brief folder initialized and synced to Google Sheets for ${payload.clientName} by salesperson ${user.name}.`, 'submission');
+            // }
             
             // Confetti reward
             confetti({
@@ -731,9 +771,9 @@ export default function SalesPortal({
         if (res.ok) {
           fetchLeads();
           onAddToast('Lead Updated', `Updated lead records for ${payload.clientName}.`, 'success');
-          if (onAddNotification) {
-            onAddNotification(`Client brief folder details modified for ${payload.clientName} by salesperson ${user.name}.`, 'update');
-          }
+          // if (onAddNotification) {
+          //   onAddNotification(`Client brief folder details modified for ${payload.clientName} by salesperson ${user.name}.`, 'update');
+          // }
         }
       }
       closeWizard();
@@ -813,7 +853,7 @@ export default function SalesPortal({
     <div className="space-y-6">
       
       {/* Sales Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/50 dark:border-slate-800/50 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/50 dark:border-slate-800/50 pb-5 relative z-30">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Users className="w-5 h-5 text-indigo-500 animate-pulse-ring rounded-full" /> Representative workspace
@@ -831,6 +871,7 @@ export default function SalesPortal({
               onClick={() => {
                 setShowNotifications(!showNotifications);
                 if (!showNotifications && setNotifications) {
+                  localStorage.setItem('crm_notifications_last_read', Date.now().toString());
                   setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
                 }
               }}
@@ -1073,15 +1114,16 @@ export default function SalesPortal({
                       <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
                       <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
                       <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
+                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Business Name</th>
                       <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
                       <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
+                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                     {filteredCentralClients.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-550 font-normal">
+                        <td colSpan="8" className="p-6 text-center text-gray-400 dark:text-gray-550 font-normal">
                           No clients found matching the selected filters.
                         </td>
                       </tr>
@@ -1110,14 +1152,44 @@ export default function SalesPortal({
                               {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
                             </td>
                             <td className="p-3 text-gray-900 dark:text-white font-bold">
-                              <div>{client.clientName}</div>
-                              {client.companyName && (
-                                <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">
-                                  {client.companyName}
-                                </div>
-                              )}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span>{client.clientName}</span>
+                                {(() => {
+                                  const badge = getPaymentStatus(client);
+                                  return (
+                                    <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                                      {badge.label}
+                                    </span>
+                                  );
+                                })()}
+                                {(() => {
+                                  const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
+                                  if (deadlineAlert) {
+                                    return (
+                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                        {deadlineAlert.label}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
+                            </td>
+                            <td className="p-3 text-gray-900 dark:text-white font-bold">
+                              {client.companyName || '—'}
                             </td>
                             <td className="p-3 font-mono">{client.mobileNumber}</td>
+                            <td className="p-3">
+                               {client.assignedToName ? (
+                                 <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
+                                   👤 {client.assignedToName}
+                                 </span>
+                               ) : (
+                                 <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                                   {getTeamDisplayLabel(client.assignedTeam)}
+                                 </span>
+                               )}
+                            </td>
                             <td className="p-3">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                                 client.workflowStatus === 'Completed'
@@ -1131,17 +1203,6 @@ export default function SalesPortal({
                                 {getStatusLabel(client.workflowStatus, client.assignedTeam)}
                               </span>
                             </td>
-                            <td className="p-3">
-                               {client.assignedToName ? (
-                                 <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                                   👤 {client.assignedToName}
-                                 </span>
-                               ) : (
-                                 <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                                   {getTeamDisplayLabel(client.assignedTeam)}
-                                 </span>
-                               )}
-                            </td>
                           </tr>
                         );
                       })
@@ -1152,7 +1213,8 @@ export default function SalesPortal({
             </Card>
           </div>
       <div className="w-full">
-        <Card title="My Onboarded Clients" subtitle="Review, edit, and transmit client folders to the central admin sheet">          {isLoadingLeads ? (
+        <Card title="My Onboarded Clients" subtitle="Review, edit, and transmit client folders to the central admin sheet">
+          {isLoadingLeads ? (
             <div className="text-center py-12">
               <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
               <p className="text-xs text-gray-500">Retrieving campaign briefs from database...</p>
@@ -1233,6 +1295,14 @@ export default function SalesPortal({
                                 {lead.clientId || 'N/A'}
                               </button>
                               <div className="flex items-center gap-1.5">
+                                {(() => {
+                                  const badge = getPaymentStatus(lead);
+                                  return (
+                                    <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                                      {badge.label}
+                                    </span>
+                                  );
+                                })()}
                                 {(() => {
                                   const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
                                   if (deadlineAlert) {
@@ -1315,9 +1385,30 @@ export default function SalesPortal({
                                 </button>
                               )}
                               {lead.clientName}
+                              {(() => {
+                                const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
+                                if (payStatus === 'Partial') {
+                                  return (
+                                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 ml-2">
+                                      Partial Payment Done
+                                    </span>
+                                  );
+                                }
+                                if (payStatus === 'Paid') {
+                                  return (
+                                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">
+                                      Full Payment Done
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </h3>
                             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
                               {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
+                            </p>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
+                              Created By: <span className="text-gray-700 dark:text-gray-300 font-semibold">{lead.salespersonName || '—'}</span>
                             </p>
                           </div>
                           
@@ -2085,7 +2176,7 @@ export default function SalesPortal({
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
                         6. Shared Communication Chat
                       </h4>
-                      <ClientChat leadId={client._id || client.id} />
+                      <ClientChat leadId={client._id || client.id} layout="stack" />
                     </div>
                   </div>
                 </div>

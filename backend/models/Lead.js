@@ -212,6 +212,11 @@ const leadSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  paymentStatus: {
+    type: String,
+    enum: ['Unpaid', 'Partial', 'Paid'],
+    default: 'Unpaid'
+  },
   facebookAccountStatus: {
     type: String,
     enum: ['Existing', 'New'],

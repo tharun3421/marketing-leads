@@ -17,7 +17,8 @@ import {
   Mail,
   Phone,
   Eye,
-  EyeOff
+  EyeOff,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Card from '../UI/Card';
@@ -87,6 +88,25 @@ const checkDeadlineAlert = (deadlineStr) => {
   return null;
 };
 
+const getPaymentStatus = (lead) => {
+  // If the backend pre-calculated and sent lead.paymentStatus, use it!
+  if (lead.paymentStatus) {
+    if (lead.paymentStatus === 'Paid') {
+      return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+    }
+    if (lead.paymentStatus === 'Partial') {
+      return { label: 'Partial', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
+    }
+    return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
+  }
+  // Fallback to local calculation if fields exist
+  const plan = Number(lead.planAmount || 0);
+  const advance = Number(lead.advanceAmount || 0);
+  if (plan > 0 && advance >= plan) return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+  if (advance > 0 && advance < plan) return { label: 'Partial', color: 'bg-amber-500/10 text-amber-650 border-amber-550/25 font-bold border-amber-500/20' };
+  return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
+};
+
 export default function TechnicalPortal({
   notifications = [],
   setNotifications,
@@ -122,9 +142,15 @@ export default function TechnicalPortal({
   const [showIgPass, setShowIgPass] = useState(false);
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
   const [editWorkflowStatus, setEditWorkflowStatus] = useState('Allocated');
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const isFirstLoadRef = React.useRef(true);
 
   const fetchAssignedLeads = async () => {
-    setIsLoading(true);
+    const isFirst = isFirstLoadRef.current;
+    if (isFirst) {
+      setIsLoading(true);
+    }
     try {
       const res = await authFetch('/api/leads');
       if (res.ok) {
@@ -137,12 +163,17 @@ export default function TechnicalPortal({
       console.error('Fetch leads error:', error);
       onAddToast('Fetch Error', 'Network or server error loading tasks.', 'error');
     } finally {
-      setIsLoading(false);
+      if (isFirst) {
+        setIsLoading(false);
+        isFirstLoadRef.current = false;
+      }
     }
   };
 
   useEffect(() => {
     fetchAssignedLeads();
+    const interval = setInterval(fetchAssignedLeads, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const selectedLead = leads.find(l => (l._id || l.id) === selectedLeadId);
@@ -201,22 +232,35 @@ export default function TechnicalPortal({
 
     setIsSubmitting(true);
     try {
-      const postersPendingCount = postersStatus === 'Completed' ? 0 : (postersStatus === 'Pending' ? Number(selectedLead.postersRequired || 0) : Number(postersPending));
-      const videosPendingCount = videosStatus === 'Completed' ? 0 : (videosStatus === 'Pending' ? Number(selectedLead.videosRequired || 0) : Number(videosPending));
-      const adsPendingCount = adsStatus === 'Completed' ? 0 : (adsStatus === 'Pending' ? Number(selectedLead.adsRequired || 0) : Number(adsPending));
-      const websitePendingCount = selectedLead.websiteRequired ? (websiteStatus === 'Completed' ? 0 : 1) : 0;
+      const updatePayload = {};
 
-      const updatePayload = {
-        postersStatus,
-        postersPending: postersPendingCount,
-        videosStatus,
-        videosPending: videosPendingCount,
-        adsStatus,
-        adsPending: adsPendingCount,
-        websiteStatus,
-        websitePending: websitePendingCount,
-        workflowStatus: editWorkflowStatus
-      };
+      if (selectedLead.postersRequired !== undefined) {
+        const postersPendingCount = postersStatus === 'Completed' ? 0 : (postersStatus === 'Pending' ? Number(selectedLead.postersRequired || 0) : Number(postersPending));
+        updatePayload.postersStatus = postersStatus;
+        updatePayload.postersPending = postersPendingCount;
+      }
+
+      if (selectedLead.videosRequired !== undefined) {
+        const videosPendingCount = videosStatus === 'Completed' ? 0 : (videosStatus === 'Pending' ? Number(selectedLead.videosRequired || 0) : Number(videosPending));
+        updatePayload.videosStatus = videosStatus;
+        updatePayload.videosPending = videosPendingCount;
+      }
+
+      if (selectedLead.adsRequired !== undefined) {
+        const adsPendingCount = adsStatus === 'Completed' ? 0 : (adsStatus === 'Pending' ? Number(selectedLead.adsRequired || 0) : Number(adsPending));
+        updatePayload.adsStatus = adsStatus;
+        updatePayload.adsPending = adsPendingCount;
+      }
+
+      if (selectedLead.websiteRequired !== undefined) {
+        const websitePendingCount = selectedLead.websiteRequired ? (websiteStatus === 'Completed' ? 0 : 1) : 0;
+        updatePayload.websiteStatus = websiteStatus;
+        updatePayload.websitePending = websitePendingCount;
+      }
+
+      if (editWorkflowStatus !== selectedLead.workflowStatus) {
+        updatePayload.workflowStatus = editWorkflowStatus;
+      }
 
       const res = await authFetch(`/api/leads/${selectedLead._id}`, {
         method: 'PUT',
@@ -225,9 +269,9 @@ export default function TechnicalPortal({
 
       if (res.ok) {
         onAddToast('Lead Updated', `Successfully updated deliverables status for ${selectedLead.clientName}.`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`Technical member "${user?.name || ''}" updated campaign specs for client "${selectedLead.clientName}".`, 'info');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`Technical member "${user?.name || ''}" updated campaign specs for client "${selectedLead.clientName}".`, 'info');
+        // }
         await fetchAssignedLeads();
       } else {
         const errData = await res.json();
@@ -255,9 +299,9 @@ export default function TechnicalPortal({
 
       if (res.ok) {
         onAddToast('Client Accepted', `Successfully accepted folder for ${lead.clientName}.`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`Technical member "${user?.name || ''}" accepted client campaign folder for "${lead.clientName}".`, 'info');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`Technical member "${user?.name || ''}" accepted client campaign folder for "${lead.clientName}".`, 'info');
+        // }
         await fetchAssignedLeads();
       } else {
         const errData = await res.json();
@@ -280,9 +324,9 @@ export default function TechnicalPortal({
       if (res.ok) {
         fetchAssignedLeads();
         onAddToast('Status Updated', `Updated workflow status to ${newStatus}.`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`Technical member "${user?.name || ''}" updated workflow status of client to ${newStatus}.`, 'update');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`Technical member "${user?.name || ''}" updated workflow status of client to ${newStatus}.`, 'update');
+        // }
       }
     } catch (err) {
       console.error(err);
@@ -384,7 +428,12 @@ export default function TechnicalPortal({
         const companyMatch = (lead.companyName || '').toLowerCase().includes(q);
         const idMatch = (lead.clientId || '').toLowerCase().includes(q);
         const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
-        if (!nameMatch && !companyMatch && !idMatch && !phoneMatch) return false;
+        const createdByMatch = (lead.salespersonName || '').toLowerCase().includes(q);
+        const assignedToName = lead.assignedToName || '';
+        const assignedTeamLabel = getTeamDisplayLabel(lead.assignedTeam);
+        const assignedToMatch = assignedToName.toLowerCase().includes(q) || assignedTeamLabel.toLowerCase().includes(q);
+
+        if (!nameMatch && !companyMatch && !idMatch && !phoneMatch && !createdByMatch && !assignedToMatch) return false;
       }
 
       // 2. Status filter
@@ -432,7 +481,13 @@ export default function TechnicalPortal({
         const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
         const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
         const idMatch = (lead.clientId || '').toLowerCase().includes(q);
-        if (!nameMatch && !phoneMatch && !idMatch) return false;
+        const createdByMatch = (lead.salespersonName || '').toLowerCase().includes(q);
+        const businessMatch = (lead.companyName || '').toLowerCase().includes(q);
+        const assignedToName = lead.assignedToName || '';
+        const assignedTeamLabel = getTeamDisplayLabel(lead.assignedTeam);
+        const assignedToMatch = assignedToName.toLowerCase().includes(q) || assignedTeamLabel.toLowerCase().includes(q);
+
+        if (!nameMatch && !phoneMatch && !idMatch && !createdByMatch && !businessMatch && !assignedToMatch) return false;
       }
 
       if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
@@ -502,6 +557,14 @@ export default function TechnicalPortal({
             </button>
             <div className="flex items-center gap-1.5">
               {(() => {
+                const badge = getPaymentStatus(lead);
+                return (
+                  <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                    {badge.label}
+                  </span>
+                );
+              })()}
+              {(() => {
                 const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
                 if (deadlineAlert) {
                   return (
@@ -556,7 +619,7 @@ export default function TechnicalPortal({
     <div className="space-y-6">
       
       {/* Portal Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-6 glass-card rounded-2xl gap-4 border border-indigo-500/5">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-6 glass-card rounded-2xl gap-4 border border-indigo-500/5 relative z-30">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20 shadow-md">
             <Sliders className="w-6 h-6" />
@@ -567,17 +630,68 @@ export default function TechnicalPortal({
           </div>
         </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            logout();
-            onAddToast('Sign Out Success', 'Technical session terminated.', 'info');
-          }}
-          icon={LogOut}
-        >
-          Sign Out Portal
-        </Button>
+        <div className="flex items-center gap-2.5">
+          {/* Notification Bell */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setShowNotifications(!showNotifications);
+                if (!showNotifications && setNotifications) {
+                  localStorage.setItem('crm_notifications_last_read', Date.now().toString());
+                  setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+                }
+              }}
+              className="p-2.5 rounded-xl border border-gray-200 dark:border-slate-800 bg-white/50 hover:bg-white/80 dark:bg-slate-950/30 dark:hover:bg-slate-950/60 text-gray-550 hover:text-indigo-650 dark:text-gray-400 dark:hover:text-indigo-400 transition-all cursor-pointer shadow-sm relative"
+              title="Activity Alerts"
+            >
+              <Bell className="w-4.5 h-4.5" />
+              {notifications.filter(n => n.unread).length > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-slate-950 animate-ping" />
+              )}
+            </button>
+
+            {/* Notifications Dropdown */}
+            {showNotifications && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
+                <div className="absolute right-0 mt-2.5 w-80 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-855 rounded-2xl shadow-xl z-50 p-4 max-h-[420px] overflow-y-auto animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/40 pb-2 mb-3">
+                    <h3 className="font-bold text-gray-900 dark:text-white text-sm">System Operations Log</h3>
+                    <span className="text-[10px] text-gray-400 font-semibold">{notifications.filter(n => n.unread).length} Unread</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    {notifications.length === 0 ? (
+                      <p className="text-xs text-gray-400 dark:text-gray-550 text-center py-4">No logged operations yet.</p>
+                    ) : (
+                      notifications.slice(0, 10).map((notif) => (
+                        <div key={notif.id} className="p-2.5 rounded-xl bg-gray-50/50 dark:bg-slate-950/15 border border-gray-100/50 dark:border-slate-800/20 text-xs">
+                          <p className="text-gray-700 dark:text-gray-300 font-medium leading-relaxed">{notif.message}</p>
+                          <span className="text-[10px] text-gray-400 block mt-1.5 font-normal">
+                            {new Date(notif.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              logout();
+              onAddToast('Sign Out Success', 'Technical session terminated.', 'info');
+            }}
+            icon={LogOut}
+          >
+            Sign Out Portal
+          </Button>
+        </div>
       </div>
 
       {/* Service Metrics Grid (Department Specific) */}
@@ -873,15 +987,16 @@ export default function TechnicalPortal({
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
+                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Business Name</th>
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
                   <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
+                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                 {filteredCentralClients.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
+                    <td colSpan="8" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
                       No clients found matching the selected filters.
                     </td>
                   </tr>
@@ -904,14 +1019,44 @@ export default function TechnicalPortal({
                           {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
                         </td>
                         <td className="p-3 text-gray-900 dark:text-white font-bold">
-                          <div>{client.clientName}</div>
-                          {client.companyName && (
-                            <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">
-                              {client.companyName}
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{client.clientName}</span>
+                            {(() => {
+                              const badge = getPaymentStatus(client);
+                              return (
+                                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
+                            {(() => {
+                              const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
+                              if (deadlineAlert) {
+                                return (
+                                  <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                    {deadlineAlert.label}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        </td>
+                        <td className="p-3 text-gray-900 dark:text-white font-bold">
+                          {client.companyName || '—'}
                         </td>
                         <td className="p-3 font-mono">{client.mobileNumber}</td>
+                        <td className="p-3">
+                          {client.assignedToName ? (
+                            <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
+                              👤 {client.assignedToName}
+                            </span>
+                          ) : (
+                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                              {getTeamDisplayLabel(client.assignedTeam)}
+                            </span>
+                          )}
+                        </td>
                         <td className="p-3">
                           <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                             client.workflowStatus === 'Completed'
@@ -924,17 +1069,6 @@ export default function TechnicalPortal({
                           }`}>
                             {getStatusLabel(client.workflowStatus, client.assignedTeam)}
                           </span>
-                        </td>
-                        <td className="p-3">
-                          {client.assignedToName ? (
-                            <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                              👤 {client.assignedToName}
-                            </span>
-                          ) : (
-                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                              {getTeamDisplayLabel(client.assignedTeam)}
-                            </span>
-                          )}
                         </td>
                       </tr>
                     );
@@ -1147,23 +1281,25 @@ export default function TechnicalPortal({
                             <div>
                               <span className="text-gray-400">Competitors:</span> <strong>{lead.competitors || '—'}</strong>
                             </div>
-                            <div className="flex justify-between items-center text-[11px] pt-1 border-t border-gray-100 dark:border-slate-805/40">
-                              <span>Start: <strong>{lead.startDate || '—'}</strong></span>
-                              <span className="flex items-center gap-1.5">
-                                Deadline: <strong className="text-rose-500 font-bold">{lead.deliveryDeadline || '—'}</strong>
-                                {(() => {
-                                  const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
-                                  if (deadlineAlert) {
-                                    return (
-                                      <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                        {deadlineAlert.label}
-                                      </span>
-                                    );
-                                  }
-                                  return null;
-                                })()}
-                              </span>
-                            </div>
+                            {user?.team !== 'ads' && (
+                              <div className="flex justify-between items-center text-[11px] pt-1 border-t border-gray-100 dark:border-slate-805/40">
+                                <span>Start: <strong>{lead.startDate || '—'}</strong></span>
+                                <span className="flex items-center gap-1.5">
+                                  Deadline: <strong className="text-rose-500 font-bold">{lead.deliveryDeadline || '—'}</strong>
+                                  {(() => {
+                                    const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                                    if (deadlineAlert) {
+                                      return (
+                                        <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                          {deadlineAlert.label}
+                                        </span>
+                                      );
+                                    }
+                                    return null;
+                                  })()}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1547,11 +1683,22 @@ export default function TechnicalPortal({
                         </h4>
                         <div className="grid grid-cols-1 gap-4">
                           <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                            <span className="text-[10px] font-bold text-gray-455 block uppercase">Ad Campaign Budget</span>
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">
-                              ₹{(client.adBudget || 0).toLocaleString()}
-                              {client.adBudgetPerDay > 0 && ` (₹${client.adBudgetPerDay.toLocaleString()}/day)`}
-                            </span>
+                            {user?.team === 'ads' ? (
+                              <>
+                                <span className="text-[10px] font-bold text-gray-455 block uppercase">Daily Ads Budget</span>
+                                <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                  {client.adBudgetPerDay > 0 ? `₹${client.adBudgetPerDay.toLocaleString()}/day` : '—'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-[10px] font-bold text-gray-455 block uppercase">Ad Campaign Budget</span>
+                                <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                  ₹{(client.adBudget || 0).toLocaleString()}
+                                  {client.adBudgetPerDay > 0 && ` (₹${client.adBudgetPerDay.toLocaleString()}/day)`}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1670,27 +1817,31 @@ export default function TechnicalPortal({
                             <span className="text-gray-450 block">—</span>
                           )}
                         </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Start Date</span>
-                          <span className="text-gray-905 dark:text-white font-bold">{client.startDate || '—'}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Delivery Deadline</span>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
-                            {(() => {
-                              const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
-                              if (deadlineAlert) {
-                                return (
-                                  <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                    {deadlineAlert.label}
-                                  </span>
-                                );
-                              }
-                              return null;
-                            })()}
-                          </div>
-                        </div>
+                        {user?.team !== 'ads' && (
+                          <>
+                            <div>
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Start Date</span>
+                              <span className="text-gray-905 dark:text-white font-bold">{client.startDate || '—'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Delivery Deadline</span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
+                                {(() => {
+                                  const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
+                                  if (deadlineAlert) {
+                                    return (
+                                      <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                        {deadlineAlert.label}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase mb-1">Brand Colors</span>
@@ -1739,7 +1890,7 @@ export default function TechnicalPortal({
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
                         6. Shared Communication Chat
                       </h4>
-                      <ClientChat leadId={client._id || client.id} />
+                      <ClientChat leadId={client._id || client.id} layout="stack" />
                     </div>
                   </div>
 

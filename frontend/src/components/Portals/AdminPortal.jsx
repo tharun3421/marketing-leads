@@ -155,6 +155,8 @@ export default function AdminPortal({
   // Relocated header config modals states
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+  const [repSearchQuery, setRepSearchQuery] = useState('');
+  const [techSearchQuery, setTechSearchQuery] = useState('');
 
   // Central Clients Management filter states
   const [clientSearchQuery, setClientSearchQuery] = useState('');
@@ -167,8 +169,13 @@ export default function AdminPortal({
   const [filterWorkflowStatus, setFilterWorkflowStatus] = useState('All');
   const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
 
+  const isFirstLoadRef = React.useRef(true);
+
   const fetchData = async () => {
-    setIsLoading(true);
+    const isFirst = isFirstLoadRef.current;
+    if (isFirst) {
+      setIsLoading(true);
+    }
     try {
       const leadsRes = await authFetch('/api/leads');
       if (leadsRes.ok) {
@@ -198,12 +205,17 @@ export default function AdminPortal({
       console.error('Error fetching admin data:', error);
       onAddToast('Fetch Error', 'Failed to load system data from server.', 'error');
     } finally {
-      setIsLoading(false);
+      if (isFirst) {
+        setIsLoading(false);
+        isFirstLoadRef.current = false;
+      }
     }
   };
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleCentralStatusChange = async (leadId, newStatus) => {
@@ -215,9 +227,9 @@ export default function AdminPortal({
       if (res.ok) {
         fetchData();
         onAddToast('Status Updated', `Updated workflow status to ${newStatus}.`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`Admin updated workflow status of client to ${newStatus}.`, 'update');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`Admin updated workflow status of client to ${newStatus}.`, 'update');
+        // }
       }
     } catch (err) {
       console.error(err);
@@ -239,9 +251,9 @@ export default function AdminPortal({
       if (res.ok) {
         fetchData();
         onAddToast('Assignment Updated', `Updated team assignment to ${newTeam ? newTeam.toUpperCase() : 'None'}.`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`Admin updated team assignment of client to ${newTeam || 'none'}.`, 'update');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`Admin updated team assignment of client to ${newTeam || 'none'}.`, 'update');
+        // }
       }
     } catch (err) {
       console.error(err);
@@ -257,7 +269,13 @@ export default function AdminPortal({
         const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
         const phoneMatch = (lead.mobileNumber || '').toLowerCase().includes(q);
         const idMatch = (lead.clientId || '').toLowerCase().includes(q);
-        if (!nameMatch && !phoneMatch && !idMatch) return false;
+        const createdByMatch = (lead.salespersonName || '').toLowerCase().includes(q);
+        const businessMatch = (lead.companyName || '').toLowerCase().includes(q);
+        const assignedToName = lead.assignedToName || '';
+        const assignedTeamLabel = getTeamDisplayLabel(lead.assignedTeam);
+        const assignedToMatch = assignedToName.toLowerCase().includes(q) || assignedTeamLabel.toLowerCase().includes(q);
+
+        if (!nameMatch && !phoneMatch && !idMatch && !createdByMatch && !businessMatch && !assignedToMatch) return false;
       }
 
       if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
@@ -369,6 +387,25 @@ export default function AdminPortal({
     const submitted = completed; // for compatibility
     return { id, name, username, total, completed, inProgress, pending, submitted };
   });
+
+  const filteredRepStats = useMemo(() => {
+    const q = repSearchQuery.toLowerCase().trim();
+    if (!q) return repStats;
+    return repStats.filter(rep => 
+      (rep.name || '').toLowerCase().includes(q) || 
+      (rep.username || '').toLowerCase().includes(q)
+    );
+  }, [repStats, repSearchQuery]);
+
+  const filteredTechnicalList = useMemo(() => {
+    const q = techSearchQuery.toLowerCase().trim();
+    if (!q) return technicalList;
+    return technicalList.filter(tech => 
+      (tech.name || '').toLowerCase().includes(q) || 
+      (tech.username || '').toLowerCase().includes(q) ||
+      (tech.team || '').toLowerCase().includes(q)
+    );
+  }, [technicalList, techSearchQuery]);
 
   // Handle salesperson / staff account creation
   const handleCreateRep = async (e) => {
@@ -516,9 +553,9 @@ export default function AdminPortal({
       const data = await res.json();
       if (res.ok) {
         onAddToast('Tasks Assigned', `Successfully updated assignments for ${selectedLeadIds.length} card(s).`, 'success');
-        if (onAddNotification) {
-          onAddNotification(`${selectedLeadIds.length} campaign task(s) updated by Admin.`, 'info');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`${selectedLeadIds.length} campaign task(s) updated by Admin.`, 'info');
+        // }
         setSelectedLeadIds([]);
         setAssignToTechId('');
         await fetchData(); // refresh list
@@ -1310,9 +1347,9 @@ const handleSaveClientDetails = async () => {
       const data = await res.json();
       if (res.ok) {
         onAddToast('Client Updated', 'Client records updated successfully.', 'success');
-        if (onAddNotification) {
-          onAddNotification(`Admin updated client records for "${editedClientFields.clientName || lead.clientName}".`, 'update');
-        }
+        // if (onAddNotification) {
+        //   onAddNotification(`Admin updated client records for "${editedClientFields.clientName || lead.clientName}".`, 'update');
+        // }
         setIsEditingClient(false);
         setEditedClientFields({});
         await fetchData(); // refresh list
@@ -1333,7 +1370,7 @@ const handleClientFieldChange = (field, value) => {
     <div className="space-y-6">
       
       {/* Admin Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/50 dark:border-slate-800/50 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/50 dark:border-slate-800/50 pb-5 relative z-30">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-indigo-500" /> Admin Control Dashboard
@@ -1371,6 +1408,7 @@ const handleClientFieldChange = (field, value) => {
               onClick={() => {
                 setShowNotifications(!showNotifications);
                 if (!showNotifications && setNotifications) {
+                  localStorage.setItem('crm_notifications_last_read', Date.now().toString());
                   setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
                 }
               }}
@@ -1983,18 +2021,19 @@ const handleClientFieldChange = (field, value) => {
             <thead>
               <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
                 <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
                 <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
                 <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Business Name</th>
                 <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
                 <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
+                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
               {filteredCentralClients.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-550 font-normal">
+                  <td colSpan="8" className="p-6 text-center text-gray-400 dark:text-gray-555 font-normal">
                     No clients found matching the selected filters.
                   </td>
                 </tr>
@@ -2012,6 +2051,9 @@ const handleClientFieldChange = (field, value) => {
                       >
                         {client.clientId || 'N/A'}
                       </button>
+                    </td>
+                    <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
+                      {client.salespersonName || '-'}
                     </td>
                     <td className="p-3 font-bold text-gray-900 dark:text-white">
                       {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
@@ -2039,13 +2081,22 @@ const handleClientFieldChange = (field, value) => {
                           return null;
                         })()}
                       </div>
-                      {client.companyName && (
-                        <div className="text-xs text-gray-400 dark:text-gray-555 font-normal mt-0.5">
-                          {client.companyName}
-                        </div>
-                      )}
+                    </td>
+                    <td className="p-3 text-gray-900 dark:text-white font-bold">
+                      {client.companyName || '-'}
                     </td>
                     <td className="p-3 font-mono">{client.mobileNumber}</td>
+                    <td className="p-3">
+                      {client.assignedToName ? (
+                        <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
+                          👤 {client.assignedToName}
+                        </span>
+                      ) : (
+                        <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
+                          {getTeamDisplayLabel(client.assignedTeam)}
+                        </span>
+                      )}
+                    </td>
                     <td className="p-3">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                         client.workflowStatus === 'Completed'
@@ -2059,20 +2110,6 @@ const handleClientFieldChange = (field, value) => {
                         {getStatusLabel(client.workflowStatus, client.assignedTeam)}
                       </span>
                     </td>
-                    <td className="p-3">
-                      {client.assignedToName ? (
-                        <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                          👤 {client.assignedToName}
-                        </span>
-                      ) : (
-                        <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                          {getTeamDisplayLabel(client.assignedTeam)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
-                      {client.salespersonName || '-'}
-                    </td>
                   </tr>
                 ))
               )}
@@ -2083,10 +2120,8 @@ const handleClientFieldChange = (field, value) => {
 
       {/* Main Roster Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* Salesforce Directory */}
         <Card title="Salesforce Directory" subtitle="Inspect client brief portfolios compiled by representatives">
-          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-5 border-b border-gray-100 dark:border-slate-800/40 pb-4">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-3 border-b border-gray-100 dark:border-slate-800/40 pb-4">
             <span className="text-xs text-gray-400 font-medium">Select representative to view active portfolio</span>
             <Button
               variant="outline"
@@ -2098,14 +2133,33 @@ const handleClientFieldChange = (field, value) => {
             </Button>
           </div>
           
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-550" />
+            <input
+              type="text"
+              placeholder="Search representatives..."
+              value={repSearchQuery}
+              onChange={(e) => setRepSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-xs border border-gray-205 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
+            />
+          </div>
+          
           <div className="max-h-[420px] overflow-y-auto pr-1.5 scrollbar-thin">
             <div className="grid grid-cols-1 gap-4">
-              {repStats.map((rep, idx) => (
-                <div 
-                  key={idx}
-                  onClick={() => { setSelectedRep(rep.name); setSelectedTech(null); }}
-                  className="p-5 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white/40 hover:bg-white/80 dark:bg-slate-950/20 dark:hover:bg-slate-950/40 transition-all cursor-pointer flex flex-col justify-between hover:scale-[1.01] hover:shadow-md group"
-                >
+              {filteredRepStats.length === 0 ? (
+                <div className="text-center py-8 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
+                  <Users className="w-8 h-8 text-gray-300 dark:text-slate-700 mx-auto mb-2" />
+                  <p className="text-xs font-medium text-gray-555 dark:text-gray-400">
+                    {repStats.length === 0 ? 'No representatives have been registered yet.' : 'No representatives match the search query.'}
+                  </p>
+                </div>
+              ) : (
+                filteredRepStats.map((rep, idx) => (
+                  <div 
+                    key={idx}
+                    onClick={() => { setSelectedRep(rep.name); setSelectedTech(null); }}
+                    className="p-5 rounded-2xl border border-gray-200 dark:border-slate-800 bg-white/40 hover:bg-white/80 dark:bg-slate-950/20 dark:hover:bg-slate-950/40 transition-all cursor-pointer flex flex-col justify-between hover:scale-[1.01] hover:shadow-md group"
+                  >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8.5 h-8.5 rounded-full bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 font-bold flex items-center justify-center text-xs">
@@ -2184,24 +2238,34 @@ const handleClientFieldChange = (field, value) => {
                     </div>
                   </div>
                 </div>
-              ))}
+              )))}
             </div>
           </div>
         </Card>
 
         {/* Technical Team Directory */}
         <Card title="Technical Team Directory" subtitle="Manage technical specialist accounts and credentials">
-          {technicalList.length === 0 ? (
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-550" />
+            <input
+              type="text"
+              placeholder="Search technical specialists..."
+              value={techSearchQuery}
+              onChange={(e) => setTechSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-xs border border-gray-205 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
+            />
+          </div>
+          {filteredTechnicalList.length === 0 ? (
             <div className="text-center py-8 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
               <Users className="w-8 h-8 text-gray-300 dark:text-slate-700 mx-auto mb-2" />
               <p className="text-xs font-medium text-gray-555 dark:text-gray-400">
-                No technical team members have been registered yet.
+                {technicalList.length === 0 ? 'No technical team members have been registered yet.' : 'No technical team members match the search query.'}
               </p>
             </div>
           ) : (
             <div className="max-h-[420px] overflow-y-auto pr-1.5 scrollbar-thin">
               <div className="grid grid-cols-1 gap-4">
-                {technicalList.map((tech, idx) => {
+                {filteredTechnicalList.map((tech, idx) => {
                   const techLeads = leads.filter(l => 
                     (l.assignedTo && l.assignedTo.toString() === tech._id.toString()) ||
                     (l.assignedDeveloper && l.assignedDeveloper.toString() === tech._id.toString()) ||
@@ -2566,10 +2630,10 @@ const handleClientFieldChange = (field, value) => {
                 }} 
                 className="flex-1 overflow-y-auto p-6 space-y-6"
               >
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                   
-                  {/* Left Column: Form Details (2/3 width) */}
-                  <div className="lg:col-span-2 space-y-6">
+                  {/* Left Column: Form Details (3/5 width) */}
+                  <div className="lg:col-span-3 space-y-6">
                     {/* Contact Info Card */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
@@ -2741,6 +2805,18 @@ const handleClientFieldChange = (field, value) => {
                             onChange={(e) => handleClientFieldChange('adBudgetPerDay', e.target.value)}
                             className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                           />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase font-extrabold">Payment Status</label>
+                          <select 
+                            value={editedClientFields.paymentStatus ?? client.paymentStatus ?? 'Unpaid'}
+                            onChange={(e) => handleClientFieldChange('paymentStatus', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-bold"
+                          >
+                            <option value="Unpaid">Unpaid</option>
+                            <option value="Partial">Partial</option>
+                            <option value="Paid">Paid</option>
+                          </select>
                         </div>
                       </div>
                     </div>
@@ -3036,13 +3112,13 @@ const handleClientFieldChange = (field, value) => {
 
                   </div>
 
-                  {/* Right Column: Collaboration Chat (1/3 width) */}
-                  <div className="space-y-6 lg:col-span-1 flex flex-col justify-between">
+                  {/* Right Column: Collaboration Chat (2/5 width) */}
+                  <div className="space-y-6 lg:col-span-2 flex flex-col justify-between">
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-805 flex-1 flex flex-col">
                       <h4 className="text-xs font-bold text-indigo-650 dark:text-indigo-400 uppercase tracking-wider mb-2">
                         Collaboration Chat
                       </h4>
-                      <ClientChat leadId={client._id || client.id} />
+                      <ClientChat leadId={client._id || client.id} layout="stack" />
                     </div>
                   </div>
  

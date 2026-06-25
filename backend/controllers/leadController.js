@@ -1,6 +1,33 @@
 const Lead = require('../models/Lead');
 const Config = require('../models/Config');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
+
+// Helper to create client-related notifications and auto-prune them to 100
+const createLeadNotification = async (clientId, description) => {
+  try {
+    const message = `[${clientId}] ${description}`;
+    const notif = new Notification({
+      message,
+      type: 'info',
+      timestamp: new Date()
+    });
+    await notif.save();
+    
+    // Auto-prune to keep only the last 100 notifications
+    const count = await Notification.countDocuments();
+    if (count > 100) {
+      const oldest = await Notification.find()
+        .sort({ timestamp: 1 })
+        .limit(count - 100);
+      const oldestIds = oldest.map(n => n._id);
+      await Notification.deleteMany({ _id: { $in: oldestIds } });
+    }
+  } catch (err) {
+    console.error('Error generating backend lead notification:', err.message);
+  }
+};
+
 
 // Helper to sanitize numeric fields from empty strings
 const sanitizeNumberFields = (body) => {
@@ -92,6 +119,11 @@ const redactLeadForTechnicalUser = (lead, team) => {
     delete leadObj.videosPending;
     delete leadObj.videosStatus;
     delete leadObj.brandColors;
+
+    // Redact project dates and total budget for Ads Team
+    delete leadObj.startDate;
+    delete leadObj.deliveryDeadline;
+    delete leadObj.adBudget;
   }
 
   return leadObj;
@@ -100,8 +132,19 @@ const redactLeadForTechnicalUser = (lead, team) => {
 const redactLeadForRole = (lead, user) => {
   const leadObj = lead.toObject ? lead.toObject() : lead;
 
-  // 1. Hide payment details for non-admins
-  if (user.role !== 'admin') {
+  // Calculate payment status dynamically if not set in DB
+  let paymentStatus = leadObj.paymentStatus;
+  if (!paymentStatus) {
+    const plan = Number(leadObj.planAmount || 0);
+    const advance = Number(leadObj.advanceAmount || 0);
+    paymentStatus = 'Unpaid';
+    if (plan > 0 && advance >= plan) paymentStatus = 'Paid';
+    else if (advance > 0 && advance < plan) paymentStatus = 'Partial';
+  }
+  leadObj.paymentStatus = paymentStatus;
+
+  // 1. Hide payment details for non-admins (except salespersons)
+  if (user.role !== 'admin' && user.role !== 'salesperson') {
     delete leadObj.planAmount;
     delete leadObj.advanceAmount;
     delete leadObj.pendingAmount;
@@ -364,6 +407,9 @@ const assignLeads = async (req, res) => {
         }
       }
       await lead.save();
+      const teamLabel = techUser ? (techUser.team === 'ads' ? 'Ads Team' : techUser.team === 'design' ? 'Design Team' : 'Developer Team') : null;
+      const desc = techUser ? `Client assigned to ${teamLabel}` : 'Client details updated';
+      await createLeadNotification(lead.clientId, desc);
     }
 
     res.json({ message: 'Leads assigned successfully', assignedToName: techUser ? techUser.name : null });
@@ -439,11 +485,13 @@ const createLead = async (req, res) => {
       await lead.save();
     } catch (syncError) {
       console.error('Auto Google Sheets sync failed on lead creation:', syncError.message);
+      await createLeadNotification(clientId, 'Client details updated');
       const leadObj = lead.toObject();
       leadObj.syncWarning = `Client ID ${clientId} created locally, but Google Sheets sync failed: ${syncError.message}`;
       return res.status(201).json(leadObj);
     }
 
+    await createLeadNotification(lead.clientId, 'Client details updated');
     res.status(201).json(lead);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -502,6 +550,11 @@ const updateLead = async (req, res) => {
     // Prevent overwriting owner
     delete updatedData.salesperson;
     delete updatedData.salespersonName;
+
+    // Only Admin can update/edit the payment status
+    if (req.user.role !== 'admin') {
+      delete updatedData.paymentStatus;
+    }
 
     // Intercept technical user claim/accept actions
     if (req.user.role === 'technical') {
@@ -587,6 +640,67 @@ const updateLead = async (req, res) => {
 
     const updatedLead = await Lead.findByIdAndUpdate(req.params.id, updatedData, { new: true });
     
+    // Determine change description for notification
+    let desc = 'Client details updated';
+
+    // 1. Payment status check
+    const oldPlan = Number(lead.planAmount || 0);
+    const oldAdvance = Number(lead.advanceAmount || 0);
+    let oldPayStatus = lead.paymentStatus;
+    if (!oldPayStatus) {
+      oldPayStatus = 'Unpaid';
+      if (oldPlan > 0 && oldAdvance >= oldPlan) oldPayStatus = 'Paid';
+      else if (oldAdvance > 0 && oldAdvance < oldPlan) oldPayStatus = 'Partial';
+    }
+
+    const newPlan = Number(updatedLead.planAmount || 0);
+    const newAdvance = Number(updatedLead.advanceAmount || 0);
+    let newPayStatus = updatedLead.paymentStatus;
+    if (!newPayStatus) {
+      newPayStatus = 'Unpaid';
+      if (newPlan > 0 && newAdvance >= newPlan) newPayStatus = 'Paid';
+      else if (newAdvance > 0 && newAdvance < newPlan) newPayStatus = 'Partial';
+    }
+
+    if (oldPayStatus !== newPayStatus) {
+      desc = 'Payment status changed';
+    } else {
+      // 2. Assigned team check
+      const getTeamList = (t) => {
+        if (!t) return [];
+        if (Array.isArray(t)) return t;
+        return [t];
+      };
+      const oldTeams = getTeamList(lead.assignedTeam);
+      const newTeams = getTeamList(updatedLead.assignedTeam);
+      const addedTeams = newTeams.filter(t => !oldTeams.includes(t));
+
+      if (addedTeams.length > 0) {
+        if (addedTeams.includes('ads')) {
+          desc = 'Client assigned to Ads Team';
+        } else if (addedTeams.includes('design')) {
+          desc = 'Client assigned to Design Team';
+        } else if (addedTeams.includes('developer')) {
+          desc = 'Client assigned to Developer Team';
+        }
+      } else {
+        // Check if individual specialist assignees changed
+        const devChanged = (lead.assignedDeveloper || '').toString() !== (updatedLead.assignedDeveloper || '').toString();
+        const designChanged = (lead.assignedDesigner || '').toString() !== (updatedLead.assignedDesigner || '').toString();
+        const adsChanged = (lead.assignedAdSpecialist || '').toString() !== (updatedLead.assignedAdSpecialist || '').toString();
+
+        if (adsChanged && updatedLead.assignedAdSpecialist) {
+          desc = 'Client assigned to Ads Team';
+        } else if (designChanged && updatedLead.assignedDesigner) {
+          desc = 'Client assigned to Design Team';
+        } else if (devChanged && updatedLead.assignedDeveloper) {
+          desc = 'Client assigned to Developer Team';
+        }
+      }
+    }
+
+    await createLeadNotification(updatedLead.clientId, desc);
+
     // Process response payload mapping and redaction
     res.json(redactLeadForRole(updatedLead, req.user));
   } catch (error) {
@@ -726,6 +840,7 @@ const addLeadMessage = async (req, res) => {
 
     lead.communications.push(newMessage);
     await lead.save();
+    await createLeadNotification(lead.clientId, 'Client details updated');
 
     res.status(201).json(redactLeadForRole(lead, req.user));
   } catch (error) {
