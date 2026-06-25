@@ -111,6 +111,9 @@ const leadSchema = new mongoose.Schema({
   platforms: [{
     type: String
   }],
+  otherTools: [{
+    type: String
+  }],
   brandColors: {
     type: String,
     default: '#6366f1'

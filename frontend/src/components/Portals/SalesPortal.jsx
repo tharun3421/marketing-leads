@@ -235,9 +235,9 @@ const checkDeadlineAlert = (deadlineStr) => {
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
   if (diffDays < 0) {
-    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
+    return { type: 'overdue', label: 'Due Date Reminder', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
   } else if (diffDays <= 3) {
-    return { type: 'approaching', label: `Due in ${diffDays}d`, color: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
+    return { type: 'approaching', label: 'Due Date Reminder', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
   }
   return null;
 };
@@ -344,6 +344,7 @@ export default function SalesPortal({
       websiteUrl: '',
       websiteRequired: false,
       websiteType: '',
+      otherTools: [],
       mobileNumber: '',
       email: '',
       facebookId: '',
@@ -490,6 +491,7 @@ export default function SalesPortal({
       websiteUrl: '',
       websiteRequired: false,
       websiteType: '',
+      otherTools: [],
       mobileNumber: '',
       email: '',
       facebookId: '',
@@ -538,7 +540,7 @@ export default function SalesPortal({
 
   const handleNextStep = async () => {
     const fieldsToValidate = [
-      ['salespersonName', 'clientName', 'websiteUrl', 'websiteRequired', 'websiteType', 'mobileNumber', 'email', 'facebookId', 'facebookPassword', 'instagramId', 'instagramPassword', 'facebookAccountStatus', 'instagramAccountStatus'],
+      ['salespersonName', 'clientName', 'websiteUrl', 'websiteRequired', 'websiteType', 'otherTools', 'mobileNumber', 'email', 'facebookId', 'facebookPassword', 'instagramId', 'instagramPassword', 'facebookAccountStatus', 'instagramAccountStatus'],
       ['postersRequired', 'videosRequired', 'adsRequired', 'platforms', 'brandColors', 'competitors', 'adBudget', 'startDate', 'deliveryDeadline', 'notes', 'adBudgetPerDay', 'targetAudienceRequired', 'targetAudience'],
       ['isConfirmed']
     ];
@@ -1016,7 +1018,7 @@ export default function SalesPortal({
 
        {/* Central Clients Section */}
           <div className="mt-8">
-            <Card title="Clients" subtitle="Central client management roster for tracking and team routing">
+            <Card title="Client Work flow" subtitle="Central client management roster for tracking and team routing">
               <div className="space-y-4 mb-6">
                 <div className="flex flex-col md:flex-row gap-4">
                   {/* Search */}
@@ -1024,7 +1026,7 @@ export default function SalesPortal({
                     <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                     <input
                       type="text"
-                      placeholder="Search by client ID, name, or WhatsApp number..."
+                      placeholder="Search by client ID, name, or Business Number..."
                       value={clientSearchQuery}
                       onChange={(e) => setClientSearchQuery(e.target.value)}
                       className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
@@ -1110,20 +1112,19 @@ export default function SalesPortal({
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Business Name</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
-                      <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Name</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                     {filteredCentralClients.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="p-6 text-center text-gray-400 dark:text-gray-550 font-normal">
+                        <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-550 font-normal">
                           No clients found matching the selected filters.
                         </td>
                       </tr>
@@ -1148,21 +1149,18 @@ export default function SalesPortal({
                             <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
                               {client.salespersonName || '—'}
                             </td>
-                            <td className="p-3 font-bold text-gray-900 dark:text-white">
-                              {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
-                            </td>
                             <td className="p-3 text-gray-900 dark:text-white font-bold">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span>{client.clientName}</span>
-                                {(() => {
+                                {/* {(() => {
                                   const badge = getPaymentStatus(client);
                                   return (
                                     <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
                                       {badge.label}
                                     </span>
                                   );
-                                })()}
-                                {(() => {
+                                })()} */}
+                                {/* {(() => {
                                   const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
                                   if (deadlineAlert) {
                                     return (
@@ -1172,7 +1170,7 @@ export default function SalesPortal({
                                     );
                                   }
                                   return null;
-                                })()}
+                                })()} */}
                               </div>
                             </td>
                             <td className="p-3 text-gray-900 dark:text-white font-bold">
@@ -1181,8 +1179,8 @@ export default function SalesPortal({
                             <td className="p-3 font-mono">{client.mobileNumber}</td>
                             <td className="p-3">
                                {client.assignedToName ? (
-                                 <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                                   👤 {client.assignedToName}
+                                 <span className="bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ">
+                                    {client.assignedToName}
                                  </span>
                                ) : (
                                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
@@ -1327,8 +1325,16 @@ export default function SalesPortal({
                                 </span>
                               </div>
                             </div>
-                            <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                              {lead.clientName}
+                            <h4 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap truncate">
+                              <span>{lead.clientName}</span>
+                              {(() => {
+                                const badge = getPaymentStatus(lead);
+                                return (
+                                  <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${badge.color}`}>
+                                    {badge.label}
+                                  </span>
+                                );
+                              })()}
                             </h4>
                             <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
                               {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
@@ -1450,7 +1456,7 @@ export default function SalesPortal({
                               </div>
                               <div className="flex items-center gap-2">
                                 <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                <span>WhatsApp: <strong>{lead.mobileNumber}</strong></span>
+                                <span>Business Number: <strong>{lead.mobileNumber}</strong></span>
                               </div>
                               {lead.websiteUrl && (
                                 <div className="flex items-center gap-2">
@@ -1458,6 +1464,36 @@ export default function SalesPortal({
                                   <span className="truncate">Website: <a href={lead.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline">{lead.websiteUrl}</a></span>
                                 </div>
                               )}
+                            </div>
+                          </div>
+
+                          {/* Payment Details */}
+                          <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-2.5">
+                            <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wider">Payment Details</h4>
+                            <div className="text-xs space-y-2 text-gray-700 dark:text-gray-300 font-medium">
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-400">Plan Amount:</span>
+                                <strong className="text-gray-900 dark:text-white">₹{lead.planAmount || 0}</strong>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-400">Advance Paid:</span>
+                                <strong className="text-gray-900 dark:text-white">₹{lead.advanceAmount || 0}</strong>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-400">Pending Balance:</span>
+                                <strong className="text-amber-600 dark:text-amber-400">₹{lead.pendingAmount || 0}</strong>
+                              </div>
+                              <div className="flex justify-between items-center pt-1.5 border-t border-gray-100 dark:border-slate-800/40">
+                                <span className="text-gray-400">Payment Status:</span>
+                                {(() => {
+                                  const badge = getPaymentStatus(lead);
+                                  return (
+                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${badge.color}`}>
+                                      {badge.label}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </div>
                           </div>
 
@@ -1709,12 +1745,12 @@ export default function SalesPortal({
                       <table className="w-full text-left text-sm border-collapse">
                         <thead>
                           <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Workflow Status</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
@@ -1732,8 +1768,18 @@ export default function SalesPortal({
                                   {client.clientId || 'N/A'}
                                 </button>
                               </td>
-                              <td className="p-3 text-gray-900 dark:text-white font-bold">
-                                <div>{client.clientName}</div>
+                               <td className="p-3 text-gray-900 dark:text-white font-bold">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span>{client.clientName}</span>
+                                  {(() => {
+                                    const badge = getPaymentStatus(client);
+                                    return (
+                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                                        {badge.label}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
                                 {client.companyName && (
                                   <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">
                                     {client.companyName}
@@ -1916,13 +1962,21 @@ export default function SalesPortal({
               {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">
                       Client Profile Dossier
                     </h3>
                     <span className="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded font-mono">
                       ID: {client.clientId || 'N/A'}
                     </span>
+                    {(() => {
+                      const badge = getPaymentStatus(client);
+                      return (
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <p className="text-xs text-gray-400 dark:text-gray-555 mt-1">
                     Created by salesperson <strong className="text-indigo-650 dark:text-indigo-405">{client.salespersonName}</strong> on {new Date(client.createdAt || client.timestamp).toLocaleString()}
@@ -1957,7 +2011,7 @@ export default function SalesPortal({
                           <span className="text-gray-900 dark:text-white font-semibold">{client.companyName || '—'}</span>
                         </div>
                         <div className="mt-2">
-                          <span className="text-[10px] font-bold text-gray-400 block uppercase">WhatsApp Mobile</span>
+                          <span className="text-[10px] font-bold text-gray-400 block uppercase">Business Number</span>
                           <span className="font-mono text-gray-900 dark:text-white font-bold">{client.mobileNumber}</span>
                         </div>
                         <div className="mt-2">
@@ -2083,6 +2137,21 @@ export default function SalesPortal({
                                 : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
                           }`}>
                             {client.websiteStatus || 'Pending'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Other Tools */}
+                      {client.otherTools && client.otherTools.length > 0 && (
+                        <div className="flex justify-between items-center pb-1 border-t border-gray-100 dark:border-slate-800/40 pt-2 mt-2">
+                          <div>
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Other Required Tools</span>
+                            <span className="text-[10px] text-gray-400 font-medium">
+                              {(Array.isArray(client.otherTools) ? client.otherTools : [client.otherTools]).join(', ')}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">
+                            Required
                           </span>
                         </div>
                       )}

@@ -166,7 +166,7 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
+            className="overflow-hidden space-y-4"
           >
             <Select
               label="Type of Website Required"
@@ -174,13 +174,11 @@ export default function StepProfileAccess({ register, errors, watch, isClientPor
               required
               disabled={isReadOnlyProfile}
               options={[
-                { value: 'E-commerce Store', label: 'E-commerce Store' },
-                { value: 'Landing Page', label: 'Landing Page' },
-                { value: 'Corporate Website', label: 'Corporate Website' },
-                { value: 'Blog / Content Website', label: 'Blog / Content Website' },
-                { value: 'Portfolio Website', label: 'Portfolio Website' },
-                { value: 'Custom Application', label: 'Custom Application' },
-                { value: 'Other', label: 'Other' }
+                { value: 'Static Website', label: 'Static Website' },
+                { value: 'Dynamic Website', label: 'Dynamic Website' },
+                { value: 'E-commerce Website', label: 'E-commerce Website' },
+                { value: 'Web App', label: 'Web App' },
+                { value: 'Mobile App', label: 'Mobile App' }
               ]}
               error={errors.websiteType?.message}
               {...register('websiteType', { 

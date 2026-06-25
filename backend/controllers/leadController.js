@@ -408,7 +408,7 @@ const assignLeads = async (req, res) => {
       }
       await lead.save();
       const teamLabel = techUser ? (techUser.team === 'ads' ? 'Ads Team' : techUser.team === 'design' ? 'Design Team' : 'Developer Team') : null;
-      const desc = techUser ? `Client assigned to ${teamLabel}` : 'Client details updated';
+      const desc = techUser ? `Client assigned to ${teamLabel} by Admin ${req.user.name}` : `Client details updated by Admin ${req.user.name}`;
       await createLeadNotification(lead.clientId, desc);
     }
 
@@ -485,13 +485,13 @@ const createLead = async (req, res) => {
       await lead.save();
     } catch (syncError) {
       console.error('Auto Google Sheets sync failed on lead creation:', syncError.message);
-      await createLeadNotification(clientId, 'Client details updated');
+      await createLeadNotification(clientId, `Client brief created by salesperson ${req.user.name}`);
       const leadObj = lead.toObject();
       leadObj.syncWarning = `Client ID ${clientId} created locally, but Google Sheets sync failed: ${syncError.message}`;
       return res.status(201).json(leadObj);
     }
 
-    await createLeadNotification(lead.clientId, 'Client details updated');
+    await createLeadNotification(lead.clientId, `Client brief created by salesperson ${req.user.name}`);
     res.status(201).json(lead);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -532,7 +532,20 @@ const updateLead = async (req, res) => {
       hasTeam(lead, req.user.team) &&
       !isClaimedByOtherInDept;
 
-    if (!isAdmin && !isCreator && !isSalesperson && !isAssignee && !isTeamMember) {
+    let isClaimAction = false;
+    if (req.user.role === 'technical' && req.body.assignedTo !== undefined) {
+      if (req.body.assignedTo === req.user.id.toString()) {
+        if (req.user.team === 'developer' && !lead.assignedDeveloper) {
+          isClaimAction = true;
+        } else if (req.user.team === 'design' && !lead.assignedDesigner) {
+          isClaimAction = true;
+        } else if (req.user.team === 'ads' && !lead.assignedAdSpecialist) {
+          isClaimAction = true;
+        }
+      }
+    }
+
+    if (!isAdmin && !isCreator && !isSalesperson && !isAssignee && !isTeamMember && !isClaimAction) {
       return res.status(403).json({ message: 'Access denied: Cannot edit leads assigned to others or already claimed by another specialist' });
     }
 
@@ -572,6 +585,21 @@ const updateLead = async (req, res) => {
         // Legacy fields for backward compatibility
         updatedData.assignedTo = req.body.assignedTo;
         updatedData.assignedToName = req.body.assignedToName;
+
+        // Ensure their team is in the assignedTeam array
+        let currentTeams = lead.assignedTeam;
+        if (!currentTeams) {
+          currentTeams = [req.user.team];
+        } else if (Array.isArray(currentTeams)) {
+          if (!currentTeams.includes(req.user.team)) {
+            currentTeams = [...currentTeams, req.user.team];
+          }
+        } else {
+          if (currentTeams !== req.user.team && currentTeams !== 'all') {
+            currentTeams = [currentTeams, req.user.team];
+          }
+        }
+        updatedData.assignedTeam = currentTeams;
       }
     }
 
@@ -594,6 +622,20 @@ const updateLead = async (req, res) => {
         updatedData.assignedTo = null;
         updatedData.assignedToName = null;
       }
+    }
+
+    // Sync legacy assignedTo fields for Admin or Salesperson updates
+    if (req.user.role === 'admin' || req.user.role === 'salesperson') {
+      const activeDev = updatedData.assignedDeveloper !== undefined ? updatedData.assignedDeveloper : lead.assignedDeveloper;
+      const activeDesign = updatedData.assignedDesigner !== undefined ? updatedData.assignedDesigner : lead.assignedDesigner;
+      const activeAds = updatedData.assignedAdSpecialist !== undefined ? updatedData.assignedAdSpecialist : lead.assignedAdSpecialist;
+
+      const activeDevName = updatedData.assignedDeveloperName !== undefined ? updatedData.assignedDeveloperName : lead.assignedDeveloperName;
+      const activeDesignName = updatedData.assignedDesignerName !== undefined ? updatedData.assignedDesignerName : lead.assignedDesignerName;
+      const activeAdsName = updatedData.assignedAdSpecialistName !== undefined ? updatedData.assignedAdSpecialistName : lead.assignedAdSpecialistName;
+
+      updatedData.assignedTo = activeDev || activeDesign || activeAds || null;
+      updatedData.assignedToName = activeDevName || activeDesignName || activeAdsName || null;
     }
 
     // Calculate workflow status dynamically based on assignments and deliverables if not manually overridden
@@ -641,7 +683,17 @@ const updateLead = async (req, res) => {
     const updatedLead = await Lead.findByIdAndUpdate(req.params.id, updatedData, { new: true });
     
     // Determine change description for notification
-    let desc = 'Client details updated';
+    const roleLabel = req.user.role === 'admin' 
+      ? 'Admin' 
+      : req.user.role === 'salesperson' 
+        ? 'Salesperson' 
+        : req.user.team === 'ads'
+          ? 'Ads Team'
+          : req.user.team === 'design'
+            ? 'Design Team'
+            : 'Developer Team';
+    const userSuffix = `by ${roleLabel} ${req.user.name}`;
+    let desc = `Client details updated ${userSuffix}`;
 
     // 1. Payment status check
     const oldPlan = Number(lead.planAmount || 0);
@@ -663,7 +715,7 @@ const updateLead = async (req, res) => {
     }
 
     if (oldPayStatus !== newPayStatus) {
-      desc = 'Payment status changed';
+      desc = `Payment status updated to ${newPayStatus} ${userSuffix}`;
     } else {
       // 2. Assigned team check
       const getTeamList = (t) => {
@@ -677,11 +729,11 @@ const updateLead = async (req, res) => {
 
       if (addedTeams.length > 0) {
         if (addedTeams.includes('ads')) {
-          desc = 'Client assigned to Ads Team';
+          desc = `Client assigned to Ads Team ${userSuffix}`;
         } else if (addedTeams.includes('design')) {
-          desc = 'Client assigned to Design Team';
+          desc = `Client assigned to Design Team ${userSuffix}`;
         } else if (addedTeams.includes('developer')) {
-          desc = 'Client assigned to Developer Team';
+          desc = `Client assigned to Developer Team ${userSuffix}`;
         }
       } else {
         // Check if individual specialist assignees changed
@@ -690,11 +742,11 @@ const updateLead = async (req, res) => {
         const adsChanged = (lead.assignedAdSpecialist || '').toString() !== (updatedLead.assignedAdSpecialist || '').toString();
 
         if (adsChanged && updatedLead.assignedAdSpecialist) {
-          desc = 'Client assigned to Ads Team';
+          desc = `Client assigned to Ads Specialist ${updatedLead.assignedAdSpecialistName} ${userSuffix}`;
         } else if (designChanged && updatedLead.assignedDesigner) {
-          desc = 'Client assigned to Design Team';
+          desc = `Client assigned to Design Specialist ${updatedLead.assignedDesignerName} ${userSuffix}`;
         } else if (devChanged && updatedLead.assignedDeveloper) {
-          desc = 'Client assigned to Developer Team';
+          desc = `Client assigned to Developer Specialist ${updatedLead.assignedDeveloperName} ${userSuffix}`;
         }
       }
     }
@@ -776,7 +828,7 @@ const getLeadById = async (req, res) => {
     const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
     const isTeamMember = req.user.role === 'technical' && hasTeam(lead, req.user.team);
 
-    if (!isAdmin && !isCreator && req.user.role !== 'salesperson' && !isTeamMember) {
+    if (!isAdmin && !isCreator && req.user.role !== 'salesperson' && req.user.role !== 'technical') {
       return res.status(403).json({ message: 'Access denied: You do not have access to this client brief' });
     }
 
@@ -808,7 +860,18 @@ const addLeadMessage = async (req, res) => {
     const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
     const isTeamMember = req.user.role === 'technical' && hasTeam(lead, req.user.team);
 
-    if (!isAdmin && !isCreator && !isTeamMember) {
+    let isAssignee = false;
+    if (req.user.role === 'technical') {
+      if (req.user.team === 'developer') {
+        isAssignee = lead.assignedDeveloper && lead.assignedDeveloper.toString() === req.user.id.toString();
+      } else if (req.user.team === 'design') {
+        isAssignee = lead.assignedDesigner && lead.assignedDesigner.toString() === req.user.id.toString();
+      } else if (req.user.team === 'ads') {
+        isAssignee = lead.assignedAdSpecialist && lead.assignedAdSpecialist.toString() === req.user.id.toString();
+      }
+    }
+
+    if (!isAdmin && !isCreator && !isTeamMember && !isAssignee) {
       return res.status(403).json({ message: 'Access denied: You do not have access to this client brief' });
     }
 
@@ -840,7 +903,7 @@ const addLeadMessage = async (req, res) => {
 
     lead.communications.push(newMessage);
     await lead.save();
-    await createLeadNotification(lead.clientId, 'Client details updated');
+    await createLeadNotification(lead.clientId, `New message posted in ${category} by ${roleLabel} ${req.user.name}`);
 
     res.status(201).json(redactLeadForRole(lead, req.user));
   } catch (error) {

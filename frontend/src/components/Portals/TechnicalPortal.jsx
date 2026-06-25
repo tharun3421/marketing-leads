@@ -81,9 +81,9 @@ const checkDeadlineAlert = (deadlineStr) => {
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
   if (diffDays < 0) {
-    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
+    return { type: 'overdue', label: 'Due Date Reminder', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
   } else if (diffDays <= 3) {
-    return { type: 'approaching', label: `Due in ${diffDays}d`, color: 'bg-amber-500/10 text-amber-650 border-amber-550/25 font-bold' };
+    return { type: 'approaching', label: 'Due Date Reminder', color: 'bg-amber-500/10 text-amber-650 border-amber-550/25 font-bold' };
   }
   return null;
 };
@@ -262,7 +262,7 @@ export default function TechnicalPortal({
         updatePayload.workflowStatus = editWorkflowStatus;
       }
 
-      const res = await authFetch(`/api/leads/${selectedLead._id}`, {
+      const res = await authFetch(`/api/leads/${selectedLead._id || selectedLead.id}`, {
         method: 'PUT',
         body: JSON.stringify(updatePayload)
       });
@@ -288,7 +288,7 @@ export default function TechnicalPortal({
   const handleAcceptClick = async (lead) => {
     setIsLoading(true);
     try {
-      const res = await authFetch(`/api/leads/${lead._id}`, {
+      const res = await authFetch(`/api/leads/${lead._id || lead.id}`, {
         method: 'PUT',
         body: JSON.stringify({
           assignedTo: userId,
@@ -342,8 +342,18 @@ export default function TechnicalPortal({
 
   // Metric aggregates based on claimed clients only (within technician's department)
   const myLeads = useMemo(() => {
-    return teamLeads.filter(l => l.assignedTo && (l.assignedTo?._id || l.assignedTo) === userId);
-  }, [teamLeads, userId]);
+    return teamLeads.filter(l => {
+      const teamAssignee = user?.team === 'developer'
+        ? l.assignedDeveloper
+        : user?.team === 'design'
+          ? l.assignedDesigner
+          : user?.team === 'ads'
+            ? l.assignedAdSpecialist
+            : l.assignedTo;
+      const teamAssigneeId = teamAssignee?._id || teamAssignee;
+      return teamAssigneeId && teamAssigneeId === userId;
+    });
+  }, [teamLeads, user?.team, userId]);
 
   const totalPosters = useMemo(() => myLeads.reduce((acc, l) => acc + Number(l.postersRequired || 0), 0), [myLeads]);
   const pendingPosters = useMemo(() => myLeads.reduce((acc, l) => acc + (Number(l.postersRequired) > 0 ? Number(l.postersPending ?? l.postersRequired) : 0), 0), [myLeads]);
@@ -363,8 +373,32 @@ export default function TechnicalPortal({
 
   // Scope the top metrics grid counts to department tasks only via teamLeads
   const totalClientsCount = useMemo(() => teamLeads.length, [teamLeads]);
-  const claimedClientsCount = useMemo(() => teamLeads.filter(l => l.assignedTo).length, [teamLeads]);
-  const unclaimedClientsCount = useMemo(() => teamLeads.filter(l => !l.assignedTo).length, [teamLeads]);
+  const claimedClientsCount = useMemo(() => {
+    return teamLeads.filter(l => {
+      const teamAssignee = user?.team === 'developer'
+        ? l.assignedDeveloper
+        : user?.team === 'design'
+          ? l.assignedDesigner
+          : user?.team === 'ads'
+            ? l.assignedAdSpecialist
+            : l.assignedTo;
+      return !!teamAssignee;
+    }).length;
+  }, [teamLeads, user?.team]);
+
+  const unclaimedClientsCount = useMemo(() => {
+    return teamLeads.filter(l => {
+      const teamAssignee = user?.team === 'developer'
+        ? l.assignedDeveloper
+        : user?.team === 'design'
+          ? l.assignedDesigner
+          : user?.team === 'ads'
+            ? l.assignedAdSpecialist
+            : l.assignedTo;
+      return !teamAssignee;
+    }).length;
+  }, [teamLeads, user?.team]);
+
   const inProgressClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'In Progress').length, [teamLeads]);
   const pendingClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'Allocated').length, [teamLeads]);
   const completedClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'Completed').length, [teamLeads]);
@@ -376,12 +410,30 @@ export default function TechnicalPortal({
       case 'claimed':
         return { 
           title: 'Claimed Department Clients', 
-          list: teamLeads.filter(l => l.assignedTo) 
+          list: teamLeads.filter(l => {
+            const teamAssignee = user?.team === 'developer'
+              ? l.assignedDeveloper
+              : user?.team === 'design'
+                ? l.assignedDesigner
+                : user?.team === 'ads'
+                  ? l.assignedAdSpecialist
+                  : l.assignedTo;
+            return !!teamAssignee;
+          }) 
         };
       case 'unclaimed':
         return { 
           title: 'Unclaimed Department Clients', 
-          list: teamLeads.filter(l => !l.assignedTo) 
+          list: teamLeads.filter(l => {
+            const teamAssignee = user?.team === 'developer'
+              ? l.assignedDeveloper
+              : user?.team === 'design'
+                ? l.assignedDesigner
+                : user?.team === 'ads'
+                  ? l.assignedAdSpecialist
+                  : l.assignedTo;
+            return !teamAssignee;
+          }) 
         };
       case 'in-progress':
         return { 
@@ -416,8 +468,15 @@ export default function TechnicalPortal({
       }
 
       // Only show unclaimed tasks or tasks assigned to me in the main checklist
-      const leadAssignedToId = lead.assignedTo?._id || lead.assignedTo;
-      if (leadAssignedToId && leadAssignedToId !== userId) {
+      const teamAssignee = user?.team === 'developer'
+        ? lead.assignedDeveloper
+        : user?.team === 'design'
+          ? lead.assignedDesigner
+          : user?.team === 'ads'
+            ? lead.assignedAdSpecialist
+            : lead.assignedTo;
+      const teamAssigneeId = teamAssignee?._id || teamAssignee;
+      if (teamAssigneeId && teamAssigneeId !== userId) {
         return false;
       }
 
@@ -452,13 +511,32 @@ export default function TechnicalPortal({
     });
   }, [leads, user?.team, userId, listSearchQuery, filterWorkflowStatus, filterAssignedTeam]);
 
-  const unclaimedLeads = useMemo(() => filteredLeads.filter(lead => !lead.assignedTo), [filteredLeads]);
+  const unclaimedLeads = useMemo(() => {
+    return filteredLeads.filter(lead => {
+      const teamAssignee = user?.team === 'developer'
+        ? lead.assignedDeveloper
+        : user?.team === 'design'
+          ? lead.assignedDesigner
+          : user?.team === 'ads'
+            ? lead.assignedAdSpecialist
+            : lead.assignedTo;
+      return !teamAssignee;
+    });
+  }, [filteredLeads, user?.team]);
+
   const claimedLeads = useMemo(() => {
     return filteredLeads.filter(lead => {
-      const leadAssignedToId = lead.assignedTo?._id || lead.assignedTo;
-      return leadAssignedToId && leadAssignedToId === userId;
+      const teamAssignee = user?.team === 'developer'
+        ? lead.assignedDeveloper
+        : user?.team === 'design'
+          ? lead.assignedDesigner
+          : user?.team === 'ads'
+            ? lead.assignedAdSpecialist
+            : lead.assignedTo;
+      const teamAssigneeId = teamAssignee?._id || teamAssignee;
+      return teamAssigneeId && teamAssigneeId === userId;
     });
-  }, [filteredLeads, userId]);
+  }, [filteredLeads, user?.team, userId]);
 
   useEffect(() => {
     if (filteredLeads.length > 0) {
@@ -594,8 +672,16 @@ export default function TechnicalPortal({
               )}
             </div>
           </div>
-          <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">
-            {lead.clientName}
+          <h4 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap truncate">
+            <span>{lead.clientName}</span>
+            {(() => {
+              const badge = getPaymentStatus(lead);
+              return (
+                <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${badge.color}`}>
+                  {badge.label}
+                </span>
+              );
+            })()}
           </h4>
           <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
             {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
@@ -811,7 +897,7 @@ export default function TechnicalPortal({
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-405 uppercase tracking-wider">Total Clients</p>
+            <p className="text-[10px] font-bold text-gray-500 dark:text-gray-405 uppercase tracking-wider">Assigned Clients</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalClientsCount}</p>
           </div>
         </div>
@@ -889,7 +975,7 @@ export default function TechnicalPortal({
 
        {/* Central Clients Section */}
       <div className="mt-8">
-        <Card title="Clients" subtitle="Central client management roster synchronized in real-time across portals">
+        <Card title="Client Work flow" subtitle="Central client management roster synchronized in real-time across portals">
           <div className="space-y-4 mb-6">
             <div className="flex flex-col md:flex-row gap-4">
               {/* Search */}
@@ -897,7 +983,7 @@ export default function TechnicalPortal({
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <input
                   type="text"
-                  placeholder="Search by client ID, name, or WhatsApp number..."
+                  placeholder="Search by client ID, name, or Business Number..."
                   value={clientSearchQuery}
                   onChange={(e) => setClientSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
@@ -983,20 +1069,19 @@ export default function TechnicalPortal({
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Business Name</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
-                  <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                  <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                  <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
+                  <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                  <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Name</th>
+                  <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                  <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
+                  <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                 {filteredCentralClients.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="p-6 text-center text-gray-400 dark:text-gray-500 font-normal">
+                    <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-550 font-normal">
                       No clients found matching the selected filters.
                     </td>
                   </tr>
@@ -1015,13 +1100,10 @@ export default function TechnicalPortal({
                         <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
                           {client.salespersonName || '—'}
                         </td>
-                        <td className="p-3 font-bold text-gray-900 dark:text-white">
-                          {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
-                        </td>
                         <td className="p-3 text-gray-900 dark:text-white font-bold">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span>{client.clientName}</span>
-                            {(() => {
+                            {/* {(() => {
                               const badge = getPaymentStatus(client);
                               return (
                                 <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
@@ -1039,7 +1121,7 @@ export default function TechnicalPortal({
                                 );
                               }
                               return null;
-                            })()}
+                            })()} */}
                           </div>
                         </td>
                         <td className="p-3 text-gray-900 dark:text-white font-bold">
@@ -1049,7 +1131,7 @@ export default function TechnicalPortal({
                         <td className="p-3">
                           {client.assignedToName ? (
                             <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                              👤 {client.assignedToName}
+                               {client.assignedToName}
                             </span>
                           ) : (
                             <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
@@ -1177,7 +1259,14 @@ export default function TechnicalPortal({
                 }
 
                 const leadId = lead._id || lead.id;
-                const isClaimed = !!lead.assignedTo;
+                const teamAssignee = user?.team === 'developer'
+                  ? lead.assignedDeveloper
+                  : user?.team === 'design'
+                    ? lead.assignedDesigner
+                    : user?.team === 'ads'
+                      ? lead.assignedAdSpecialist
+                      : lead.assignedTo;
+                const isClaimed = !!teamAssignee;
                 
                 // Details calculations
                 const totalReq = Number(lead.postersRequired || 0) + Number(lead.videosRequired || 0) + Number(lead.adsRequired || 0) + (lead.websiteRequired ? 1 : 0);
@@ -1205,9 +1294,30 @@ export default function TechnicalPortal({
                               </button>
                             )}
                             {lead.clientName}
+                            {(() => {
+                              const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
+                              if (payStatus === 'Partial') {
+                                return (
+                                  <span className="text-xs font-bold text-rose-600 dark:text-rose-400 ml-2">
+                                    Partial Payment Done
+                                  </span>
+                                );
+                              }
+                              if (payStatus === 'Paid') {
+                                return (
+                                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">
+                                    Full Payment Done
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                           </h3>
                           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
                             {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
+                          </p>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
+                            Created By: <span className="text-gray-700 dark:text-gray-300 font-semibold">{lead.salespersonName || '—'}</span>
                           </p>
                         </div>
                         
@@ -1246,7 +1356,7 @@ export default function TechnicalPortal({
                             </div>
                             <div className="flex items-center gap-2">
                               <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              <span>WhatsApp: 
+                              <span>Business Number: 
                                 <a 
                                   href={`https://wa.me/${lead.mobileNumber.replace(/[^0-9]/g, '')}`} 
                                   target="_blank" 
@@ -1574,13 +1684,21 @@ export default function TechnicalPortal({
               {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white">
                       Client Profile Dossier
                     </h3>
                     <span className="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded font-mono">
                       ID: {client.clientId || 'N/A'}
                     </span>
+                    {(() => {
+                      const badge = getPaymentStatus(client);
+                      return (
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <p className="text-xs text-gray-400 dark:text-gray-555 mt-1">
                     Created by salesperson <strong className="text-indigo-655 dark:text-indigo-400">{client.salespersonName}</strong> on {new Date(client.createdAt || client.timestamp).toLocaleString()}
@@ -1615,7 +1733,7 @@ export default function TechnicalPortal({
                           <span className="text-gray-900 dark:text-white font-semibold">{client.companyName || '—'}</span>
                         </div>
                         <div className="mt-2">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">WhatsApp Mobile</span>
+                           <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Business Number</span>
                           <span className="font-mono text-gray-900 dark:text-white font-bold">{client.mobileNumber}</span>
                         </div>
                         <div className="mt-2">
@@ -1795,6 +1913,21 @@ export default function TechnicalPortal({
                         </div>
                       )}
 
+                      {/* Other Tools */}
+                      {client.otherTools && client.otherTools.length > 0 && (
+                        <div className="flex justify-between items-center pb-1 border-t border-gray-100 dark:border-slate-800/40 pt-2 mt-2">
+                          <div>
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Other Required Tools</span>
+                            <span className="text-[10px] text-gray-400 font-medium">
+                              {(Array.isArray(client.otherTools) ? client.otherTools : [client.otherTools]).join(', ')}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">
+                            Required
+                          </span>
+                        </div>
+                      )}
+
                     </div>
 
                     {/* Specifications Card */}
@@ -1885,8 +2018,8 @@ export default function TechnicalPortal({
                   </div>
 
                   {/* Right Column: Shared Communication Chat (1/3 width) */}
-                  <div className="space-y-6 lg:col-span-1 flex flex-col justify-between">
-                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 flex-1 flex flex-col">
+                  <div className="space-y-6 lg:col-span-1 flex flex-col justify-between ">
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 flex-1 flex flex-col ">
                       <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
                         6. Shared Communication Chat
                       </h4>
@@ -1898,7 +2031,24 @@ export default function TechnicalPortal({
               </div>
 
               {/* Modal Footer */}
-              <div className="flex justify-end p-5 border-t border-gray-100 dark:border-slate-800/80">
+              <div className="flex justify-end gap-3 p-5 border-t border-gray-100 dark:border-slate-800/80">
+                {!(user?.team === 'developer'
+                  ? client.assignedDeveloper
+                  : user?.team === 'design'
+                    ? client.assignedDesigner
+                    : user?.team === 'ads'
+                      ? client.assignedAdSpecialist
+                      : client.assignedTo) && (
+                  <Button
+                    onClick={async () => {
+                      await handleAcceptClick(client);
+                    }}
+                    variant="primary"
+                    size="sm"
+                  >
+                    Self Claim
+                  </Button>
+                )}
                 <Button
                   onClick={() => setViewedClientId(null)}
                   variant="outline"
@@ -1950,12 +2100,12 @@ export default function TechnicalPortal({
                       <table className="w-full text-left text-sm border-collapse">
                         <thead>
                           <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Workflow Status</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
-                            <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
@@ -1974,7 +2124,17 @@ export default function TechnicalPortal({
                                 </button>
                               </td>
                               <td className="p-3 text-gray-900 dark:text-white font-bold">
-                                <div>{client.clientName}</div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span>{client.clientName}</span>
+                                  {(() => {
+                                    const badge = getPaymentStatus(client);
+                                    return (
+                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                                        {badge.label}
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
                                 {client.companyName && (
                                   <div className="text-xs text-gray-405 dark:text-gray-550 font-normal mt-0.5">
                                     {client.companyName}

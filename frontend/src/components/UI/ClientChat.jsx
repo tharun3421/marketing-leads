@@ -199,7 +199,7 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
   ) => {
     return (
       <div className={`flex flex-col bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs ${
-        layout === 'stack' ? 'h-[320px]' : 'h-[380px]'
+        layout === 'stack' ? 'h-[420px]' : 'h-[480px]'
       }`}>
         
         {/* Card Header */}

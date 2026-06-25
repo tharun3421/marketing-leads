@@ -88,14 +88,23 @@ const checkDeadlineAlert = (deadlineStr) => {
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
   if (diffDays < 0) {
-    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
+    return { type: 'overdue', label: 'Due Date Reminder', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
   } else if (diffDays <= 3) {
-    return { type: 'approaching', label: `Due in ${diffDays}d`, color: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
+    return { type: 'approaching', label: 'Due Date Reminder', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
   }
   return null;
 };
 
 const getPaymentStatus = (lead) => {
+  if (lead.paymentStatus) {
+    if (lead.paymentStatus === 'Paid') {
+      return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+    }
+    if (lead.paymentStatus === 'Partial') {
+      return { label: 'Partial', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
+    }
+    return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
+  }
   const plan = Number(lead.planAmount || 0);
   const advance = Number(lead.advanceAmount || 0);
   if (plan > 0 && advance >= plan) return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
@@ -860,19 +869,19 @@ export default function AdminPortal({
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+            <div className="overflow-auto max-h-[450px] border border-gray-100 dark:border-slate-800/60 rounded-xl scrollbar-thin">
               <table className="min-w-[900px] w-full text-left text-sm border-collapse">
                 <thead>
                   <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
-                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Contact</th>
-                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Company & Sector</th>
-                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Representative</th>
-                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assignee</th>
-                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Timestamp</th>
-                    <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Deliverables Status</th>
-                    <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Workflow Status</th>
-                    <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Action</th>
+                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Contact</th>
+                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Company & Sector</th>
+                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Representative</th>
+                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assignee</th>
+                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Timestamp</th>
+                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Deliverables Status</th>
+                    <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Workflow Status</th>
+                    <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40">
@@ -1364,6 +1373,32 @@ const handleSaveClientDetails = async () => {
 
 const handleClientFieldChange = (field, value) => {
     setEditedClientFields(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSpecialistChange = (teamKey, specialistId) => {
+    const specialist = technicalList.find(m => (m._id || m.id) === specialistId);
+    const specialistName = specialist ? specialist.name : null;
+    const idVal = specialistId || null;
+
+    if (teamKey === 'developer') {
+      setEditedClientFields(prev => ({
+        ...prev,
+        assignedDeveloper: idVal,
+        assignedDeveloperName: specialistName
+      }));
+    } else if (teamKey === 'design') {
+      setEditedClientFields(prev => ({
+        ...prev,
+        assignedDesigner: idVal,
+        assignedDesignerName: specialistName
+      }));
+    } else if (teamKey === 'ads') {
+      setEditedClientFields(prev => ({
+        ...prev,
+        assignedAdSpecialist: idVal,
+        assignedAdSpecialistName: specialistName
+      }));
+    }
   };
 
   return (
@@ -1895,11 +1930,11 @@ const handleClientFieldChange = (field, value) => {
           <table className="w-full text-left text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Service Category</th>
-                <th className="p-3 font-semibold text-center text-amber-600 dark:text-amber-400">Pending</th>
-                <th className="p-3 font-semibold text-center text-indigo-600 dark:text-indigo-400">In Progress</th>
-                <th className="p-3 font-semibold text-center text-emerald-600 dark:text-emerald-400">Completed</th>
-                <th className="p-3 font-semibold text-center text-gray-700 dark:text-gray-300">Total Requested</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Service Category</th>
+                <th className="p-3 font-bold text-center text-amber-600 dark:text-amber-400">Pending</th>
+                <th className="p-3 font-bold text-center text-indigo-600 dark:text-indigo-400">In Progress</th>
+                <th className="p-3 font-bold text-center text-emerald-600 dark:text-emerald-400">Completed</th>
+                <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Total Requested</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-350 font-medium">
@@ -2018,22 +2053,21 @@ const handleClientFieldChange = (field, value) => {
 
         <div className="overflow-auto max-h-[380px] border border-gray-100 dark:border-slate-800/60 rounded-xl scrollbar-thin">
           <table className="w-full text-left text-sm border-collapse">
-            <thead>
+             <thead>
               <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Date</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Business Name</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp Number</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
-                <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Status</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Name</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
               {filteredCentralClients.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="p-6 text-center text-gray-400 dark:text-gray-555 font-normal">
+                  <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-555 font-normal">
                     No clients found matching the selected filters.
                   </td>
                 </tr>
@@ -2054,9 +2088,6 @@ const handleClientFieldChange = (field, value) => {
                     </td>
                     <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
                       {client.salespersonName || '-'}
-                    </td>
-                    <td className="p-3 font-bold text-gray-900 dark:text-white">
-                      {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
                     </td>
                     <td className="p-3 text-gray-900 dark:text-white font-bold">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -2513,12 +2544,12 @@ const handleClientFieldChange = (field, value) => {
                     <table className="w-full text-left text-sm border-collapse">
                       <thead>
                         <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                          <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client ID</th>
-                          <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Client Name</th>
-                          <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">WhatsApp</th>
-                          <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Workflow Status</th>
-                          <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Assigned To</th>
-                          <th className="p-3 font-semibold text-gray-700 dark:text-gray-300">Created By</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
@@ -2602,6 +2633,14 @@ const handleClientFieldChange = (field, value) => {
                     <span className="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded font-mono">
                       ID: {client.clientId || 'N/A'}
                     </span>
+                    {(() => {
+                      const badge = getPaymentStatus({ ...client, ...editedClientFields });
+                      return (
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${badge.color}`}>
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <p className="text-xs text-gray-400 dark:text-gray-550 mt-1">
                     Created by salesperson <strong className="text-indigo-650 dark:text-indigo-405">{client.salespersonName}</strong> on {new Date(client.createdAt || client.timestamp).toLocaleString()}
@@ -3122,6 +3161,123 @@ const handleClientFieldChange = (field, value) => {
                     </div>
                   </div>
  
+                </div>
+
+                {/* CRM Assignment Control Section */}
+                <div className="bg-indigo-500/5 dark:bg-slate-900/40 p-4 rounded-xl border border-indigo-500/20 dark:border-slate-800/80 space-y-4">
+                  <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                    ⚙️ CRM Technical Assignment Console
+                  </h4>
+                  
+                  {/* Assign to Team */}
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Assign to Team(s)</label>
+                    <div className="flex flex-wrap gap-4 text-xs text-gray-700 dark:text-gray-300 font-semibold mt-1">
+                      {['design', 'developer', 'ads'].map((team) => {
+                        const currentTeams = editedClientFields.assignedTeam ?? client.assignedTeam ?? [];
+                        const isChecked = Array.isArray(currentTeams) 
+                          ? currentTeams.includes(team) 
+                          : currentTeams === team;
+                        
+                        return (
+                          <label key={team} className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                let nextTeams = [];
+                                const baseTeams = Array.isArray(currentTeams) ? currentTeams : (currentTeams ? [currentTeams] : []);
+                                if (e.target.checked) {
+                                  nextTeams = [...baseTeams, team];
+                                } else {
+                                  nextTeams = baseTeams.filter(t => t !== team);
+                                }
+                                handleClientFieldChange('assignedTeam', nextTeams);
+                              }}
+                              className="rounded border-gray-200 dark:border-slate-800 text-indigo-650"
+                            />
+                            <span className="capitalize">{team === 'ads' ? 'Ads Campaign' : team === 'design' ? 'Graphic Design' : 'Developer'}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Assign to Individual Person */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                    {/* Developer Team */}
+                    {(() => {
+                      const currentTeams = editedClientFields.assignedTeam ?? client.assignedTeam ?? [];
+                      const hasDev = Array.isArray(currentTeams) ? currentTeams.includes('developer') : currentTeams === 'developer';
+                      if (!hasDev) return null;
+
+                      const devsList = technicalList.filter(m => m.team === 'developer');
+                      return (
+                        <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-100">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Developer Specialist</label>
+                          <select
+                            value={editedClientFields.assignedDeveloper ?? client.assignedDeveloper ?? ''}
+                            onChange={(e) => handleSpecialistChange('developer', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2.5 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          >
+                            <option value="">Select Developer (Unassigned)</option>
+                            {devsList.map(dev => (
+                              <option key={dev._id || dev.id} value={dev._id || dev.id}>{dev.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Design Team */}
+                    {(() => {
+                      const currentTeams = editedClientFields.assignedTeam ?? client.assignedTeam ?? [];
+                      const hasDesign = Array.isArray(currentTeams) ? currentTeams.includes('design') : currentTeams === 'design';
+                      if (!hasDesign) return null;
+
+                      const designersList = technicalList.filter(m => m.team === 'design');
+                      return (
+                        <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-100">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Designer Specialist</label>
+                          <select
+                            value={editedClientFields.assignedDesigner ?? client.assignedDesigner ?? ''}
+                            onChange={(e) => handleSpecialistChange('design', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2.5 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          >
+                            <option value="">Select Designer (Unassigned)</option>
+                            {designersList.map(designer => (
+                              <option key={designer._id || designer.id} value={designer._id || designer.id}>{designer.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Ads Team */}
+                    {(() => {
+                      const currentTeams = editedClientFields.assignedTeam ?? client.assignedTeam ?? [];
+                      const hasAds = Array.isArray(currentTeams) ? currentTeams.includes('ads') : currentTeams === 'ads';
+                      if (!hasAds) return null;
+
+                      const adsList = technicalList.filter(m => m.team === 'ads');
+                      return (
+                        <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-100">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Ads Specialist</label>
+                          <select
+                            value={editedClientFields.assignedAdSpecialist ?? client.assignedAdSpecialist ?? ''}
+                            onChange={(e) => handleSpecialistChange('ads', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2.5 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          >
+                            <option value="">Select Ads Specialist (Unassigned)</option>
+                            {adsList.map(ads => (
+                              <option key={ads._id || ads.id} value={ads._id || ads.id}>{ads.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
                 </div>
 
                 {/* Footer Buttons */}
