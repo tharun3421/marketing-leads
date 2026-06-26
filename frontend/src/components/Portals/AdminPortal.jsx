@@ -73,7 +73,8 @@ const getStatusLabel = (status, team) => {
   return status || 'Non-Allocated';
 };
 
-const checkDeadlineAlert = (deadlineStr) => {
+const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
+  if (workflowStatus === 'Completed') return null;
   if (!deadlineStr) return null;
   const deadlineDate = new Date(deadlineStr);
   if (isNaN(deadlineDate.getTime())) return null;
@@ -87,10 +88,12 @@ const checkDeadlineAlert = (deadlineStr) => {
   const diffTime = deadline - today;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  if (diffDays < 0) {
-    return { type: 'overdue', label: 'Due Date Reminder', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
+  if (diffDays === 0) {
+    return { type: 'today', label: 'Due Today', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20 font-bold' };
+  } else if (diffDays < 0) {
+    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20 font-bold' };
   } else if (diffDays <= 3) {
-    return { type: 'approaching', label: 'Due Date Reminder', color: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
+    return { type: 'approaching', label: 'Due Date Reminder', color: 'bg-amber-500/10 text-amber-600 border border-amber-500/20 font-bold' };
   }
   return null;
 };
@@ -98,17 +101,17 @@ const checkDeadlineAlert = (deadlineStr) => {
 const getPaymentStatus = (lead) => {
   if (lead.paymentStatus) {
     if (lead.paymentStatus === 'Paid') {
-      return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+      return { label: 'Fully Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
     }
     if (lead.paymentStatus === 'Partial') {
-      return { label: 'Partial', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
+      return { label: 'Partially Paid', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
     }
     return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
   }
   const plan = Number(lead.planAmount || 0);
   const advance = Number(lead.advanceAmount || 0);
-  if (plan > 0 && advance >= plan) return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
-  if (advance > 0 && advance < plan) return { label: 'Partial', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
+  if (plan > 0 && advance >= plan) return { label: 'Fully Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+  if (advance > 0 && advance < plan) return { label: 'Partially Paid', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
   return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
 };
 
@@ -171,6 +174,8 @@ export default function AdminPortal({
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [clientStatusFilter, setClientStatusFilter] = useState('All');
   const [clientTeamFilter, setClientTeamFilter] = useState('All');
+  const [clientCreatedByFilter, setClientCreatedByFilter] = useState('All');
+  const [clientAssignedToFilter, setClientAssignedToFilter] = useState('All');
   const [clientStartDateFilter, setClientStartDateFilter] = useState('');
   const [clientEndDateFilter, setClientEndDateFilter] = useState('');
 
@@ -297,6 +302,26 @@ export default function AdminPortal({
         }
       }
 
+      if (clientCreatedByFilter !== 'All' && lead.salespersonName !== clientCreatedByFilter) {
+        return false;
+      }
+
+      if (clientAssignedToFilter !== 'All') {
+        if (clientAssignedToFilter === 'Unassigned') {
+          if (lead.assignedDeveloper || lead.assignedDesigner || lead.assignedAdSpecialist || lead.assignedTo) {
+            return false;
+          }
+        } else {
+          const devId = (lead.assignedDeveloper?._id || lead.assignedDeveloper || '').toString();
+          const designId = (lead.assignedDesigner?._id || lead.assignedDesigner || '').toString();
+          const adsId = (lead.assignedAdSpecialist?._id || lead.assignedAdSpecialist || '').toString();
+          const assignedToId = (lead.assignedTo?._id || lead.assignedTo || '').toString();
+          if (devId !== clientAssignedToFilter && designId !== clientAssignedToFilter && adsId !== clientAssignedToFilter && assignedToId !== clientAssignedToFilter) {
+            return false;
+          }
+        }
+      }
+
       if (clientStartDateFilter) {
         const start = new Date(clientStartDateFilter);
         start.setHours(0, 0, 0, 0);
@@ -312,7 +337,7 @@ export default function AdminPortal({
 
       return true;
     });
-  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientStartDateFilter, clientEndDateFilter]);
+  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientCreatedByFilter, clientAssignedToFilter, clientStartDateFilter, clientEndDateFilter]);
 
 
 
@@ -911,7 +936,7 @@ export default function AdminPortal({
                             );
                           })()}
                           {(() => {
-                            const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                            const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
                             if (deadlineAlert) {
                               return (
                                 <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
@@ -1961,15 +1986,15 @@ const handleClientFieldChange = (field, value) => {
       </Card>
 
       {/* Central Clients Section */}
-      <Card title="Clients" subtitle="Central client management roster synchronized in real-time across portals">
+      <Card title="Client Work flow" subtitle="Central client management roster synchronized in real-time across portals">
         <div className="space-y-4 mb-6">
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col md:flex-row flex-wrap gap-4">
             {/* Search */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+            <div className="relative flex-1 min-w-[280px]">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-555" />
               <input
                 type="text"
-                placeholder="Search by client ID, name, or WhatsApp number..."
+                placeholder="Search by client ID, name, or business number..."
                 value={clientSearchQuery}
                 onChange={(e) => setClientSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
@@ -2005,6 +2030,37 @@ const handleClientFieldChange = (field, value) => {
                 <option value="all">All Teams</option>
               </select>
             </div>
+
+            {/* Created By Filter */}
+            <div className="w-full md:w-44">
+              <select
+                value={clientCreatedByFilter}
+                onChange={(e) => setClientCreatedByFilter(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+              >
+                <option value="All">All Creators</option>
+                {salespersonsList.map(sp => (
+                  <option key={sp._id || sp.id} value={sp.name}>{sp.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Assigned To Filter */}
+            <div className="w-full md:w-44">
+              <select
+                value={clientAssignedToFilter}
+                onChange={(e) => setClientAssignedToFilter(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+              >
+                <option value="All">All Assignees</option>
+                <option value="Unassigned">Unassigned</option>
+                {technicalList.map(tech => (
+                  <option key={tech._id || tech.id} value={tech._id || tech.id}>
+                    {tech.name} ({tech.team === 'design' ? 'Design' : tech.team === 'developer' ? 'Dev' : 'Ads'})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
@@ -2032,7 +2088,7 @@ const handleClientFieldChange = (field, value) => {
 
             <div className="flex gap-2 justify-end">
               {/* Clear Filters */}
-              {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
+              {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientCreatedByFilter !== 'All' || clientAssignedToFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -2040,6 +2096,8 @@ const handleClientFieldChange = (field, value) => {
                     setClientSearchQuery('');
                     setClientStatusFilter('All');
                     setClientTeamFilter('All');
+                    setClientCreatedByFilter('All');
+                    setClientAssignedToFilter('All');
                     setClientStartDateFilter('');
                     setClientEndDateFilter('');
                   }}
@@ -2057,6 +2115,7 @@ const handleClientFieldChange = (field, value) => {
               <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
                 <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
                 <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
+                <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Date</th>
                 <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
                 <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Name</th>
                 <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
@@ -2067,7 +2126,7 @@ const handleClientFieldChange = (field, value) => {
             <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
               {filteredCentralClients.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-555 font-normal">
+                  <td colSpan="8" className="p-6 text-center text-gray-400 dark:text-gray-555 font-normal">
                     No clients found matching the selected filters.
                   </td>
                 </tr>
@@ -2089,6 +2148,9 @@ const handleClientFieldChange = (field, value) => {
                     <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
                       {client.salespersonName || '-'}
                     </td>
+                    <td className="p-3 font-bold text-gray-900 dark:text-white">
+                      {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
+                    </td>
                     <td className="p-3 text-gray-900 dark:text-white font-bold">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span>{client.clientName}</span>
@@ -2101,7 +2163,7 @@ const handleClientFieldChange = (field, value) => {
                           );
                         })()}
                         {(() => {
-                          const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
+                          const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline, client.workflowStatus);
                           if (deadlineAlert) {
                             return (
                               <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
@@ -2853,8 +2915,8 @@ const handleClientFieldChange = (field, value) => {
                             className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-bold"
                           >
                             <option value="Unpaid">Unpaid</option>
-                            <option value="Partial">Partial</option>
-                            <option value="Paid">Paid</option>
+                            <option value="Partial">Partially Paid</option>
+                            <option value="Paid">Fully Paid</option>
                           </select>
                         </div>
                       </div>

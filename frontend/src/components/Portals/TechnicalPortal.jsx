@@ -66,7 +66,8 @@ const getStatusLabel = (status, team) => {
   return status || 'Non-Allocated';
 };
 
-const checkDeadlineAlert = (deadlineStr) => {
+const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
+  if (workflowStatus === 'Completed') return null;
   if (!deadlineStr) return null;
   const deadlineDate = new Date(deadlineStr);
   if (isNaN(deadlineDate.getTime())) return null;
@@ -80,10 +81,12 @@ const checkDeadlineAlert = (deadlineStr) => {
   const diffTime = deadline - today;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  if (diffDays < 0) {
-    return { type: 'overdue', label: 'Due Date Reminder', color: 'bg-rose-500/10 text-rose-600 border-rose-500/20 font-bold' };
+  if (diffDays === 0) {
+    return { type: 'today', label: 'Due Today', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20 font-bold' };
+  } else if (diffDays < 0) {
+    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20 font-bold' };
   } else if (diffDays <= 3) {
-    return { type: 'approaching', label: 'Due Date Reminder', color: 'bg-amber-500/10 text-amber-650 border-amber-550/25 font-bold' };
+    return { type: 'approaching', label: 'Due Date Reminder', color: 'bg-amber-500/10 text-amber-655 dark:text-amber-400 border border-amber-500/20 font-bold' };
   }
   return null;
 };
@@ -92,18 +95,18 @@ const getPaymentStatus = (lead) => {
   // If the backend pre-calculated and sent lead.paymentStatus, use it!
   if (lead.paymentStatus) {
     if (lead.paymentStatus === 'Paid') {
-      return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+      return { label: 'Fully Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
     }
     if (lead.paymentStatus === 'Partial') {
-      return { label: 'Partial', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
+      return { label: 'Partially Paid', color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' };
     }
     return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
   }
   // Fallback to local calculation if fields exist
   const plan = Number(lead.planAmount || 0);
   const advance = Number(lead.advanceAmount || 0);
-  if (plan > 0 && advance >= plan) return { label: 'Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
-  if (advance > 0 && advance < plan) return { label: 'Partial', color: 'bg-amber-500/10 text-amber-650 border-amber-550/25 font-bold border-amber-500/20' };
+  if (plan > 0 && advance >= plan) return { label: 'Fully Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
+  if (advance > 0 && advance < plan) return { label: 'Partially Paid', color: 'bg-amber-500/10 text-amber-650 border border-amber-550/25 font-bold border-amber-500/20' };
   return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
 };
 
@@ -178,6 +181,15 @@ export default function TechnicalPortal({
 
   const selectedLead = leads.find(l => (l._id || l.id) === selectedLeadId);
 
+  const teamAssignee = user?.team === 'developer'
+    ? selectedLead?.assignedDeveloper
+    : user?.team === 'design'
+      ? selectedLead?.assignedDesigner
+      : user?.team === 'ads'
+        ? selectedLead?.assignedAdSpecialist
+        : selectedLead?.assignedTo;
+  const teamAssigneeId = (teamAssignee?._id || teamAssignee || '').toString();
+
   useEffect(() => {
     if (selectedLead) {
       setPostersStatus(selectedLead.postersStatus || 'Pending');
@@ -198,7 +210,7 @@ export default function TechnicalPortal({
       setWebsiteStatus('Pending');
       setEditWorkflowStatus('Allocated');
     }
-  }, [selectedLeadId, leads]);
+  }, [selectedLeadId, teamAssigneeId]);
 
   const handleSelectLead = (leadId) => {
     setSelectedLeadId(leadId);
@@ -643,7 +655,7 @@ export default function TechnicalPortal({
                 );
               })()}
               {(() => {
-                const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
                 if (deadlineAlert) {
                   return (
                     <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
@@ -1397,7 +1409,7 @@ export default function TechnicalPortal({
                                 <span className="flex items-center gap-1.5">
                                   Deadline: <strong className="text-rose-500 font-bold">{lead.deliveryDeadline || '—'}</strong>
                                   {(() => {
-                                    const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline);
+                                    const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
                                     if (deadlineAlert) {
                                       return (
                                         <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
@@ -1960,17 +1972,17 @@ export default function TechnicalPortal({
                               <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Delivery Deadline</span>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
-                                {(() => {
-                                  const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
-                                  if (deadlineAlert) {
-                                    return (
-                                      <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                        {deadlineAlert.label}
-                                      </span>
-                                    );
-                                  }
-                                  return null;
-                                })()}
+                                 {(() => {
+                                   const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline, client.workflowStatus);
+                                   if (deadlineAlert) {
+                                     return (
+                                       <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                         {deadlineAlert.label}
+                                       </span>
+                                     );
+                                   }
+                                   return null;
+                                 })()}
                               </div>
                             </div>
                           </>
