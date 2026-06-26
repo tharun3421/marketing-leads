@@ -27,7 +27,10 @@ import {
   Eye,
   EyeOff,
   Check,
-  ChevronDown
+  ChevronDown,
+  LayoutDashboard,
+  Menu,
+  ListChecks
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -283,6 +286,8 @@ export default function SalesPortal({
   const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
   
   const [showNotifications, setShowNotifications] = useState(false);
+  const [activeSection, setActiveSection] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
 
   // Central Clients Management filter states
@@ -853,22 +858,21 @@ export default function SalesPortal({
   });
 
   const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    return (
+  <div className="space-y-6">
+    
+    {/* Sales Header */}
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/50 dark:border-slate-800/50 pb-5 relative z-30">
+      <div>
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+          <Users className="w-5 h-5 text-indigo-500 animate-pulse-ring rounded-full" /> Representative workspace
+        </h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Active Identity: <strong className="text-gray-900 dark:text-slate-100 font-semibold">{user ? user.name : 'Salesperson'}</strong>
+        </p>
+      </div>
 
-  return (
-    <div className="space-y-6">
-      
-      {/* Sales Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200/50 dark:border-slate-800/50 pb-5 relative z-30">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-500 animate-pulse-ring rounded-full" /> Representative workspace
-          </h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Active Identity: <strong className="text-gray-900 dark:text-slate-100 font-semibold">{user ? user.name : 'Salesperson'}</strong>
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5">
           {/* Notification Bell */}
           <div className="relative">
             <button

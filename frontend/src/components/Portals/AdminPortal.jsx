@@ -78,22 +78,43 @@ const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
   if (!deadlineStr) return null;
   const deadlineDate = new Date(deadlineStr);
   if (isNaN(deadlineDate.getTime())) return null;
-  
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const deadline = new Date(deadlineDate);
   deadline.setHours(0, 0, 0, 0);
-  
+
   const diffTime = deadline - today;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
+
+  // Format deadline date as DD/MM/YYYY for display
+  const formattedDate = deadline.toLocaleDateString('en-GB');
+
   if (diffDays === 0) {
-    return { type: 'today', label: 'Due Today', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20 font-bold' };
+    return {
+      type: 'today',
+      label: 'Due Today',
+      date: null,
+      color: 'text-rose-600 dark:text-rose-400 font-bold',
+      dotColor: 'bg-rose-500'
+    };
   } else if (diffDays < 0) {
-    return { type: 'overdue', label: 'Overdue', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20 font-bold' };
+    return {
+      type: 'overdue',
+      label: 'Due Day',
+      date: formattedDate,
+      color: 'text-rose-600 dark:text-rose-400 font-bold',
+      dotColor: 'bg-rose-500'
+    };
   } else if (diffDays <= 3) {
-    return { type: 'approaching', label: 'Due Date Reminder', color: 'bg-amber-500/10 text-amber-600 border border-amber-500/20 font-bold' };
+    return {
+      type: 'approaching',
+      label: 'Due Soon',
+      date: formattedDate,
+      color: 'text-amber-600 dark:text-amber-400 font-bold',
+      dotColor: 'bg-amber-500'
+    };
   }
   return null;
 };
@@ -936,16 +957,24 @@ export default function AdminPortal({
                             );
                           })()}
                           {(() => {
-                            const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
-                            if (deadlineAlert) {
-                              return (
-                                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                  {deadlineAlert.label}
-                                </span>
-                              );
-                            }
-                            return null;
-                          })()}
+  const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
+  if (deadlineAlert) {
+    return (
+      <span className="flex flex-col gap-0.5 mt-0.5">
+        <span className="inline-flex items-center gap-1 text-[9px] font-extrabold">
+          <span className={`w-1.5 h-1.5 rounded-full ${deadlineAlert.dotColor}`} />
+          <span className={deadlineAlert.color}>{deadlineAlert.label}</span>
+        </span>
+        {deadlineAlert.date && (
+          <span className={`text-[9px] ${deadlineAlert.color} opacity-80 pl-2.5`}>
+            {deadlineAlert.date}
+          </span>
+        )}
+      </span>
+    );
+  }
+  return null;
+})()}
                         </div>
                         <div className="text-xs text-gray-400 dark:text-gray-555">{lead.email}</div>
                       </td>
@@ -2163,16 +2192,24 @@ const handleClientFieldChange = (field, value) => {
                           );
                         })()}
                         {(() => {
-                          const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline, client.workflowStatus);
-                          if (deadlineAlert) {
-                            return (
-                              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                {deadlineAlert.label}
-                              </span>
-                            );
-                          }
-                          return null;
-                        })()}
+  const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline, client.workflowStatus);
+  if (deadlineAlert) {
+    return (
+      <span className="flex flex-col gap-0.5 mt-0.5">
+        <span className="inline-flex items-center gap-1 text-[9px] font-extrabold">
+          <span className={`w-1.5 h-1.5 rounded-full ${deadlineAlert.dotColor}`} />
+          <span className={deadlineAlert.color}>{deadlineAlert.label}</span>
+        </span>
+        {deadlineAlert.date && (
+          <span className={`text-[9px] ${deadlineAlert.color} opacity-80 pl-2.5`}>
+            {deadlineAlert.date}
+          </span>
+        )}
+      </span>
+    );
+  }
+  return null;
+})()}
                       </div>
                     </td>
                     <td className="p-3 text-gray-900 dark:text-white font-bold">
@@ -2181,8 +2218,8 @@ const handleClientFieldChange = (field, value) => {
                     <td className="p-3 font-mono">{client.mobileNumber}</td>
                     <td className="p-3">
                       {client.assignedToName ? (
-                        <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                          👤 {client.assignedToName}
+                        <span className="bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ">
+                          {client.assignedToName}
                         </span>
                       ) : (
                         <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
@@ -2213,7 +2250,7 @@ const handleClientFieldChange = (field, value) => {
 
       {/* Main Roster Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card title="Salesforce Directory" subtitle="Inspect client brief portfolios compiled by representatives">
+        <Card title="Sales Team Directory" subtitle="Inspect client brief portfolios compiled by representatives">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-3 border-b border-gray-100 dark:border-slate-800/40 pb-4">
             <span className="text-xs text-gray-400 font-medium">Select representative to view active portfolio</span>
             <Button
