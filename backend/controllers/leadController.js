@@ -58,6 +58,75 @@ const sanitizeNumberFields = (body) => {
 };
 
 // Helper to redact client details for technical department specialists
+// const redactLeadForTechnicalUser = (lead, team) => {
+//   const leadObj = lead.toObject ? lead.toObject() : lead;
+
+//   // Always redact financial details for technical users
+//   delete leadObj.planAmount;
+//   delete leadObj.advanceAmount;
+//   delete leadObj.pendingAmount;
+
+//   if (team === 'developer') {
+//     // Developers only see website-related requirements and data
+//     delete leadObj.postersRequired;
+//     delete leadObj.postersPending;
+//     delete leadObj.postersStatus;
+//     delete leadObj.videosRequired;
+//     delete leadObj.videosPending;
+//     delete leadObj.videosStatus;
+//     delete leadObj.brandColors;
+
+//     delete leadObj.adsRequired;
+//     delete leadObj.adsPending;
+//     delete leadObj.adsStatus;
+//     delete leadObj.adBudget;
+//     delete leadObj.adBudgetPerDay;
+//     delete leadObj.facebookId;
+//     delete leadObj.facebookPassword;
+//     delete leadObj.instagramId;
+//     delete leadObj.instagramPassword;
+//     delete leadObj.platforms;
+//   } else if (team === 'design') {
+//     // Designing Team only sees design-related requirements
+//     delete leadObj.websiteRequired;
+//     delete leadObj.websiteType;
+//     delete leadObj.websiteStatus;
+//     delete leadObj.websitePending;
+//     delete leadObj.websiteUrl;
+
+//     delete leadObj.adsRequired;
+//     delete leadObj.adsPending;
+//     delete leadObj.adsStatus;
+//     delete leadObj.adBudget;
+//     delete leadObj.adBudgetPerDay;
+//     delete leadObj.facebookId;
+//     delete leadObj.facebookPassword;
+//     delete leadObj.instagramId;
+//     delete leadObj.instagramPassword;
+//     delete leadObj.platforms;
+//   } else if (team === 'ads') {
+//     // Ads Team only sees campaign-related requirements and advertising details
+//     delete leadObj.websiteRequired;
+//     delete leadObj.websiteType;
+//     delete leadObj.websiteStatus;
+//     delete leadObj.websitePending;
+//     delete leadObj.websiteUrl;
+
+//     delete leadObj.postersRequired;
+//     delete leadObj.postersPending;
+//     delete leadObj.postersStatus;
+//     delete leadObj.videosRequired;
+//     delete leadObj.videosPending;
+//     delete leadObj.videosStatus;
+//     delete leadObj.brandColors;
+
+//     // Redact project dates and total budget for Ads Team
+//   delete leadObj.adBudget;
+//   }
+
+//   return leadObj;
+// };
+
 const redactLeadForTechnicalUser = (lead, team) => {
   const leadObj = lead.toObject ? lead.toObject() : lead;
 
@@ -67,7 +136,6 @@ const redactLeadForTechnicalUser = (lead, team) => {
   delete leadObj.pendingAmount;
 
   if (team === 'developer') {
-    // Developers only see website-related requirements and data
     delete leadObj.postersRequired;
     delete leadObj.postersPending;
     delete leadObj.postersStatus;
@@ -75,7 +143,6 @@ const redactLeadForTechnicalUser = (lead, team) => {
     delete leadObj.videosPending;
     delete leadObj.videosStatus;
     delete leadObj.brandColors;
-
     delete leadObj.adsRequired;
     delete leadObj.adsPending;
     delete leadObj.adsStatus;
@@ -87,13 +154,11 @@ const redactLeadForTechnicalUser = (lead, team) => {
     delete leadObj.instagramPassword;
     delete leadObj.platforms;
   } else if (team === 'design') {
-    // Designing Team only sees design-related requirements
     delete leadObj.websiteRequired;
     delete leadObj.websiteType;
     delete leadObj.websiteStatus;
     delete leadObj.websitePending;
     delete leadObj.websiteUrl;
-
     delete leadObj.adsRequired;
     delete leadObj.adsPending;
     delete leadObj.adsStatus;
@@ -105,13 +170,11 @@ const redactLeadForTechnicalUser = (lead, team) => {
     delete leadObj.instagramPassword;
     delete leadObj.platforms;
   } else if (team === 'ads') {
-    // Ads Team only sees campaign-related requirements and advertising details
     delete leadObj.websiteRequired;
     delete leadObj.websiteType;
     delete leadObj.websiteStatus;
     delete leadObj.websitePending;
     delete leadObj.websiteUrl;
-
     delete leadObj.postersRequired;
     delete leadObj.postersPending;
     delete leadObj.postersStatus;
@@ -119,11 +182,8 @@ const redactLeadForTechnicalUser = (lead, team) => {
     delete leadObj.videosPending;
     delete leadObj.videosStatus;
     delete leadObj.brandColors;
-
-    // Redact project dates and total budget for Ads Team
-    delete leadObj.startDate;
-    delete leadObj.deliveryDeadline;
     delete leadObj.adBudget;
+    // platforms is intentionally kept so ads team can see GMB, SEO etc.
   }
 
   return leadObj;
@@ -437,12 +497,29 @@ const createLead = async (req, res) => {
     }
     const clientId = 'LDC' + String(nextNum).padStart(4, '0');
 
+    // const leadData = {
+    //   ...req.body,
+    //   clientId,
+    //   salesperson: req.user.id,
+    //   salespersonName: req.user.name,
+    //   status: 'Draft'
+    // };
+
+    const plan = Number(req.body.planAmount || 0);
+    const advance = Number(req.body.advanceAmount || 0);
+    const pending = Number(req.body.pendingAmount || 0);
+    let autoPaymentStatus = 'Unpaid';
+    if (plan > 0 && advance >= plan) autoPaymentStatus = 'Paid';
+    else if (advance > 0 && advance < plan) autoPaymentStatus = 'Partial';
+    else if (plan > 0 && pending === 0 && advance === 0) autoPaymentStatus = 'Paid';
+
     const leadData = {
       ...req.body,
       clientId,
       salesperson: req.user.id,
       salespersonName: req.user.name,
-      status: 'Draft'
+      status: 'Draft',
+      paymentStatus: autoPaymentStatus
     };
 
     // Calculate workflow status dynamically on creation
@@ -565,8 +642,28 @@ const updateLead = async (req, res) => {
     delete updatedData.salespersonName;
 
     // Only Admin can update/edit the payment status
+    // if (req.user.role !== 'admin') {
+    //   delete updatedData.paymentStatus;
+    // }
+
+    // Auto-calculate paymentStatus from amounts for all roles
+    const plan = Number(updatedData.planAmount ?? lead.planAmount ?? 0);
+    const advance = Number(updatedData.advanceAmount ?? lead.advanceAmount ?? 0);
+    const pending = Number(updatedData.pendingAmount ?? lead.pendingAmount ?? 0);
+    let autoPaymentStatus = 'Unpaid';
+    if (plan > 0 && advance >= plan) autoPaymentStatus = 'Paid';
+    else if (advance > 0 && advance < plan) autoPaymentStatus = 'Partial';
+    else if (plan > 0 && pending === 0 && advance === 0) autoPaymentStatus = 'Paid';
+
+    // Admin can manually override; others get auto-calculated
     if (req.user.role !== 'admin') {
-      delete updatedData.paymentStatus;
+      updatedData.paymentStatus = autoPaymentStatus;
+    } else {
+      // Admin: if they changed amounts, recalculate; otherwise keep their manual status
+      const amountsChanged = updatedData.planAmount !== undefined || updatedData.advanceAmount !== undefined;
+      if (amountsChanged) {
+        updatedData.paymentStatus = autoPaymentStatus;
+      }
     }
 
     // Intercept technical user claim/accept actions
@@ -846,8 +943,17 @@ const addLeadMessage = async (req, res) => {
   if (!category || !message) {
     return res.status(400).json({ message: 'Category and message text are required' });
   }
-  if (!['Work Notes', 'Customer Notes'].includes(category)) {
+  // if (!['Work Notes', 'Customer Notes'].includes(category)) {
+  //   return res.status(400).json({ message: 'Invalid category' });
+  // }
+
+  if (!['Work Notes', 'Customer Notes', 'Sales Notes'].includes(category)) {
     return res.status(400).json({ message: 'Invalid category' });
+  }
+
+  // Sales Notes are only accessible to admin and salesperson
+  if (category === 'Sales Notes' && req.user.role === 'technical') {
+    return res.status(403).json({ message: 'Access denied: Sales Notes are restricted to sales team and admin only' });
   }
 
   try {
@@ -860,20 +966,20 @@ const addLeadMessage = async (req, res) => {
     const isCreator = lead.salesperson && lead.salesperson.toString() === req.user.id.toString();
     const isTeamMember = req.user.role === 'technical' && hasTeam(lead, req.user.team);
 
-    let isAssignee = false;
-    if (req.user.role === 'technical') {
-      if (req.user.team === 'developer') {
-        isAssignee = lead.assignedDeveloper && lead.assignedDeveloper.toString() === req.user.id.toString();
-      } else if (req.user.team === 'design') {
-        isAssignee = lead.assignedDesigner && lead.assignedDesigner.toString() === req.user.id.toString();
-      } else if (req.user.team === 'ads') {
-        isAssignee = lead.assignedAdSpecialist && lead.assignedAdSpecialist.toString() === req.user.id.toString();
-      }
-    }
+    // let isAssignee = false;
+    // if (req.user.role === 'technical') {
+    //   if (req.user.team === 'developer') {
+    //     isAssignee = lead.assignedDeveloper && lead.assignedDeveloper.toString() === req.user.id.toString();
+    //   } else if (req.user.team === 'design') {
+    //     isAssignee = lead.assignedDesigner && lead.assignedDesigner.toString() === req.user.id.toString();
+    //   } else if (req.user.team === 'ads') {
+    //     isAssignee = lead.assignedAdSpecialist && lead.assignedAdSpecialist.toString() === req.user.id.toString();
+    //   }
+    // }
 
-    if (!isAdmin && !isCreator && !isTeamMember && !isAssignee) {
-      return res.status(403).json({ message: 'Access denied: You do not have access to this client brief' });
-    }
+    // if (!isAdmin && !isCreator && !isTeamMember && !isAssignee) {
+    //   return res.status(403).json({ message: 'Access denied: You do not have access to this client brief' });
+    // }
 
     const roleLabel = req.user.role === 'admin' 
       ? 'Admin' 

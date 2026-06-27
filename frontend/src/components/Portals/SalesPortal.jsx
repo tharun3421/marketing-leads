@@ -1157,7 +1157,7 @@ export default function SalesPortal({
                               {client.salespersonName || '—'}
                             </td>
                             <td className="p-3 text-gray-900 dark:text-white font-bold">
-                              <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap"> 
                                 <span>{client.clientName}</span>
                                 {/* {(() => {
                                   const badge = getPaymentStatus(client);
@@ -1166,8 +1166,8 @@ export default function SalesPortal({
                                       {badge.label}
                                     </span>
                                   );
-                                })()} */}
-                                {/* {(() => {
+                                })()}
+                                {(() => {
                                   const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
                                   if (deadlineAlert) {
                                     return (
@@ -1334,14 +1334,6 @@ export default function SalesPortal({
                             </div>
                             <h4 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap truncate">
                               <span>{lead.clientName}</span>
-                              {(() => {
-                                const badge = getPaymentStatus(lead);
-                                return (
-                                  <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${badge.color}`}>
-                                    {badge.label}
-                                  </span>
-                                );
-                              })()}
                             </h4>
                             <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
                               {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
@@ -1398,7 +1390,7 @@ export default function SalesPortal({
                                 </button>
                               )}
                               {lead.clientName}
-                              {(() => {
+                              {/* {(() => {
                                 const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
                                 if (payStatus === 'Partial') {
                                   return (
@@ -1415,7 +1407,36 @@ export default function SalesPortal({
                                   );
                                 }
                                 return null;
-                              })()}
+                              })()} */}
+
+                              {(() => {
+  const payStatus = lead.paymentStatus || (
+    Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0)
+      ? 'Paid'
+      : Number(lead.advanceAmount || 0) > 0
+        ? 'Partial'
+        : 'Unpaid'
+  );
+  if (payStatus === 'Paid') {
+    return (
+      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">
+        Full Payment Done
+      </span>
+    );
+  }
+  if (payStatus === 'Partial') {
+    return (
+      <span className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-2">
+        Partial Payment Done
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 ml-2">
+      Payment Unpaid
+    </span>
+  );
+})()}
                             </h3>
                             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
                               {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}

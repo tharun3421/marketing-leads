@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Send, CornerDownRight, X, MessageSquare, Clock, User, Layers } from 'lucide-react';
+import { Send, CornerDownRight, X, MessageSquare, Clock, User, Layers, Briefcase } from 'lucide-react';
 import Button from './Button';
 
 export default function ClientChat({ leadId, layout = 'grid' }) {
@@ -11,11 +11,16 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
   const [workInput, setWorkInput] = useState('');
   const [replyingToWork, setReplyingToWork] = useState(null);
   const [isSendingWork, setIsSendingWork] = useState(false);
-  
+
   // States for Customer Notes (Client Notes Card)
   const [clientInput, setClientInput] = useState('');
   const [replyingToClient, setReplyingToClient] = useState(null);
   const [isSendingClient, setIsSendingClient] = useState(false);
+
+  // States for Sales Notes
+  const [salesInput, setSalesInput] = useState('');
+  const [replyingToSales, setReplyingToSales] = useState(null);
+  const [isSendingSales, setIsSendingSales] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -30,6 +35,12 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
   const clientEndRef = useRef(null);
   const clientUserSentRef = useRef(false);
   const prevClientLengthRef = useRef(0);
+
+  // Refs for Sales Notes scrolling
+  const salesScrollContainerRef = useRef(null);
+  const salesEndRef = useRef(null);
+  const salesUserSentRef = useRef(false);
+  const prevSalesLengthRef = useRef(0);
 
   // Poll latest client communications every 3 seconds
   useEffect(() => {
@@ -67,14 +78,17 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
       clearInterval(interval);
       setReplyingToWork(null);
       setReplyingToClient(null);
+      setReplyingToSales(null);
       setWorkInput('');
       setClientInput('');
+      setSalesInput('');
     };
   }, [leadId, authFetch]);
 
   // Separate messages by category
   const workMessages = localMessages.filter(msg => msg.category === 'Work Notes');
   const clientMessages = localMessages.filter(msg => msg.category === 'Customer Notes');
+  const salesMessages = localMessages.filter(msg => msg.category === 'Sales Notes');
 
   // Auto-scroll for Work Notes Card
   useEffect(() => {
@@ -89,10 +103,7 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
       const behavior = workUserSentRef.current ? 'smooth' : 'auto';
       setTimeout(() => {
         if (container) {
-          container.scrollTo({
-            top: container.scrollHeight,
-            behavior
-          });
+          container.scrollTo({ top: container.scrollHeight, behavior });
         }
       }, 50);
       workUserSentRef.current = false;
@@ -114,10 +125,7 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
       const behavior = clientUserSentRef.current ? 'smooth' : 'auto';
       setTimeout(() => {
         if (container) {
-          container.scrollTo({
-            top: container.scrollHeight,
-            behavior
-          });
+          container.scrollTo({ top: container.scrollHeight, behavior });
         }
       }, 50);
       clientUserSentRef.current = false;
@@ -125,6 +133,28 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
 
     prevClientLengthRef.current = currentLength;
   }, [clientMessages]);
+
+  // Auto-scroll for Sales Notes Card
+  useEffect(() => {
+    if (!salesEndRef.current || !salesScrollContainerRef.current) return;
+
+    const container = salesScrollContainerRef.current;
+    const currentLength = salesMessages.length;
+    const hasNewMessage = currentLength > prevSalesLengthRef.current;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+
+    if (salesUserSentRef.current || prevSalesLengthRef.current === 0 || (hasNewMessage && isNearBottom)) {
+      const behavior = salesUserSentRef.current ? 'smooth' : 'auto';
+      setTimeout(() => {
+        if (container) {
+          container.scrollTo({ top: container.scrollHeight, behavior });
+        }
+      }, 50);
+      salesUserSentRef.current = false;
+    }
+
+    prevSalesLengthRef.current = currentLength;
+  }, [salesMessages]);
 
   const handleSendMessage = async (category, text, replyingTo, setInputText, setReplyingTo, setIsSending, userSentRef) => {
     const cleanText = text.trim();
@@ -343,6 +373,8 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
     ? 'flex flex-col gap-4 mt-2 w-full'
     : 'grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 w-full';
 
+  const isSalesOrAdmin = user?.role === 'admin' || user?.role === 'salesperson';
+
   return (
     <div className={containerClass}>
       {/* Workflow Card */}
@@ -381,6 +413,25 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
         User,
         'Customer Facing',
         'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10'
+      )}
+
+      {/* Sales Notes Card — only visible to admin and salesperson */}
+      {isSalesOrAdmin && renderChatCard(
+        'Sales Notes',
+        'Sales Notes',
+        salesMessages,
+        salesInput,
+        setSalesInput,
+        replyingToSales,
+        setReplyingToSales,
+        isSendingSales,
+        setIsSendingSales,
+        salesScrollContainerRef,
+        salesEndRef,
+        salesUserSentRef,
+        Briefcase,
+        'Sales & Admin',
+        'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/10'
       )}
     </div>
   );

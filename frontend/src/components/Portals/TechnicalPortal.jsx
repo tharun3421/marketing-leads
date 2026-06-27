@@ -686,14 +686,6 @@ export default function TechnicalPortal({
           </div>
           <h4 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap truncate">
             <span>{lead.clientName}</span>
-            {(() => {
-              const badge = getPaymentStatus(lead);
-              return (
-                <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${badge.color}`}>
-                  {badge.label}
-                </span>
-              );
-            })()}
           </h4>
           <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
             {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
@@ -1306,7 +1298,7 @@ export default function TechnicalPortal({
                               </button>
                             )}
                             {lead.clientName}
-                            {(() => {
+                            {/* {(() => {
                               const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
                               if (payStatus === 'Partial') {
                                 return (
@@ -1323,7 +1315,30 @@ export default function TechnicalPortal({
                                 );
                               }
                               return null;
-                            })()}
+                            })()} */}
+
+                            {(() => {
+  const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
+  if (payStatus === 'Paid') {
+    return (
+      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">
+        Full Payment Done
+      </span>
+    );
+  }
+  if (payStatus === 'Partial') {
+    return (
+      <span className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-2">
+        Partial Payment Done
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 ml-2">
+      Payment Unpaid
+    </span>
+  );
+})()}
                           </h3>
                           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
                             {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
@@ -1403,25 +1418,23 @@ export default function TechnicalPortal({
                             <div>
                               <span className="text-gray-400">Competitors:</span> <strong>{lead.competitors || '—'}</strong>
                             </div>
-                            {user?.team !== 'ads' && (
-                              <div className="flex justify-between items-center text-[11px] pt-1 border-t border-gray-100 dark:border-slate-805/40">
-                                <span>Start: <strong>{lead.startDate || '—'}</strong></span>
-                                <span className="flex items-center gap-1.5">
-                                  Deadline: <strong className="text-rose-500 font-bold">{lead.deliveryDeadline || '—'}</strong>
-                                  {(() => {
-                                    const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
-                                    if (deadlineAlert) {
-                                      return (
-                                        <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                          {deadlineAlert.label}
-                                        </span>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
-                                </span>
-                              </div>
-                            )}
+                            <div className="flex justify-between items-center text-[10px] pt-1 border-t border-gray-100 dark:border-slate-805/40">
+                              <span>Start: <strong>{lead.startDate || '—'}</strong></span>
+                              <span className="flex items-center gap-1.5">
+                                Deadline: <strong className="text-rose-500 font-bold">{lead.deliveryDeadline || '—'}</strong>
+                                {(() => {
+                                  const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
+                                  if (deadlineAlert) {
+                                    return (
+                                      <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                                        {deadlineAlert.label}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
@@ -1448,14 +1461,41 @@ export default function TechnicalPortal({
                                 </span>
                               </div>
                             )}
-                            {Number(lead.adsRequired) > 0 && (
+                            {/* {Number(lead.adsRequired) > 0 && (
                               <div className="flex items-center justify-between p-2 bg-pink-500/3 dark:bg-pink-500/1 border border-pink-500/5 rounded-lg">
                                 <span className="text-gray-700 dark:text-gray-300">Ads/Campaigns: <strong>{lead.adsRequired} required</strong></span>
                                 <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">
                                   {lead.adsStatus} ({Number(lead.adsRequired) - currentAdsPending} Done)
                                 </span>
                               </div>
-                            )}
+                            )} */}
+
+                            {(Number(lead.adsRequired) > 0 || (lead.platforms && lead.platforms.length > 0)) && (
+  <div className="flex flex-col gap-1.5 p-2 bg-pink-500/3 dark:bg-pink-500/1 border border-pink-500/5 rounded-lg">
+    <div className="flex items-center justify-between">
+      <span className="text-gray-700 dark:text-gray-300">
+        Ads/Campaigns: <strong>{lead.adsRequired > 0 ? `${lead.adsRequired} required` : 'Service only'}</strong>
+      </span>
+      {Number(lead.adsRequired) > 0 && (
+        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">
+          {lead.adsStatus} ({Number(lead.adsRequired) - currentAdsPending} Done)
+        </span>
+      )}
+    </div>
+    {lead.platforms && lead.platforms.length > 0 && (
+      <div className="flex flex-wrap gap-1">
+        {lead.platforms.map((platform, idx) => (
+          <span
+            key={idx}
+            className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10"
+          >
+            {platform}
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+)}
                             {lead.websiteRequired && (
                               <div className="flex items-center justify-between p-2 bg-purple-500/3 dark:bg-purple-500/1 border border-purple-500/5 rounded-lg sm:col-span-2">
                                 <span className="text-gray-700 dark:text-gray-300">Website: <strong>{lead.websiteType || 'General'} Dev</strong></span>

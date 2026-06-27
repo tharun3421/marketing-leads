@@ -13,7 +13,9 @@ import {
   Chrome,
   Notebook,
   IndianRupeeIcon,
-  Infinity
+  Infinity,
+  MapPin,
+  TrendingUp
 } from 'lucide-react';
 
 const platformOptions = [
@@ -21,7 +23,9 @@ const platformOptions = [
   { id: 'Google Ads', name: 'Google Ads', icon: Chrome },
   { id: 'YouTube Ads', name: 'YouTube Ads', icon: Youtube },
   { id: 'LinkedIn Ads', name: 'LinkedIn Ads', icon: Linkedin },
-];
+  { id: 'GMB', name: 'GMB', icon: MapPin },
+  { id: 'SEO', name: 'SEO', icon: TrendingUp },
+];  
 
 export default function StepRequirementsBrief({ register, errors, setValue, watch, isClientPortal = false, isReadOnlyProfile = false }) {
   const watchPlatforms = watch('platforms') || [];

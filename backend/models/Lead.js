@@ -239,7 +239,8 @@ const leadSchema = new mongoose.Schema({
     sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     senderName: { type: String, required: true },
     senderRole: { type: String, required: true },
-    category: { type: String, enum: ['Work Notes', 'Customer Notes'], required: true },
+    // category: { type: String, enum: ['Work Notes', 'Customer Notes'], required: true },
+    category: { type: String, enum: ['Work Notes', 'Customer Notes', 'Sales Notes'], required: true },
     message: { type: String, required: true },
     replyTo: {
       senderName: String,
