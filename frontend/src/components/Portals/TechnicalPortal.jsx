@@ -66,6 +66,27 @@ const getStatusLabel = (status, team) => {
   return status || 'Non-Allocated';
 };
 
+// Render per-team status badges for a lead
+const getPerTeamStatusBadges = (lead) => {
+  const teams = lead.assignedTeam;
+  if (!teams) return null;
+  const teamList = Array.isArray(teams)
+    ? teams
+    : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+
+  const entries = [];
+  if (teamList.includes('ads') || teamList.includes('all')) {
+    entries.push({ label: 'Ads Team', status: lead.adsTeamStatus || 'Pending' });
+  }
+  if (teamList.includes('design') || teamList.includes('all')) {
+    entries.push({ label: 'Design Team', status: lead.designTeamStatus || 'Pending' });
+  }
+  if (teamList.includes('developer') || teamList.includes('all')) {
+    entries.push({ label: 'Dev Team', status: lead.devTeamStatus || 'Pending' });
+  }
+  return entries;
+};
+
 const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
   if (workflowStatus === 'Completed') return null;
   if (!deadlineStr) return null;
@@ -146,6 +167,22 @@ export default function TechnicalPortal({
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
   const [editWorkflowStatus, setEditWorkflowStatus] = useState('Allocated');
   const [showNotifications, setShowNotifications] = useState(false);
+  // Plan dates for Ads team (legacy single date — kept for backward compat)
+  const [editPlanStartDate, setEditPlanStartDate] = useState('');
+  // Per-team status editing
+  const [editAdsTeamStatus, setEditAdsTeamStatus] = useState('Pending');
+  const [editDesignTeamStatus, setEditDesignTeamStatus] = useState('Pending');
+  const [editDevTeamStatus, setEditDevTeamStatus] = useState('Pending');
+  // Per-campaign start dates and statuses (one per platform)
+  const [editMetaStart, setEditMetaStart] = useState('');
+  const [editMetaStatus, setEditMetaStatus] = useState('Pending');
+  const [editGoogleStart, setEditGoogleStart] = useState('');
+  const [editGoogleStatus, setEditGoogleStatus] = useState('Pending');
+  const [editLinkedinStart, setEditLinkedinStart] = useState('');
+  const [editLinkedinStatus, setEditLinkedinStatus] = useState('Pending');
+  const [editSeoStart, setEditSeoStart] = useState('');
+  const [editSeoStatus, setEditSeoStatus] = useState('Pending');
+  const [editGmbStatus, setEditGmbStatus] = useState('Pending');
 
   const isFirstLoadRef = React.useRef(true);
 
@@ -200,6 +237,20 @@ export default function TechnicalPortal({
       setAdsPending(Number(selectedLead.adsPending ?? selectedLead.adsRequired ?? 0));
       setWebsiteStatus(selectedLead.websiteStatus || 'Pending');
       setEditWorkflowStatus(selectedLead.workflowStatus || 'Allocated');
+      setEditPlanStartDate(selectedLead.planStartDate || '');
+      setEditAdsTeamStatus(selectedLead.adsTeamStatus || 'Pending');
+      setEditDesignTeamStatus(selectedLead.designTeamStatus || 'Pending');
+      setEditDevTeamStatus(selectedLead.devTeamStatus || 'Pending');
+      // Per-campaign
+      setEditMetaStart(selectedLead.metaAdsStartDate || '');
+      setEditMetaStatus(selectedLead.metaAdsCampaignStatus || 'Pending');
+      setEditGoogleStart(selectedLead.googleAdsStartDate || '');
+      setEditGoogleStatus(selectedLead.googleAdsCampaignStatus || 'Pending');
+      setEditLinkedinStart(selectedLead.linkedinAdsStartDate || '');
+      setEditLinkedinStatus(selectedLead.linkedinAdsCampaignStatus || 'Pending');
+      setEditSeoStart(selectedLead.seoStartDate || '');
+      setEditSeoStatus(selectedLead.seoCampaignStatus || 'Pending');
+      setEditGmbStatus(selectedLead.gmbCampaignStatus || 'Pending');
     } else {
       setPostersStatus('Pending');
       setPostersPending(0);
@@ -209,6 +260,19 @@ export default function TechnicalPortal({
       setAdsPending(0);
       setWebsiteStatus('Pending');
       setEditWorkflowStatus('Allocated');
+      setEditPlanStartDate('');
+      setEditAdsTeamStatus('Pending');
+      setEditDesignTeamStatus('Pending');
+      setEditDevTeamStatus('Pending');
+      setEditMetaStart('');
+      setEditMetaStatus('Pending');
+      setEditGoogleStart('');
+      setEditGoogleStatus('Pending');
+      setEditLinkedinStart('');
+      setEditLinkedinStatus('Pending');
+      setEditSeoStart('');
+      setEditSeoStatus('Pending');
+      setEditGmbStatus('Pending');
     }
   }, [selectedLeadId, teamAssigneeId]);
 
@@ -234,6 +298,19 @@ export default function TechnicalPortal({
       setAdsPending(Number(selectedLead.adsPending ?? selectedLead.adsRequired ?? 0));
       setWebsiteStatus(selectedLead.websiteStatus || 'Pending');
       setEditWorkflowStatus(selectedLead.workflowStatus || 'Allocated');
+      setEditPlanStartDate(selectedLead.planStartDate || '');
+      setEditAdsTeamStatus(selectedLead.adsTeamStatus || 'Pending');
+      setEditDesignTeamStatus(selectedLead.designTeamStatus || 'Pending');
+      setEditDevTeamStatus(selectedLead.devTeamStatus || 'Pending');
+      setEditMetaStart(selectedLead.metaAdsStartDate || '');
+      setEditMetaStatus(selectedLead.metaAdsCampaignStatus || 'Pending');
+      setEditGoogleStart(selectedLead.googleAdsStartDate || '');
+      setEditGoogleStatus(selectedLead.googleAdsCampaignStatus || 'Pending');
+      setEditLinkedinStart(selectedLead.linkedinAdsStartDate || '');
+      setEditLinkedinStatus(selectedLead.linkedinAdsCampaignStatus || 'Pending');
+      setEditSeoStart(selectedLead.seoStartDate || '');
+      setEditSeoStatus(selectedLead.seoCampaignStatus || 'Pending');
+      setEditGmbStatus(selectedLead.gmbCampaignStatus || 'Pending');
       onAddToast('Reset Updates', 'Updates draft reset to current database values.', 'info');
     }
   };
@@ -265,13 +342,80 @@ export default function TechnicalPortal({
       }
 
       if (selectedLead.websiteRequired !== undefined) {
-        const websitePendingCount = selectedLead.websiteRequired ? (websiteStatus === 'Completed' ? 0 : 1) : 0;
-        updatePayload.websiteStatus = websiteStatus;
-        updatePayload.websitePending = websitePendingCount;
-      }
+  // For developer team, websiteStatus mirrors devTeamStatus
+  const effectiveWebsiteStatus = user?.team === 'developer' ? editDevTeamStatus : websiteStatus;
+  const websitePendingCount = selectedLead.websiteRequired ? (effectiveWebsiteStatus === 'Completed' ? 0 : 1) : 0;
+  updatePayload.websiteStatus = effectiveWebsiteStatus;
+  updatePayload.websitePending = websitePendingCount;
+}
 
-      if (editWorkflowStatus !== selectedLead.workflowStatus) {
-        updatePayload.workflowStatus = editWorkflowStatus;
+      // if (editWorkflowStatus !== selectedLead.workflowStatus) {
+      //   updatePayload.workflowStatus = editWorkflowStatus;
+      // }
+
+      // For developer team, auto-derive workflowStatus from devTeamStatus
+if (user?.team === 'developer') {
+  updatePayload.workflowStatus = editDevTeamStatus === 'Completed'
+    ? 'Completed'
+    : editDevTeamStatus === 'In Progress'
+      ? 'In Progress'
+      : 'Allocated';
+} else if (editWorkflowStatus !== selectedLead.workflowStatus) {
+  updatePayload.workflowStatus = editWorkflowStatus;
+}
+
+      // Per-team statuses
+      if (user?.team === 'ads' || user?.team === 'all') {
+        updatePayload.adsTeamStatus = editAdsTeamStatus;
+
+        // Per-campaign: Meta Ads
+        const metaDur = Number(selectedLead.metaAdsPlanDuration || 0);
+        if (metaDur > 0 && editMetaStart) {
+          const metaEnd = new Date(editMetaStart);
+          metaEnd.setDate(metaEnd.getDate() + metaDur);
+          updatePayload.metaAdsStartDate = editMetaStart;
+          updatePayload.metaAdsEndDate = metaEnd.toISOString().split('T')[0];
+        }
+        updatePayload.metaAdsCampaignStatus = editMetaStatus;
+
+        // Per-campaign: Google Ads
+        const googleDur = Number(selectedLead.googleAdsPlanDuration || 0);
+        if (googleDur > 0 && editGoogleStart) {
+          const googleEnd = new Date(editGoogleStart);
+          googleEnd.setDate(googleEnd.getDate() + googleDur);
+          updatePayload.googleAdsStartDate = editGoogleStart;
+          updatePayload.googleAdsEndDate = googleEnd.toISOString().split('T')[0];
+        }
+        updatePayload.googleAdsCampaignStatus = editGoogleStatus;
+
+        // Per-campaign: LinkedIn Ads
+        const linkedinDur = Number(selectedLead.linkedinAdsPlanDuration || 0);
+        if (linkedinDur > 0 && editLinkedinStart) {
+          const linkedinEnd = new Date(editLinkedinStart);
+          linkedinEnd.setDate(linkedinEnd.getDate() + linkedinDur);
+          updatePayload.linkedinAdsStartDate = editLinkedinStart;
+          updatePayload.linkedinAdsEndDate = linkedinEnd.toISOString().split('T')[0];
+        }
+        updatePayload.linkedinAdsCampaignStatus = editLinkedinStatus;
+
+        // Per-campaign: SEO
+        const seoDur = Number(selectedLead.seoPlanDuration || 0);
+        if (seoDur > 0 && editSeoStart) {
+          const seoEnd = new Date(editSeoStart);
+          seoEnd.setDate(seoEnd.getDate() + seoDur);
+          updatePayload.seoStartDate = editSeoStart;
+          updatePayload.seoEndDate = seoEnd.toISOString().split('T')[0];
+        }
+        updatePayload.seoCampaignStatus = editSeoStatus;
+
+        // GMB — no dates, just status
+        updatePayload.gmbCampaignStatus = editGmbStatus;
+      }
+      if (user?.team === 'design' || user?.team === 'all') {
+        updatePayload.designTeamStatus = editDesignTeamStatus;
+      }
+      if (user?.team === 'developer' || user?.team === 'all') {
+        updatePayload.devTeamStatus = editDevTeamStatus;
       }
 
       const res = await authFetch(`/api/leads/${selectedLead._id || selectedLead.id}`, {
@@ -281,9 +425,6 @@ export default function TechnicalPortal({
 
       if (res.ok) {
         onAddToast('Lead Updated', `Successfully updated deliverables status for ${selectedLead.clientName}.`, 'success');
-        // if (onAddNotification) {
-        //   onAddNotification(`Technical member "${user?.name || ''}" updated campaign specs for client "${selectedLead.clientName}".`, 'info');
-        // }
         await fetchAssignedLeads();
       } else {
         const errData = await res.json();
@@ -619,85 +760,67 @@ export default function TechnicalPortal({
   }
 
   const renderLeadCard = (lead, isClaimed) => {
-    const leadId = lead._id || lead.id;
-    const isSelected = leadId === selectedLeadId;
-    return (
-      <div
-        key={leadId}
-        onClick={() => handleSelectLead(leadId)}
-        className={`p-3.5 rounded-xl border transition-all duration-200 cursor-pointer relative overflow-hidden group ${
-          isSelected
-            ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 shadow-sm'
-            : 'border-gray-200/80 dark:border-slate-800/40 bg-white/60 hover:bg-slate-500/3 dark:bg-slate-900/20 dark:hover:bg-slate-900/40'
-        }`}
-      >
-        {isSelected && (
-          <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500" />
-        )}
-        <div className="space-y-1.5 pl-1.5">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setViewedClientId(leadId);
-              }}
-              className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono hover:underline cursor-pointer"
-            >
-              {lead.clientId || 'N/A'}
-            </button>
-            <div className="flex items-center gap-1.5">
-              {(() => {
-                const badge = getPaymentStatus(lead);
+  const leadId = lead._id || lead.id;
+  const isSelected = leadId === selectedLeadId;
+  return (
+    <div
+      key={leadId}
+      onClick={() => handleSelectLead(leadId)}
+      className={`p-3.5 rounded-xl border transition-all duration-200 cursor-pointer relative overflow-hidden group ${
+        isSelected
+          ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 shadow-sm'
+          : 'border-gray-200/80 dark:border-slate-800/40 bg-white/60 hover:bg-slate-500/3 dark:bg-slate-900/20 dark:hover:bg-slate-900/40'
+      }`}
+    >
+      {isSelected && (
+        <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500" />
+      )}
+      <div className="space-y-1.5 pl-1.5">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setViewedClientId(leadId);
+            }}
+            className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono hover:underline cursor-pointer"
+          >
+            {lead.clientId || 'N/A'}
+          </button>
+          <div className="flex items-center gap-1.5">
+            {(() => {
+              const badge = getPaymentStatus(lead);
+              return (
+                <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
+                  {badge.label}
+                </span>
+              );
+            })()}
+            {(() => {
+              const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
+              if (deadlineAlert) {
                 return (
-                  <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
-                    {badge.label}
+                  <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                    {deadlineAlert.label}
                   </span>
                 );
-              })()}
-              {(() => {
-                const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
-                if (deadlineAlert) {
-                  return (
-                    <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                      {deadlineAlert.label}
-                    </span>
-                  );
-                }
-                return null;
-              })()}
-              {!isClaimed ? (
-                <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold uppercase tracking-wider shrink-0 border border-amber-500/10 animate-pulse">
-                  Unclaimed
-                </span>
-              ) : (
-                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
-                  lead.workflowStatus === 'Completed'
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : lead.workflowStatus === 'In Progress'
-                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                      : lead.workflowStatus === 'Allocated'
-                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                }`}>
-                  {lead.workflowStatus === 'Allocated' ? 'Pending' : (lead.workflowStatus || 'Non-Allocated')}
-                </span>
-              )}
-            </div>
+              }
+              return null;
+            })()}
           </div>
-          <h4 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap truncate">
-            <span>{lead.clientName}</span>
-          </h4>
-          <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-            {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
-          </p>
-          <p className="text-[9px] text-gray-405 dark:text-gray-550 mt-1 font-semibold">
-            Created By: {lead.salespersonName}
-          </p>
         </div>
+        <h4 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap truncate">
+          <span>{lead.clientName}</span>
+        </h4>
+        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+          {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
+        </p>
+        <p className="text-[9px] text-gray-405 dark:text-gray-550 mt-1 font-semibold">
+          Created By: {lead.salespersonName}
+        </p>
       </div>
-    );
-  };
-
+    </div>
+  );
+};
   const getGridColsClass = () => {
     const team = user?.team;
     if (team === 'design') return 'grid grid-cols-1 sm:grid-cols-2 gap-4';
@@ -1133,28 +1256,82 @@ export default function TechnicalPortal({
                         </td>
                         <td className="p-3 font-mono">{client.mobileNumber}</td>
                         <td className="p-3">
-                          {client.assignedToName ? (
-                            <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                               {client.assignedToName}
-                            </span>
-                          ) : (
-                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                              {getTeamDisplayLabel(client.assignedTeam)}
-                            </span>
-                          )}
+                          {(() => {
+                            const teams = client.assignedTeam;
+                            const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+                            const assignees = [];
+                            if (teamList.includes('ads') || teamList.includes('all')) {
+                              assignees.push({
+                                team: 'Ads',
+                                name: client.assignedAdSpecialistName || null,
+                                color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400'
+                              });
+                            }
+                            if (teamList.includes('design') || teamList.includes('all')) {
+                              assignees.push({
+                                team: 'Design',
+                                name: client.assignedDesignerName || null,
+                                color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                              });
+                            }
+                            if (teamList.includes('developer') || teamList.includes('all')) {
+                              assignees.push({
+                                team: 'Dev',
+                                name: client.assignedDeveloperName || null,
+                                color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                              });
+                            }
+                            if (assignees.length === 0) {
+                              return (
+                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full text-xs font-bold">
+                                  Not Assigned
+                                </span>
+                              );
+                            }
+                            return (
+                              <div className="flex flex-col gap-1">
+                                {assignees.map((a, i) => (
+                                  <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${a.color}`}>
+                                    {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="p-3">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                            client.workflowStatus === 'Completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                              : client.workflowStatus === 'In Progress'
-                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                : client.workflowStatus === 'Allocated'
-                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                          }`}>
-                            {getStatusLabel(client.workflowStatus, client.assignedTeam)}
-                          </span>
+                          {(() => {
+                            const perTeam = getPerTeamStatusBadges(client);
+                            const sc = (s) => s === 'Completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
+                              : s === 'In Progress'
+                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/15'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15';
+                            if (perTeam && perTeam.length > 0 && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
+                              return (
+                                <div className="flex flex-col gap-1">
+                                  {perTeam.map((t, i) => (
+                                    <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold w-max ${sc(t.status)}`}>
+                                      {t.label}: {t.status}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return (
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                client.workflowStatus === 'Completed'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : client.workflowStatus === 'In Progress'
+                                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                    : client.workflowStatus === 'Allocated'
+                                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              }`}>
+                                {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
@@ -1348,22 +1525,43 @@ export default function TechnicalPortal({
                           </p>
                         </div>
                         
-                        <div className="flex flex-wrap items-center gap-2">
-                          {!isClaimed ? (
+                        <div className="flex flex-wrap items-end gap-2">
+                          {!isClaimed && (
                             <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15 px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider animate-pulse">
                               Unclaimed Task
                             </span>
-                          ) : (
-                            <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border uppercase tracking-wider ${
-                              lead.workflowStatus === 'Completed'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-500/15 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                : lead.workflowStatus === 'In Progress'
-                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-500/15 dark:bg-indigo-950/40 dark:text-indigo-300'
-                                  : 'bg-blue-50 text-blue-700 border-blue-500/15 dark:bg-blue-955/40 dark:text-blue-300'
-                            }`}>
-                              {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
-                            </span>
                           )}
+                          {(() => {
+                            const perTeam = getPerTeamStatusBadges(lead);
+                            if (perTeam && perTeam.length > 0) {
+                              const sc = (s) => s === 'Completed'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/15'
+                                : s === 'In Progress'
+                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/15'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/15';
+                              return (
+                                <div className="flex flex-wrap gap-1">
+                                  {perTeam.map((t, i) => (
+                                    <span key={i} className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border uppercase tracking-wider ${sc(t.status)}`}>
+                                      {t.label}: {t.status}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            // fallback — no per-team data yet
+                            return (
+                              <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border uppercase tracking-wider ${
+                                lead.workflowStatus === 'Completed'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-500/15 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                  : lead.workflowStatus === 'In Progress'
+                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-500/15 dark:bg-indigo-950/40 dark:text-indigo-300'
+                                    : 'bg-blue-50 text-blue-700 border-blue-500/15 dark:bg-blue-955/40 dark:text-blue-300'
+                              }`}>
+                                {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -1394,10 +1592,10 @@ export default function TechnicalPortal({
                                 </a>
                               </span>
                             </div>
-                            <div className="flex items-center gap-2">
+                            {/* <div className="flex items-center gap-2">
                               <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                               <span>Salesperson: <strong>{lead.salespersonName}</strong></span>
-                            </div>
+                            </div> */}
                           </div>
                         </div>
 
@@ -1412,9 +1610,9 @@ export default function TechnicalPortal({
                                 <span className="w-3.5 h-3.5 rounded-full border border-gray-205 shrink-0" style={{ backgroundColor: lead.brandColors }} />
                               )}
                             </div>
-                            <div>
+                            {/* <div>
                               <span className="text-gray-400">Target Audience:</span> <strong>{lead.targetAudience || '—'}</strong>
-                            </div>
+                            </div> */}
                             <div>
                               <span className="text-gray-400">Competitors:</span> <strong>{lead.competitors || '—'}</strong>
                             </div>
@@ -1542,19 +1740,21 @@ export default function TechnicalPortal({
                       ) : (
                         <form onSubmit={handleSaveUpdates} className="space-y-4">
                           <div className="grid grid-cols-1 gap-4 max-h-[300px] overflow-y-auto pr-1">
-                            {/* Workflow Status manual selector */}
-                            <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
-                              <label className="text-xs font-bold text-gray-900 dark:text-white block">Workflow Status</label>
-                              <select
-                                value={editWorkflowStatus}
-                                onChange={(e) => setEditWorkflowStatus(e.target.value)}
-                                className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-                              >
-                                <option value="Allocated">Pending</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Completed">Completed</option>
-                              </select>
-                            </div>
+                            {/* Workflow Status — hidden for developer team, auto-derived from devTeamStatus */}
+{user?.team !== 'developer' && (
+  <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
+    <label className="text-xs font-bold text-gray-900 dark:text-white block">Workflow Status</label>
+    <select
+      value={editWorkflowStatus}
+      onChange={(e) => setEditWorkflowStatus(e.target.value)}
+      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+    >
+      <option value="Allocated">Pending</option>
+      <option value="In Progress">In Progress</option>
+      <option value="Completed">Completed</option>
+    </select>
+  </div>
+)}
                             {/* Posters update */}
                             {Number(lead.postersRequired) > 0 && (
                               <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
@@ -1666,28 +1866,303 @@ export default function TechnicalPortal({
                               </div>
                             )}
 
-                            {/* Website update */}
-                            {lead.websiteRequired && (
-                              <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
-                                <div className="flex justify-between items-center">
-                                  <span className="font-bold text-gray-900 dark:text-white">Website Dev</span>
-                                  <span className="text-[10px] text-purple-650 dark:text-purple-400">{lead.websiteType || 'General'} website</span>
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <label className="text-[10px] text-gray-405 font-bold">Website Status</label>
-                                  <select
-                                    value={websiteStatus}
-                                    onChange={(e) => setWebsiteStatus(e.target.value)}
-                                    className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer"
-                                  >
-                                    <option value="Pending">Pending</option>
-                                    <option value="In Progress">In Progress</option>
-                                    <option value="Completed">Completed</option>
-                                  </select>
-                                </div>
-                              </div>
-                            )}
+                            {/* Website update — hidden for developer team, status is controlled by Dev Team Status below */}
+{lead.websiteRequired && user?.team !== 'developer' && (
+  <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
+    <div className="flex justify-between items-center">
+      <span className="font-bold text-gray-900 dark:text-white">Website Dev</span>
+      <span className="text-[10px] text-purple-650 dark:text-purple-400">{lead.websiteType || 'General'} website</span>
+    </div>
+    <div className="flex flex-col gap-1">
+      <label className="text-[10px] text-gray-405 font-bold">Website Status</label>
+      <select
+        value={websiteStatus}
+        onChange={(e) => setWebsiteStatus(e.target.value)}
+        className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer"
+      >
+        <option value="Pending">Pending</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </div>
+  </div>
+)}
                           </div>
+
+                          {/* Ads Team — Campaign Plan Information */}
+                          {(user?.team === 'ads' || user?.team === 'all') && (
+                            <div className="space-y-3">
+                              <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                                Ads Campaign — Plan Information
+                              </h4>
+
+                              {/* Budget Per Day & Target Audience — top level */}
+                              {(Number(lead.adBudgetPerDay || 0) > 0 || lead.targetAudience) && (
+                                <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
+                                  {Number(lead.adBudgetPerDay || 0) > 0 && (
+                                    <div className="flex justify-between items-center text-xs">
+                                      <span className="text-gray-500 dark:text-gray-400 font-semibold">Budget Per Day:</span>
+                                      <strong className="text-pink-600 dark:text-pink-400">₹{lead.adBudgetPerDay}/day</strong>
+                                    </div>
+                                  )}
+                                  {lead.targetAudience && (
+                                    <div className="text-xs">
+                                      <span className="text-[10px] text-gray-400 font-bold block mb-1 uppercase tracking-wider">Target Audience</span>
+                                      <p className="text-gray-700 dark:text-gray-300 leading-relaxed">{lead.targetAudience}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Meta Ads Campaign Card */}
+                              {Number(lead.metaAdsPlanDuration || 0) > 0 && (
+                                <div className="p-3 bg-indigo-500/5 border border-indigo-500/15 rounded-xl space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">Meta Ads</span>
+                                    <span className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-bold">{lead.metaAdsPlanDuration} Days</span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
+                                    <input
+                                      type="date"
+                                      value={editMetaStart}
+                                      onChange={(e) => setEditMetaStart(e.target.value)}
+                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
+                                    />
+                                  </div>
+                                  {editMetaStart && (
+                                    <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-indigo-500/10">
+                                      <span className="text-gray-400">End Date:</span>
+                                      <strong className="text-indigo-600 dark:text-indigo-400">
+                                        {(() => {
+                                          const d = new Date(editMetaStart);
+                                          d.setDate(d.getDate() + Number(lead.metaAdsPlanDuration));
+                                          return d.toLocaleDateString('en-IN');
+                                        })()}
+                                      </strong>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
+                                    <select
+                                      value={editMetaStatus}
+                                      onChange={(e) => setEditMetaStatus(e.target.value)}
+                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Completed">Completed</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Google Ads Campaign Card */}
+                              {Number(lead.googleAdsPlanDuration || 0) > 0 && (
+                                <div className="p-3 bg-emerald-500/5 border border-emerald-500/15 rounded-xl space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">Google Ads</span>
+                                    <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-full font-bold">{lead.googleAdsPlanDuration} Days</span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
+                                    <input
+                                      type="date"
+                                      value={editGoogleStart}
+                                      onChange={(e) => setEditGoogleStart(e.target.value)}
+                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
+                                    />
+                                  </div>
+                                  {editGoogleStart && (
+                                    <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-emerald-500/10">
+                                      <span className="text-gray-400">End Date:</span>
+                                      <strong className="text-emerald-600 dark:text-emerald-400">
+                                        {(() => {
+                                          const d = new Date(editGoogleStart);
+                                          d.setDate(d.getDate() + Number(lead.googleAdsPlanDuration));
+                                          return d.toLocaleDateString('en-IN');
+                                        })()}
+                                      </strong>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
+                                    <select
+                                      value={editGoogleStatus}
+                                      onChange={(e) => setEditGoogleStatus(e.target.value)}
+                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Completed">Completed</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* LinkedIn Ads Campaign Card */}
+                              {Number(lead.linkedinAdsPlanDuration || 0) > 0 && (
+                                <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-xl space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400">LinkedIn Ads</span>
+                                    <span className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full font-bold">{lead.linkedinAdsPlanDuration} Days</span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
+                                    <input
+                                      type="date"
+                                      value={editLinkedinStart}
+                                      onChange={(e) => setEditLinkedinStart(e.target.value)}
+                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
+                                    />
+                                  </div>
+                                  {editLinkedinStart && (
+                                    <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-blue-500/10">
+                                      <span className="text-gray-400">End Date:</span>
+                                      <strong className="text-blue-600 dark:text-blue-400">
+                                        {(() => {
+                                          const d = new Date(editLinkedinStart);
+                                          d.setDate(d.getDate() + Number(lead.linkedinAdsPlanDuration));
+                                          return d.toLocaleDateString('en-IN');
+                                        })()}
+                                      </strong>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
+                                    <select
+                                      value={editLinkedinStatus}
+                                      onChange={(e) => setEditLinkedinStatus(e.target.value)}
+                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Completed">Completed</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* SEO Campaign Card */}
+                              {Number(lead.seoPlanDuration || 0) > 0 && (
+                                <div className="p-3 bg-teal-500/5 border border-teal-500/15 rounded-xl space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-teal-600 dark:text-teal-400">SEO</span>
+                                    <span className="text-[10px] bg-teal-500/10 text-teal-600 dark:text-teal-400 px-2 py-0.5 rounded-full font-bold">{lead.seoPlanDuration} Days</span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
+                                    <input
+                                      type="date"
+                                      value={editSeoStart}
+                                      onChange={(e) => setEditSeoStart(e.target.value)}
+                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
+                                    />
+                                  </div>
+                                  {editSeoStart && (
+                                    <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-teal-500/10">
+                                      <span className="text-gray-400">End Date:</span>
+                                      <strong className="text-teal-600 dark:text-teal-400">
+                                        {(() => {
+                                          const d = new Date(editSeoStart);
+                                          d.setDate(d.getDate() + Number(lead.seoPlanDuration));
+                                          return d.toLocaleDateString('en-IN');
+                                        })()}
+                                      </strong>
+                                    </div>
+                                  )}
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
+                                    <select
+                                      value={editSeoStatus}
+                                      onChange={(e) => setEditSeoStatus(e.target.value)}
+                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Completed">Completed</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* GMB Campaign Card — one-time, no dates */}
+                              {lead.platforms && lead.platforms.includes('GMB') && (
+                                <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-xl space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400">GMB — Google Business Profile</span>
+                                    <span className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-bold">One-Time</span>
+                                  </div>
+                                  <p className="text-[10px] text-gray-400 dark:text-gray-500">One-time implementation — no campaign duration or dates required.</p>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Status</label>
+                                    <select
+                                      value={editGmbStatus}
+                                      onChange={(e) => setEditGmbStatus(e.target.value)}
+                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                                    >
+                                      <option value="Pending">Pending</option>
+                                      <option value="In Progress">In Progress</option>
+                                      <option value="Completed">Completed</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Overall Ads Team Status */}
+                              <div className="p-3 bg-slate-500/5 border border-slate-500/10 rounded-xl space-y-2">
+                                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Overall Ads Team Status</label>
+                                <select
+                                  value={editAdsTeamStatus}
+                                  onChange={(e) => setEditAdsTeamStatus(e.target.value)}
+                                  className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                                >
+                                  <option value="Pending">Pending</option>
+                                  <option value="In Progress">In Progress</option>
+                                  <option value="Completed">Completed</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Design Team Status */}
+                          {(user?.team === 'design' || user?.team === 'all') && (
+                            <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
+                              <label className="text-xs font-bold text-gray-900 dark:text-white block">Design Team Status</label>
+                              <select
+                                value={editDesignTeamStatus}
+                                onChange={(e) => setEditDesignTeamStatus(e.target.value)}
+                                className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                              >
+                                <option value="Pending">Pending</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Completed">Completed</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Dev Team Status */}
+{(user?.team === 'developer' || user?.team === 'all') && (
+  <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
+    <label className="text-xs font-bold text-gray-900 dark:text-white block">
+      Development Team Status
+    </label>
+    {user?.team === 'developer' && (
+      <p className="text-[10px] text-gray-400 dark:text-gray-500">
+        This also updates the overall workflow and website status automatically.
+      </p>
+    )}
+    <select
+      value={editDevTeamStatus}
+      onChange={(e) => setEditDevTeamStatus(e.target.value)}
+      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+    >
+      <option value="Pending">Pending</option>
+      <option value="In Progress">In Progress</option>
+      <option value="Completed">Completed</option>
+    </select>
+  </div>
+)}
 
                           {/* Submit actions */}
                           <div className="flex items-center justify-between gap-3 pt-2">

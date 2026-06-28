@@ -31,6 +31,10 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
   const watchPlatforms = watch('platforms') || [];
   const watchTargetAudienceRequired = watch('targetAudienceRequired') || 'Required';
   const watchBrandColor = watch('brandColors') || '#6366f1';
+  const hasMetaAds = watchPlatforms.includes('Meta Ads');
+  const hasGoogleAds = watchPlatforms.includes('Google Ads');
+  const hasLinkedInAds = watchPlatforms.includes('LinkedIn Ads');
+  const hasSEO = watchPlatforms.includes('SEO');
   
   const watchPosters = Number(watch('postersRequired') || 0);
   const watchVideos = Number(watch('videosRequired') || 0);
@@ -132,6 +136,83 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
           ))}
         </div>
       </div>
+
+      {/* Plan Duration for paid/ongoing platforms */}
+      {(hasMetaAds || hasGoogleAds || hasLinkedInAds || hasSEO) && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="overflow-hidden"
+        >
+          <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl space-y-3">
+            <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+              Campaign Plan Duration
+            </p>
+            <p className="text-[10px] text-gray-500 dark:text-gray-400">
+              GMB (Google Business Profile) is a one-time implementation and does not require a plan duration.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {hasMetaAds && (
+                <Input
+                  label="Meta Ads — Plan Duration (Days)"
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 30"
+                  icon={CalendarRange}
+                  disabled={isReadOnlyProfile}
+                  error={errors.metaAdsPlanDuration?.message}
+                  {...register('metaAdsPlanDuration', {
+                    min: { value: 1, message: 'Must be at least 1 day' }
+                  })}
+                />
+              )}
+              {hasGoogleAds && (
+                <Input
+                  label="Google Ads — Plan Duration (Days)"
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 30"
+                  icon={CalendarRange}
+                  disabled={isReadOnlyProfile}
+                  error={errors.googleAdsPlanDuration?.message}
+                  {...register('googleAdsPlanDuration', {
+                    min: { value: 1, message: 'Must be at least 1 day' }
+                  })}
+                />
+              )}
+              {hasLinkedInAds && (
+                <Input
+                  label="LinkedIn Ads — Plan Duration (Days)"
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 30"
+                  icon={CalendarRange}
+                  disabled={isReadOnlyProfile}
+                  error={errors.linkedinAdsPlanDuration?.message}
+                  {...register('linkedinAdsPlanDuration', {
+                    min: { value: 1, message: 'Must be at least 1 day' }
+                  })}
+                />
+              )}
+              {hasSEO && (
+                <Input
+                  label="SEO — Plan Duration (Days)"
+                  type="number"
+                  min="1"
+                  placeholder="e.g. 90"
+                  icon={CalendarRange}
+                  disabled={isReadOnlyProfile}
+                  error={errors.seoPlanDuration?.message}
+                  {...register('seoPlanDuration', {
+                    min: { value: 1, message: 'Must be at least 1 day' }
+                  })}
+                />
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Brand Identity & Competitors */}
       <div className="space-y-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">

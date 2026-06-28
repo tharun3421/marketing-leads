@@ -83,6 +83,27 @@ const getStatusLabel = (status, team) => {
   return status || 'Non-Allocated';
 };
 
+// Render per-team status badges for a lead
+const getPerTeamStatusBadges = (lead) => {
+  const teams = lead.assignedTeam;
+  if (!teams) return null;
+  const teamList = Array.isArray(teams)
+    ? teams
+    : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+
+  const entries = [];
+  if (teamList.includes('ads') || teamList.includes('all')) {
+    entries.push({ label: 'Ads Team', status: lead.adsTeamStatus || 'Pending' });
+  }
+  if (teamList.includes('design') || teamList.includes('all')) {
+    entries.push({ label: 'Design Team', status: lead.designTeamStatus || 'Pending' });
+  }
+  if (teamList.includes('developer') || teamList.includes('all')) {
+    entries.push({ label: 'Dev Team', status: lead.devTeamStatus || 'Pending' });
+  }
+  return entries;
+};
+
 const TeamMultiSelectDropdown = ({ assignedTeam, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [tempSelected, setTempSelected] = useState([]);
@@ -375,6 +396,11 @@ export default function SalesPortal({
       targetAudience: '',
       competitors: '',
       adBudget: '',
+      adBudgetPerDay: 0,
+      metaAdsPlanDuration: 0,
+      googleAdsPlanDuration: 0,
+      linkedinAdsPlanDuration: 0,
+      seoPlanDuration: 0,
       startDate: '',
       deliveryDeadline: '',
       notes: '',
@@ -522,6 +548,11 @@ export default function SalesPortal({
       targetAudience: '',
       competitors: '',
       adBudget: '',
+      adBudgetPerDay: 0,
+      metaAdsPlanDuration: 0,
+      googleAdsPlanDuration: 0,
+      linkedinAdsPlanDuration: 0,
+      seoPlanDuration: 0,
       startDate: '',
       deliveryDeadline: '',
       notes: '',
@@ -1196,17 +1227,38 @@ export default function SalesPortal({
                                )}
                             </td>
                             <td className="p-3">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                client.workflowStatus === 'Completed'
-                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                  : client.workflowStatus === 'In Progress'
-                                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                    : client.workflowStatus === 'Allocated'
-                                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                              }`}>
-                                {getStatusLabel(client.workflowStatus, client.assignedTeam)}
-                              </span>
+                              {(() => {
+                                const perTeam = getPerTeamStatusBadges(client);
+                                if (perTeam && perTeam.length > 0 && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
+                                  const statusColor = (s) => s === 'Completed'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    : s === 'In Progress'
+                                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+                                  return (
+                                    <div className="flex flex-col gap-1">
+                                      {perTeam.map((t, i) => (
+                                        <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${statusColor(t.status)}`}>
+                                          {t.label}: {t.status}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                    client.workflowStatus === 'Completed'
+                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                      : client.workflowStatus === 'In Progress'
+                                        ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                        : client.workflowStatus === 'Allocated'
+                                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                  }`}>
+                                    {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                                  </span>
+                                );
+                              })()}
                             </td>
                           </tr>
                         );
@@ -1465,6 +1517,25 @@ export default function SalesPortal({
                             }`}>
                               {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
                             </span>
+                            {/* Per-team status badges */}
+                            {(() => {
+                              const perTeam = getPerTeamStatusBadges(lead);
+                              if (!perTeam || perTeam.length === 0) return null;
+                              const statusColor = (s) => s === 'Completed'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/15'
+                                : s === 'In Progress'
+                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/15'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/15';
+                              return (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {perTeam.map((t, i) => (
+                                    <span key={i} className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md border ${statusColor(t.status)}`}>
+                                      {t.label}: {t.status}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
 
@@ -1612,18 +1683,29 @@ export default function SalesPortal({
                                   </div>
                                 </div>
                               )}
-                              {Number(lead.adsRequired) > 0 && (
-                                <div className="flex flex-col gap-1 p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-lg border border-gray-200/30">
-                                  <div className="flex justify-between items-center text-[11px]">
-                                    <span className="font-bold text-gray-700 dark:text-gray-300">Ads</span>
-                                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-gray-500">{lead.adsStatus || 'Pending'}</span>
-                                  </div>
-                                  <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                                    <span>Total: <strong>{lead.adsRequired}</strong></span>
-                                    <span>Completed: <strong className="text-emerald-500">{Number(lead.adsRequired) - adsPending}</strong></span>
-                                  </div>
-                                </div>
-                              )}
+                             {Number(lead.adsRequired) > 0 && (
+  <div className="flex flex-col gap-1 p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-lg border border-gray-200/30">
+    <div className="flex flex-col gap-1 text-[11px]">
+      <div className="flex justify-between items-center">
+        <span className="font-bold text-gray-700 dark:text-gray-300">Ads Campaigns</span>
+        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-gray-500">{lead.adsStatus || 'Pending'}</span>
+      </div>
+      {lead.platforms && lead.platforms.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-0.5">
+          {lead.platforms.map((p, idx) => (
+            <span key={idx} className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-indigo-500/10">
+              {p}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+    <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+      <span>Total: <strong>{lead.adsRequired}</strong></span>
+      <span>Completed: <strong className="text-emerald-500">{Number(lead.adsRequired) - adsPending}</strong></span>
+    </div>
+  </div>
+)}
                               {lead.websiteRequired && (
                                 <div className="flex flex-col gap-1 p-2 bg-gray-50/50 dark:bg-slate-950/20 rounded-lg border border-gray-200/30 col-span-1 sm:col-span-2">
                                   <div className="flex justify-between items-center text-[11px]">
@@ -1640,51 +1722,70 @@ export default function SalesPortal({
                           </div>
 
                           {/* Creative Specs & Planning */}
-                          <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-2.5 md:col-span-2">
-                            <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider">Project Specifications</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                              <div className="space-y-1.5 col-span-1 sm:col-span-2">
-                                <div className="flex items-center gap-1.5"><span className="text-gray-400">Brand Colors:</span> <strong>{lead.brandColors || '—'}</strong>
-                                  {lead.brandColors && (
-                                    <span className="w-3.5 h-3.5 rounded-full border border-gray-205" style={{ backgroundColor: lead.brandColors }} />
-                                  )}
-                                </div>
-                                <div><span className="text-gray-400">Competitors:</span> <strong>{lead.competitors || '—'}</strong></div>
-                                <div><span className="text-gray-400">Start Date:</span> <strong>{lead.startDate || '—'}</strong></div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-gray-400">Deadline:</span>
-                                  <strong>{lead.deliveryDeadline || '—'}</strong>
-                                  {(() => {
-                                    const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
-                                    if (deadlineAlert) {
-                                      return (
-                                        <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                          {deadlineAlert.label}
-                                        </span>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
-                                </div>
-                              </div>
-                              {lead.targetAudience && (
-                                <div className="col-span-1 sm:col-span-2 bg-gray-500/5 p-2 rounded-lg text-[11px] leading-relaxed">
-                                  <span className="text-[10px] font-bold text-gray-450 uppercase tracking-wider mb-0.5 block">Target Audience</span>
-                                  <p className="text-gray-700 dark:text-gray-300">{lead.targetAudience}</p>
-                                </div>
-                              )}
-                              {lead.platforms && lead.platforms.length > 0 && (
-                                <div className="col-span-1 sm:col-span-2">
-                                  <span className="text-[10px] font-bold text-gray-455 uppercase tracking-wider mb-1 block">Platforms</span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {lead.platforms.map((p, idx) => (
-                                      <span key={idx} className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-indigo-500/5">{p}</span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+<div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-2.5 md:col-span-2">
+  <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider">Project Specifications</h4>
+  <div className="grid grid-cols-2 gap-4 text-xs">
+
+    {/* Left Column */}
+    <div className="space-y-2">
+      <div>
+        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wider block mb-0.5">Brand Colors</span>
+        <div className="flex items-center gap-1.5">
+          <strong>{lead.brandColors || '—'}</strong>
+          {lead.brandColors && (
+            <span className="w-3.5 h-3.5 rounded-full border border-gray-205 shrink-0" style={{ backgroundColor: lead.brandColors }} />
+          )}
+        </div>
+      </div>
+      <div>
+        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wider block mb-0.5">Competitors</span>
+        <strong>{lead.competitors || '—'}</strong>
+      </div>
+      <div>
+        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wider block mb-0.5">Start Date</span>
+        <strong>{lead.startDate || '—'}</strong>
+      </div>
+      <div>
+        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wider block mb-0.5">Deadline</span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <strong>{lead.deliveryDeadline || '—'}</strong>
+          {(() => {
+            const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
+            if (deadlineAlert) {
+              return (
+                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
+                  {deadlineAlert.label}
+                </span>
+              );
+            }
+            return null;
+          })()}
+        </div>
+      </div>
+    </div>
+
+    {/* Right Column */}
+    <div className="space-y-2 border-l border-gray-200/50 dark:border-slate-800/40 pl-4">
+      {lead.targetAudience && (
+        <div>
+          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wider block mb-0.5">Target Audience</span>
+          <p className="text-[11px] text-gray-700 dark:text-gray-300 leading-relaxed bg-gray-500/5 p-2 rounded-lg">{lead.targetAudience}</p>
+        </div>
+      )}
+      {lead.platforms && lead.platforms.length > 0 && (
+        <div>
+          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase tracking-wider block mb-1">Platforms</span>
+          <div className="flex flex-wrap gap-1">
+            {lead.platforms.map((p, idx) => (
+              <span key={idx} className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded-lg border border-indigo-500/5">{p}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+
+  </div>
+</div>
 
                           {/* Notes and Remarks */}
                           {(lead.notes || lead.remarks) && (
@@ -1816,17 +1917,38 @@ export default function SalesPortal({
                               </td>
                               <td className="p-3 font-mono">{client.mobileNumber}</td>
                               <td className="p-3">
-                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                  client.workflowStatus === 'Completed'
-                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                    : client.workflowStatus === 'In Progress'
-                                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                      : client.workflowStatus === 'Allocated'
-                                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                                }`}>
-                                  {getStatusLabel(client.workflowStatus, client.assignedTeam)}
-                                </span>
+                                {(() => {
+                                  const perTeam = getPerTeamStatusBadges(client);
+                                  if (perTeam && perTeam.length > 0 && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
+                                    const statusColor = (s) => s === 'Completed'
+                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                      : s === 'In Progress'
+                                        ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+                                    return (
+                                      <div className="flex flex-col gap-1">
+                                        {perTeam.map((t, i) => (
+                                          <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${statusColor(t.status)}`}>
+                                            {t.label}: {t.status}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                      client.workflowStatus === 'Completed'
+                                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                        : client.workflowStatus === 'In Progress'
+                                          ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                          : client.workflowStatus === 'Allocated'
+                                            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                    }`}>
+                                      {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td className="p-3 text-xs">
                                 {client.assignedToName ? (
@@ -2135,6 +2257,16 @@ export default function SalesPortal({
                             <span className="text-[10px] text-gray-455 font-medium">
                               Required: {client.adsRequired} • Pending: {client.adsPending ?? (client.adsStatus === 'Completed' ? 0 : client.adsRequired)}
                             </span>
+                            {/* ADD THIS BELOW ↓ */}
+      {client.platforms && client.platforms.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1">
+          {client.platforms.map((p, idx) => (
+            <span key={idx} className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[9px] font-bold px-1.5 py-0.5 rounded border border-indigo-500/10">
+              {p}
+            </span>
+          ))}
+        </div>
+      )}
                           </div>
                           <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
                             client.adsStatus === 'Completed'

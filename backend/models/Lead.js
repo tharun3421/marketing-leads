@@ -215,6 +215,82 @@ const leadSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Campaign plan duration per platform (Meta Ads / Google Ads / LinkedIn Ads / SEO only)
+  metaAdsPlanDuration: {
+    type: Number,
+    default: 0
+  },
+  googleAdsPlanDuration: {
+    type: Number,
+    default: 0
+  },
+  linkedinAdsPlanDuration: {
+    type: Number,
+    default: 0
+  },
+  seoPlanDuration: {
+    type: Number,
+    default: 0
+  },
+  // Per-campaign start dates (set by Ads Team)
+  metaAdsStartDate: { type: String, default: null },
+  metaAdsEndDate: { type: String, default: null },
+  metaAdsCampaignStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  googleAdsStartDate: { type: String, default: null },
+  googleAdsEndDate: { type: String, default: null },
+  googleAdsCampaignStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  linkedinAdsStartDate: { type: String, default: null },
+  linkedinAdsEndDate: { type: String, default: null },
+  linkedinAdsCampaignStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  seoStartDate: { type: String, default: null },
+  seoEndDate: { type: String, default: null },
+  seoCampaignStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  gmbCampaignStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  // Plan dates for Ads campaigns
+  planStartDate: {
+    type: String,
+    default: null
+  },
+  planEndDate: {
+    type: String,
+    default: null
+  },
+  // Per-team individual statuses
+  adsTeamStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  designTeamStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
+  devTeamStatus: {
+    type: String,
+    enum: ['Pending', 'In Progress', 'Completed'],
+    default: 'Pending'
+  },
   paymentStatus: {
     type: String,
     enum: ['Unpaid', 'Partial', 'Paid'],

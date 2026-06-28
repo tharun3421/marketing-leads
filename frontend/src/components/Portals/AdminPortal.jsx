@@ -73,6 +73,25 @@ const getStatusLabel = (status, team) => {
   return status || 'Non-Allocated';
 };
 
+const getPerTeamStatusBadges = (lead) => {
+  const teams = lead.assignedTeam;
+  if (!teams) return null;
+  const teamList = Array.isArray(teams)
+    ? teams
+    : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+  const entries = [];
+  if (teamList.includes('ads') || teamList.includes('all')) {
+    entries.push({ label: 'Ads Team', status: lead.adsTeamStatus || 'Pending' });
+  }
+  if (teamList.includes('design') || teamList.includes('all')) {
+    entries.push({ label: 'Design Team', status: lead.designTeamStatus || 'Pending' });
+  }
+  if (teamList.includes('developer') || teamList.includes('all')) {
+    entries.push({ label: 'Dev Team', status: lead.devTeamStatus || 'Pending' });
+  }
+  return entries.length > 0 ? entries : null;
+};
+
 const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
   if (workflowStatus === 'Completed') return null;
   if (!deadlineStr) return null;
@@ -1075,19 +1094,38 @@ export default function AdminPortal({
                         </div>
                       </td>
                       <td className="p-3 text-center">
-                        <span className={`
-                          text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider
-                          ${lead.workflowStatus === 'Completed'
-                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                            : lead.workflowStatus === 'In Progress'
-                              ? 'bg-indigo-500/10 text-indigo-655 border-indigo-500/20'
-                              : lead.workflowStatus === 'Allocated'
-                                ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
-                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                        {(() => {
+                          const sc = (s) => s === 'Completed'
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                            : s === 'In Progress'
+                              ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+                          const perTeam = getPerTeamStatusBadges(lead);
+                          if (perTeam && (lead.workflowStatus === 'In Progress' || lead.workflowStatus === 'Completed' || lead.workflowStatus === 'Allocated')) {
+                            return (
+                              <div className="flex flex-col gap-0.5 items-start">
+                                {perTeam.map((t, i) => (
+                                  <span key={i} className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${sc(t.status)}`}>
+                                    {t.label}: {t.status}
+                                  </span>
+                                ))}
+                              </div>
+                            );
                           }
-                        `}>
-                          {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
-                        </span>
+                          return (
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider ${
+                              lead.workflowStatus === 'Completed'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                : lead.workflowStatus === 'In Progress'
+                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                                  : lead.workflowStatus === 'Allocated'
+                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                            }`}>
+                              {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="p-3 text-center">
                         <button
@@ -2228,17 +2266,38 @@ const handleClientFieldChange = (field, value) => {
                       )}
                     </td>
                     <td className="p-3">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                        client.workflowStatus === 'Completed'
+                      {(() => {
+                        const sc = (s) => s === 'Completed'
                           ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : client.workflowStatus === 'In Progress'
+                          : s === 'In Progress'
                             ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                            : client.workflowStatus === 'Allocated'
-                              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                      }`}>
-                        {getStatusLabel(client.workflowStatus, client.assignedTeam)}
-                      </span>
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+                        const perTeam = getPerTeamStatusBadges(client);
+                        if (perTeam && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
+                          return (
+                            <div className="flex flex-col gap-1">
+                              {perTeam.map((t, i) => (
+                                <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${sc(t.status)}`}>
+                                  {t.label}: {t.status}
+                                </span>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return (
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                            client.workflowStatus === 'Completed'
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : client.workflowStatus === 'In Progress'
+                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                : client.workflowStatus === 'Allocated'
+                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          }`}>
+                            {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                          </span>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))

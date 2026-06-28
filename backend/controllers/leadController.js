@@ -37,7 +37,9 @@ const sanitizeNumberFields = (body) => {
     'adsRequired', 'adsPending',
     'websitePending', 'planAmount',
     'advanceAmount', 'pendingAmount',
-    'adBudget', 'adBudgetPerDay'
+    'adBudget', 'adBudgetPerDay',
+    'metaAdsPlanDuration', 'googleAdsPlanDuration',
+    'linkedinAdsPlanDuration', 'seoPlanDuration'
   ];
   numberFields.forEach(field => {
     if (body[field] === '') {
@@ -45,6 +47,32 @@ const sanitizeNumberFields = (body) => {
     } else if (body[field] !== undefined && body[field] !== null) {
       const num = Number(body[field]);
       body[field] = isNaN(num) ? 0 : num;
+    }
+  });
+
+  // Sanitize enum fields — empty string must become undefined so Mongoose uses the default
+  const enumFields = [
+    'facebookAccountStatus',
+    'instagramAccountStatus',
+    'targetAudienceRequired',
+    'workflowStatus',
+    'postersStatus',
+    'videosStatus',
+    'adsStatus',
+    'websiteStatus',
+    'adsTeamStatus',
+    'designTeamStatus',
+    'devTeamStatus',
+    'paymentStatus',
+    'metaAdsCampaignStatus',
+    'googleAdsCampaignStatus',
+    'linkedinAdsCampaignStatus',
+    'seoCampaignStatus',
+    'gmbCampaignStatus'
+  ];
+  enumFields.forEach(field => {
+    if (body[field] === '') {
+      delete body[field];
     }
   });
 
