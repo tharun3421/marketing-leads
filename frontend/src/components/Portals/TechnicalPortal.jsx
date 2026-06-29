@@ -66,7 +66,6 @@ const getStatusLabel = (status, team) => {
   return status || 'Non-Allocated';
 };
 
-// Render per-team status badges for a lead
 const getPerTeamStatusBadges = (lead) => {
   const teams = lead.assignedTeam;
   if (!teams) return null;
@@ -92,16 +91,16 @@ const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
   if (!deadlineStr) return null;
   const deadlineDate = new Date(deadlineStr);
   if (isNaN(deadlineDate.getTime())) return null;
-  
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const deadline = new Date(deadlineDate);
   deadline.setHours(0, 0, 0, 0);
-  
+
   const diffTime = deadline - today;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  
+
   if (diffDays === 0) {
     return { type: 'today', label: 'Due Today', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20 font-bold' };
   } else if (diffDays < 0) {
@@ -113,7 +112,6 @@ const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
 };
 
 const getPaymentStatus = (lead) => {
-  // If the backend pre-calculated and sent lead.paymentStatus, use it!
   if (lead.paymentStatus) {
     if (lead.paymentStatus === 'Paid') {
       return { label: 'Fully Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
@@ -123,7 +121,6 @@ const getPaymentStatus = (lead) => {
     }
     return { label: 'Unpaid', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20' };
   }
-  // Fallback to local calculation if fields exist
   const plan = Number(lead.planAmount || 0);
   const advance = Number(lead.advanceAmount || 0);
   if (plan > 0 && advance >= plan) return { label: 'Fully Paid', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' };
@@ -142,8 +139,7 @@ export default function TechnicalPortal({
   const [leads, setLeads] = useState([]);
   const [filterWorkflowStatus, setFilterWorkflowStatus] = useState('All');
   const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
-  
-  // Central Clients Management filter states
+
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [clientStatusFilter, setClientStatusFilter] = useState('All');
   const [clientTeamFilter, setClientTeamFilter] = useState('All');
@@ -159,7 +155,7 @@ export default function TechnicalPortal({
   const [adsStatus, setAdsStatus] = useState('Pending');
   const [adsPending, setAdsPending] = useState(0);
   const [websiteStatus, setWebsiteStatus] = useState('Pending');
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [viewedClientId, setViewedClientId] = useState(null);
   const [showFbPass, setShowFbPass] = useState(false);
@@ -167,13 +163,10 @@ export default function TechnicalPortal({
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
   const [editWorkflowStatus, setEditWorkflowStatus] = useState('Allocated');
   const [showNotifications, setShowNotifications] = useState(false);
-  // Plan dates for Ads team (legacy single date — kept for backward compat)
   const [editPlanStartDate, setEditPlanStartDate] = useState('');
-  // Per-team status editing
   const [editAdsTeamStatus, setEditAdsTeamStatus] = useState('Pending');
   const [editDesignTeamStatus, setEditDesignTeamStatus] = useState('Pending');
   const [editDevTeamStatus, setEditDevTeamStatus] = useState('Pending');
-  // Per-campaign start dates and statuses (one per platform)
   const [editMetaStart, setEditMetaStart] = useState('');
   const [editMetaStatus, setEditMetaStatus] = useState('Pending');
   const [editGoogleStart, setEditGoogleStart] = useState('');
@@ -183,14 +176,15 @@ export default function TechnicalPortal({
   const [editSeoStart, setEditSeoStart] = useState('');
   const [editSeoStatus, setEditSeoStatus] = useState('Pending');
   const [editGmbStatus, setEditGmbStatus] = useState('Pending');
+  const [postingsPostersStatus, setPostingsPostersStatus] = useState('Pending');
+  const [postingsVideosStatus, setPostingsVideosStatus] = useState('Pending');
+  const [isLoading, setIsLoading] = useState(true);
 
   const isFirstLoadRef = React.useRef(true);
 
   const fetchAssignedLeads = async () => {
     const isFirst = isFirstLoadRef.current;
-    if (isFirst) {
-      setIsLoading(true);
-    }
+    if (isFirst) setIsLoading(true);
     try {
       const res = await authFetch('/api/leads');
       if (res.ok) {
@@ -241,7 +235,6 @@ export default function TechnicalPortal({
       setEditAdsTeamStatus(selectedLead.adsTeamStatus || 'Pending');
       setEditDesignTeamStatus(selectedLead.designTeamStatus || 'Pending');
       setEditDevTeamStatus(selectedLead.devTeamStatus || 'Pending');
-      // Per-campaign
       setEditMetaStart(selectedLead.metaAdsStartDate || '');
       setEditMetaStatus(selectedLead.metaAdsCampaignStatus || 'Pending');
       setEditGoogleStart(selectedLead.googleAdsStartDate || '');
@@ -251,6 +244,8 @@ export default function TechnicalPortal({
       setEditSeoStart(selectedLead.seoStartDate || '');
       setEditSeoStatus(selectedLead.seoCampaignStatus || 'Pending');
       setEditGmbStatus(selectedLead.gmbCampaignStatus || 'Pending');
+      setPostingsPostersStatus(selectedLead.postingsPostersStatus || 'Pending');
+      setPostingsVideosStatus(selectedLead.postingsVideosStatus || 'Pending');
     } else {
       setPostersStatus('Pending');
       setPostersPending(0);
@@ -273,6 +268,8 @@ export default function TechnicalPortal({
       setEditSeoStart('');
       setEditSeoStatus('Pending');
       setEditGmbStatus('Pending');
+      setPostingsPostersStatus('Pending');
+      setPostingsVideosStatus('Pending');
     }
   }, [selectedLeadId, teamAssigneeId]);
 
@@ -281,9 +278,7 @@ export default function TechnicalPortal({
     if (window.innerWidth < 1280) {
       setTimeout(() => {
         const panel = document.getElementById('update-milestone-panel');
-        if (panel) {
-          panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 120);
     }
   };
@@ -311,17 +306,26 @@ export default function TechnicalPortal({
       setEditSeoStart(selectedLead.seoStartDate || '');
       setEditSeoStatus(selectedLead.seoCampaignStatus || 'Pending');
       setEditGmbStatus(selectedLead.gmbCampaignStatus || 'Pending');
+      setPostingsPostersStatus(selectedLead.postingsPostersStatus || 'Pending');
+      setPostingsVideosStatus(selectedLead.postingsVideosStatus || 'Pending');
       onAddToast('Reset Updates', 'Updates draft reset to current database values.', 'info');
+
     }
   };
 
   const handleSaveUpdates = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
+   
     if (!selectedLead) return;
 
     setIsSubmitting(true);
     try {
       const updatePayload = {};
+
+       if (user?.team === 'ads') {
+  updatePayload.postingsPostersStatus = postingsPostersStatus;
+  updatePayload.postingsVideosStatus = postingsVideosStatus;
+}
 
       if (selectedLead.postersRequired !== undefined) {
         const postersPendingCount = postersStatus === 'Completed' ? 0 : (postersStatus === 'Pending' ? Number(selectedLead.postersRequired || 0) : Number(postersPending));
@@ -342,33 +346,86 @@ export default function TechnicalPortal({
       }
 
       if (selectedLead.websiteRequired !== undefined) {
-  // For developer team, websiteStatus mirrors devTeamStatus
-  const effectiveWebsiteStatus = user?.team === 'developer' ? editDevTeamStatus : websiteStatus;
-  const websitePendingCount = selectedLead.websiteRequired ? (effectiveWebsiteStatus === 'Completed' ? 0 : 1) : 0;
-  updatePayload.websiteStatus = effectiveWebsiteStatus;
-  updatePayload.websitePending = websitePendingCount;
-}
+        // For developer team, websiteStatus is auto-derived from devTeamStatus
+        const effectiveWebsiteStatus = user?.team === 'developer' ? editDevTeamStatus : websiteStatus;
+        const websitePendingCount = selectedLead.websiteRequired ? (effectiveWebsiteStatus === 'Completed' ? 0 : 1) : 0;
+        updatePayload.websiteStatus = effectiveWebsiteStatus;
+        updatePayload.websitePending = websitePendingCount;
+      }
 
-      // if (editWorkflowStatus !== selectedLead.workflowStatus) {
-      //   updatePayload.workflowStatus = editWorkflowStatus;
-      // }
+      // Auto-derive team status and workflowStatus from postings/tasks completion
+      if (user?.team === 'developer') {
+        updatePayload.workflowStatus = editDevTeamStatus === 'Completed'
+          ? 'Completed' : editDevTeamStatus === 'In Progress' ? 'In Progress' : 'Allocated';
 
-      // For developer team, auto-derive workflowStatus from devTeamStatus
-if (user?.team === 'developer') {
-  updatePayload.workflowStatus = editDevTeamStatus === 'Completed'
+      } else if (user?.team === 'design') {
+  // Auto-derive designTeamStatus from posters + videos completion
+  const hasPosters = Number(selectedLead.postersRequired || 0) > 0;
+  const hasVideos = Number(selectedLead.videosRequired || 0) > 0;
+  // Both must exist AND be Completed to reach Completed; if neither assigned, allow Completed
+  const postersAllDone = !hasPosters || postersStatus === 'Completed';
+  const videosAllDone = !hasVideos || videosStatus === 'Completed';
+  const anyAssigned = hasPosters || hasVideos;
+  const postersStarted = hasPosters && (postersStatus === 'In Progress' || postersStatus === 'Completed');
+  const videosStarted = hasVideos && (videosStatus === 'In Progress' || videosStatus === 'Completed');
+  // Only Completed when ALL assigned deliverables are done
+  const allPostingsDone = postersAllDone && videosAllDone;
+  const autoDesignStatus = allPostingsDone
     ? 'Completed'
-    : editDevTeamStatus === 'In Progress'
-      ? 'In Progress'
-      : 'Allocated';
-} else if (editWorkflowStatus !== selectedLead.workflowStatus) {
-  updatePayload.workflowStatus = editWorkflowStatus;
-}
+    : (postersStarted || videosStarted) ? 'In Progress' : 'Pending';
+  updatePayload.designTeamStatus = autoDesignStatus;
+  // Overall workflow only Completed when all postings done; otherwise In Progress if any started
+  updatePayload.workflowStatus = allPostingsDone
+    ? 'Completed'
+    : (postersStarted || videosStarted) ? 'In Progress' : 'Allocated';
+
+      } else if (user?.team === 'ads') {
+        // Auto-derive adsTeamStatus from Postings tracking (postingsPostersStatus / postingsVideosStatus)
+        const hasAdsPosters = Number(selectedLead.postersRequired || 0) > 0;
+        const hasAdsVideos = Number(selectedLead.videosRequired || 0) > 0;
+        const adsPostersAllDone = !hasAdsPosters || postingsPostersStatus === 'Completed';
+        const adsVideosAllDone = !hasAdsVideos || postingsVideosStatus === 'Completed';
+        const adsPostersStarted = hasAdsPosters && (postingsPostersStatus === 'In Progress' || postingsPostersStatus === 'Completed');
+        const adsVideosStarted = hasAdsVideos && (postingsVideosStatus === 'In Progress' || postingsVideosStatus === 'Completed');
+        const autoAdsPostingsStatus = (adsPostersAllDone && adsVideosAllDone)
+          ? 'Completed'
+          : (adsPostersStarted || adsVideosStarted) ? 'In Progress' : 'Pending';
+        const hasCampaigns = Number(selectedLead.metaAdsPlanDuration || 0) > 0
+  || Number(selectedLead.googleAdsPlanDuration || 0) > 0
+  || Number(selectedLead.linkedinAdsPlanDuration || 0) > 0
+  || Number(selectedLead.seoPlanDuration || 0) > 0
+  || (selectedLead.platforms && selectedLead.platforms.includes('GMB'));
+
+const hasPostings = Number(selectedLead.postersRequired || 0) > 0 || Number(selectedLead.videosRequired || 0) > 0;
+
+// Postings completeness (for ads team)
+const adsPostingsCompleted = autoAdsPostingsStatus === 'Completed';
+const adsPostingsInProgress = autoAdsPostingsStatus === 'In Progress';
+
+// Campaigns completeness — use the manually set editAdsTeamStatus when campaigns exist
+const campaignsCompleted = !hasCampaigns || editAdsTeamStatus === 'Completed';
+const campaignsInProgress = hasCampaigns && editAdsTeamStatus === 'In Progress';
+
+// Overall: Completed only when BOTH postings AND campaigns are fully done
+const allDone = (!hasPostings || adsPostingsCompleted) && campaignsCompleted;
+const anyInProgress = adsPostingsInProgress || campaignsInProgress
+  || (hasPostings && adsPostingsCompleted) || (hasCampaigns && editAdsTeamStatus === 'Completed' && hasPostings && !adsPostingsCompleted);
+
+const finalAdsTeamStatus = allDone ? 'Completed' : (adsPostingsInProgress || campaignsInProgress || (hasPostings && !adsPostingsCompleted && hasCampaigns)) ? 'In Progress' : (hasCampaigns ? editAdsTeamStatus : autoAdsPostingsStatus);
+
+updatePayload.adsTeamStatus = finalAdsTeamStatus;
+updatePayload.workflowStatus = allDone
+  ? 'Completed'
+  : (adsPostingsInProgress || campaignsInProgress || (hasCampaigns && hasPostings)) ? 'In Progress' : 'Allocated';
+
+      } else if (editWorkflowStatus !== selectedLead.workflowStatus) {
+        updatePayload.workflowStatus = editWorkflowStatus;
+      }
 
       // Per-team statuses
       if (user?.team === 'ads' || user?.team === 'all') {
-        updatePayload.adsTeamStatus = editAdsTeamStatus;
+        if (user?.team === 'all') updatePayload.adsTeamStatus = editAdsTeamStatus;
 
-        // Per-campaign: Meta Ads
         const metaDur = Number(selectedLead.metaAdsPlanDuration || 0);
         if (metaDur > 0 && editMetaStart) {
           const metaEnd = new Date(editMetaStart);
@@ -378,7 +435,6 @@ if (user?.team === 'developer') {
         }
         updatePayload.metaAdsCampaignStatus = editMetaStatus;
 
-        // Per-campaign: Google Ads
         const googleDur = Number(selectedLead.googleAdsPlanDuration || 0);
         if (googleDur > 0 && editGoogleStart) {
           const googleEnd = new Date(editGoogleStart);
@@ -388,7 +444,6 @@ if (user?.team === 'developer') {
         }
         updatePayload.googleAdsCampaignStatus = editGoogleStatus;
 
-        // Per-campaign: LinkedIn Ads
         const linkedinDur = Number(selectedLead.linkedinAdsPlanDuration || 0);
         if (linkedinDur > 0 && editLinkedinStart) {
           const linkedinEnd = new Date(editLinkedinStart);
@@ -398,7 +453,6 @@ if (user?.team === 'developer') {
         }
         updatePayload.linkedinAdsCampaignStatus = editLinkedinStatus;
 
-        // Per-campaign: SEO
         const seoDur = Number(selectedLead.seoPlanDuration || 0);
         if (seoDur > 0 && editSeoStart) {
           const seoEnd = new Date(editSeoStart);
@@ -407,13 +461,14 @@ if (user?.team === 'developer') {
           updatePayload.seoEndDate = seoEnd.toISOString().split('T')[0];
         }
         updatePayload.seoCampaignStatus = editSeoStatus;
-
-        // GMB — no dates, just status
         updatePayload.gmbCampaignStatus = editGmbStatus;
       }
-      if (user?.team === 'design' || user?.team === 'all') {
+
+      // design team status already set above via auto-derive; only set manually for 'all' role
+      if (user?.team === 'all') {
         updatePayload.designTeamStatus = editDesignTeamStatus;
       }
+
       if (user?.team === 'developer' || user?.team === 'all') {
         updatePayload.devTeamStatus = editDevTeamStatus;
       }
@@ -449,12 +504,8 @@ if (user?.team === 'developer') {
           workflowStatus: 'In Progress'
         })
       });
-
       if (res.ok) {
         onAddToast('Client Accepted', `Successfully accepted folder for ${lead.clientName}.`, 'success');
-        // if (onAddNotification) {
-        //   onAddNotification(`Technical member "${user?.name || ''}" accepted client campaign folder for "${lead.clientName}".`, 'info');
-        // }
         await fetchAssignedLeads();
       } else {
         const errData = await res.json();
@@ -477,9 +528,6 @@ if (user?.team === 'developer') {
       if (res.ok) {
         fetchAssignedLeads();
         onAddToast('Status Updated', `Updated workflow status to ${newStatus}.`, 'success');
-        // if (onAddNotification) {
-        //   onAddNotification(`Technical member "${user?.name || ''}" updated workflow status of client to ${newStatus}.`, 'update');
-        // }
       }
     } catch (err) {
       console.error(err);
@@ -487,24 +535,19 @@ if (user?.team === 'developer') {
     }
   };
 
-  // Define teamLeads scoped to technician's department only
   const teamLeads = useMemo(() => {
     if (!user?.team || user?.team === 'all') return leads;
     return leads.filter(l => hasTeamVal(l.assignedTeam, user.team));
   }, [leads, user?.team]);
 
-  // Metric aggregates based on claimed clients only (within technician's department)
   const myLeads = useMemo(() => {
     return teamLeads.filter(l => {
-      const teamAssignee = user?.team === 'developer'
-        ? l.assignedDeveloper
-        : user?.team === 'design'
-          ? l.assignedDesigner
-          : user?.team === 'ads'
-            ? l.assignedAdSpecialist
-            : l.assignedTo;
-      const teamAssigneeId = teamAssignee?._id || teamAssignee;
-      return teamAssigneeId && teamAssigneeId === userId;
+      const ta = user?.team === 'developer' ? l.assignedDeveloper
+        : user?.team === 'design' ? l.assignedDesigner
+        : user?.team === 'ads' ? l.assignedAdSpecialist
+        : l.assignedTo;
+      const taId = ta?._id || ta;
+      return taId && taId === userId;
     });
   }, [teamLeads, user?.team, userId]);
 
@@ -524,33 +567,22 @@ if (user?.team === 'developer') {
   const pendingCampaigns = useMemo(() => myLeads.reduce((acc, l) => acc + (Number(l.adsRequired) > 0 ? Number(l.adsPending ?? l.adsRequired) : 0), 0), [myLeads]);
   const completedCampaigns = useMemo(() => totalCampaigns - pendingCampaigns, [totalCampaigns, pendingCampaigns]);
 
-  // Scope the top metrics grid counts to department tasks only via teamLeads
   const totalClientsCount = useMemo(() => teamLeads.length, [teamLeads]);
-  const claimedClientsCount = useMemo(() => {
-    return teamLeads.filter(l => {
-      const teamAssignee = user?.team === 'developer'
-        ? l.assignedDeveloper
-        : user?.team === 'design'
-          ? l.assignedDesigner
-          : user?.team === 'ads'
-            ? l.assignedAdSpecialist
-            : l.assignedTo;
-      return !!teamAssignee;
-    }).length;
-  }, [teamLeads, user?.team]);
+  const claimedClientsCount = useMemo(() => teamLeads.filter(l => {
+    const ta = user?.team === 'developer' ? l.assignedDeveloper
+      : user?.team === 'design' ? l.assignedDesigner
+      : user?.team === 'ads' ? l.assignedAdSpecialist
+      : l.assignedTo;
+    return !!ta;
+  }).length, [teamLeads, user?.team]);
 
-  const unclaimedClientsCount = useMemo(() => {
-    return teamLeads.filter(l => {
-      const teamAssignee = user?.team === 'developer'
-        ? l.assignedDeveloper
-        : user?.team === 'design'
-          ? l.assignedDesigner
-          : user?.team === 'ads'
-            ? l.assignedAdSpecialist
-            : l.assignedTo;
-      return !teamAssignee;
-    }).length;
-  }, [teamLeads, user?.team]);
+  const unclaimedClientsCount = useMemo(() => teamLeads.filter(l => {
+    const ta = user?.team === 'developer' ? l.assignedDeveloper
+      : user?.team === 'design' ? l.assignedDesigner
+      : user?.team === 'ads' ? l.assignedAdSpecialist
+      : l.assignedTo;
+    return !ta;
+  }).length, [teamLeads, user?.team]);
 
   const inProgressClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'In Progress').length, [teamLeads]);
   const pendingClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'Allocated').length, [teamLeads]);
@@ -558,82 +590,44 @@ if (user?.team === 'developer') {
 
   const getMetricsModalTitleAndList = () => {
     switch (activeMetricsModal) {
-      case 'total':
-        return { title: 'Total Department Clients', list: teamLeads };
-      case 'claimed':
-        return { 
-          title: 'Claimed Department Clients', 
-          list: teamLeads.filter(l => {
-            const teamAssignee = user?.team === 'developer'
-              ? l.assignedDeveloper
-              : user?.team === 'design'
-                ? l.assignedDesigner
-                : user?.team === 'ads'
-                  ? l.assignedAdSpecialist
-                  : l.assignedTo;
-            return !!teamAssignee;
-          }) 
-        };
-      case 'unclaimed':
-        return { 
-          title: 'Unclaimed Department Clients', 
-          list: teamLeads.filter(l => {
-            const teamAssignee = user?.team === 'developer'
-              ? l.assignedDeveloper
-              : user?.team === 'design'
-                ? l.assignedDesigner
-                : user?.team === 'ads'
-                  ? l.assignedAdSpecialist
-                  : l.assignedTo;
-            return !teamAssignee;
-          }) 
-        };
-      case 'in-progress':
-        return { 
-          title: 'In-Progress Campaigns', 
-          list: teamLeads.filter(l => l.workflowStatus === 'In Progress') 
-        };
-      case 'pending':
-        return { 
-          title: 'Pending Campaigns', 
-          list: teamLeads.filter(l => l.workflowStatus === 'Allocated') 
-        };
-      case 'completed':
-        return { 
-          title: 'Completed Campaigns', 
-          list: teamLeads.filter(l => l.workflowStatus === 'Completed') 
-        };
-      default:
-        return { title: '', list: [] };
+      case 'total': return { title: 'Total Department Clients', list: teamLeads };
+      case 'claimed': return {
+        title: 'Claimed Department Clients',
+        list: teamLeads.filter(l => {
+          const ta = user?.team === 'developer' ? l.assignedDeveloper
+            : user?.team === 'design' ? l.assignedDesigner
+            : user?.team === 'ads' ? l.assignedAdSpecialist : l.assignedTo;
+          return !!ta;
+        })
+      };
+      case 'unclaimed': return {
+        title: 'Unclaimed Department Clients',
+        list: teamLeads.filter(l => {
+          const ta = user?.team === 'developer' ? l.assignedDeveloper
+            : user?.team === 'design' ? l.assignedDesigner
+            : user?.team === 'ads' ? l.assignedAdSpecialist : l.assignedTo;
+          return !ta;
+        })
+      };
+      case 'in-progress': return { title: 'In-Progress Campaigns', list: teamLeads.filter(l => l.workflowStatus === 'In Progress') };
+      case 'pending': return { title: 'Pending Campaigns', list: teamLeads.filter(l => l.workflowStatus === 'Allocated') };
+      case 'completed': return { title: 'Completed Campaigns', list: teamLeads.filter(l => l.workflowStatus === 'Completed') };
+      default: return { title: '', list: [] };
     }
   };
 
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Main checklist filters wrapped in useMemo, ensuring filteredLeads filters out any leads that do not belong to the technician's department
   const filteredLeads = useMemo(() => {
     return leads.filter(lead => {
-      // 0. Filter out any leads that do not belong to the technician's department
       if (user?.team && user?.team !== 'all') {
-        if (!hasTeamVal(lead.assignedTeam, user.team)) {
-          return false;
-        }
+        if (!hasTeamVal(lead.assignedTeam, user.team)) return false;
       }
+      const ta = user?.team === 'developer' ? lead.assignedDeveloper
+        : user?.team === 'design' ? lead.assignedDesigner
+        : user?.team === 'ads' ? lead.assignedAdSpecialist
+        : lead.assignedTo;
+      const taId = ta?._id || ta;
+      if (taId && taId !== userId) return false;
 
-      // Only show unclaimed tasks or tasks assigned to me in the main checklist
-      const teamAssignee = user?.team === 'developer'
-        ? lead.assignedDeveloper
-        : user?.team === 'design'
-          ? lead.assignedDesigner
-          : user?.team === 'ads'
-            ? lead.assignedAdSpecialist
-            : lead.assignedTo;
-      const teamAssigneeId = teamAssignee?._id || teamAssignee;
-      if (teamAssigneeId && teamAssigneeId !== userId) {
-        return false;
-      }
-
-      // 1. Text Search Query
       if (listSearchQuery) {
         const q = listSearchQuery.toLowerCase();
         const nameMatch = (lead.clientName || '').toLowerCase().includes(q);
@@ -644,58 +638,35 @@ if (user?.team === 'developer') {
         const assignedToName = lead.assignedToName || '';
         const assignedTeamLabel = getTeamDisplayLabel(lead.assignedTeam);
         const assignedToMatch = assignedToName.toLowerCase().includes(q) || assignedTeamLabel.toLowerCase().includes(q);
-
         if (!nameMatch && !companyMatch && !idMatch && !phoneMatch && !createdByMatch && !assignedToMatch) return false;
       }
 
-      // 2. Status filter
-      if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
-        return false;
-      }
-
-      // 3. Assigned Team filter
-      if (filterAssignedTeam !== 'All') {
-        if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
-          return false;
-        }
-      }
+      if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) return false;
+      if (filterAssignedTeam !== 'All' && !hasTeamVal(lead.assignedTeam, filterAssignedTeam)) return false;
 
       return true;
     });
   }, [leads, user?.team, userId, listSearchQuery, filterWorkflowStatus, filterAssignedTeam]);
 
-  const unclaimedLeads = useMemo(() => {
-    return filteredLeads.filter(lead => {
-      const teamAssignee = user?.team === 'developer'
-        ? lead.assignedDeveloper
-        : user?.team === 'design'
-          ? lead.assignedDesigner
-          : user?.team === 'ads'
-            ? lead.assignedAdSpecialist
-            : lead.assignedTo;
-      return !teamAssignee;
-    });
-  }, [filteredLeads, user?.team]);
+  const unclaimedLeads = useMemo(() => filteredLeads.filter(lead => {
+    const ta = user?.team === 'developer' ? lead.assignedDeveloper
+      : user?.team === 'design' ? lead.assignedDesigner
+      : user?.team === 'ads' ? lead.assignedAdSpecialist : lead.assignedTo;
+    return !ta;
+  }), [filteredLeads, user?.team]);
 
-  const claimedLeads = useMemo(() => {
-    return filteredLeads.filter(lead => {
-      const teamAssignee = user?.team === 'developer'
-        ? lead.assignedDeveloper
-        : user?.team === 'design'
-          ? lead.assignedDesigner
-          : user?.team === 'ads'
-            ? lead.assignedAdSpecialist
-            : lead.assignedTo;
-      const teamAssigneeId = teamAssignee?._id || teamAssignee;
-      return teamAssigneeId && teamAssigneeId === userId;
-    });
-  }, [filteredLeads, user?.team, userId]);
+  const claimedLeads = useMemo(() => filteredLeads.filter(lead => {
+    const ta = user?.team === 'developer' ? lead.assignedDeveloper
+      : user?.team === 'design' ? lead.assignedDesigner
+      : user?.team === 'ads' ? lead.assignedAdSpecialist : lead.assignedTo;
+    const taId = ta?._id || ta;
+    return taId && taId === userId;
+  }), [filteredLeads, user?.team, userId]);
 
   useEffect(() => {
     if (filteredLeads.length > 0) {
       const exists = filteredLeads.some(l => (l._id || l.id) === selectedLeadId);
       if (!exists) {
-        // Prioritize claimed leads for default selection, fallback to unclaimed
         const defaultLead = claimedLeads[0] || unclaimedLeads[0] || filteredLeads[0];
         setSelectedLeadId(defaultLead._id || defaultLead.id);
       }
@@ -704,7 +675,6 @@ if (user?.team === 'developer') {
     }
   }, [filteredLeads, claimedLeads, unclaimedLeads, selectedLeadId]);
 
-  // Central Clients Management filter logic (view all clients in the system) wrapped in useMemo
   const filteredCentralClients = useMemo(() => {
     return leads.filter(lead => {
       if (clientSearchQuery) {
@@ -717,33 +687,20 @@ if (user?.team === 'developer') {
         const assignedToName = lead.assignedToName || '';
         const assignedTeamLabel = getTeamDisplayLabel(lead.assignedTeam);
         const assignedToMatch = assignedToName.toLowerCase().includes(q) || assignedTeamLabel.toLowerCase().includes(q);
-
         if (!nameMatch && !phoneMatch && !idMatch && !createdByMatch && !businessMatch && !assignedToMatch) return false;
       }
-
-      if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
-        return false;
-      }
-
-      if (clientTeamFilter !== 'All') {
-        if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
-          return false;
-        }
-      }
-
+      if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) return false;
+      if (clientTeamFilter !== 'All' && !hasTeamVal(lead.assignedTeam, clientTeamFilter)) return false;
       if (clientStartDateFilter) {
         const start = new Date(clientStartDateFilter);
         start.setHours(0, 0, 0, 0);
-        const created = new Date(lead.createdAt || lead.timestamp);
-        if (created < start) return false;
+        if (new Date(lead.createdAt || lead.timestamp) < start) return false;
       }
       if (clientEndDateFilter) {
         const end = new Date(clientEndDateFilter);
         end.setHours(23, 59, 59, 999);
-        const created = new Date(lead.createdAt || lead.timestamp);
-        if (created > end) return false;
+        if (new Date(lead.createdAt || lead.timestamp) > end) return false;
       }
-
       return true;
     });
   }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientStartDateFilter, clientEndDateFilter]);
@@ -760,77 +717,62 @@ if (user?.team === 'developer') {
   }
 
   const renderLeadCard = (lead, isClaimed) => {
-  const leadId = lead._id || lead.id;
-  const isSelected = leadId === selectedLeadId;
-  return (
-    <div
-      key={leadId}
-      onClick={() => handleSelectLead(leadId)}
-      className={`p-3.5 rounded-xl border transition-all duration-200 cursor-pointer relative overflow-hidden group ${
-        isSelected
-          ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 shadow-sm'
-          : 'border-gray-200/80 dark:border-slate-800/40 bg-white/60 hover:bg-slate-500/3 dark:bg-slate-900/20 dark:hover:bg-slate-900/40'
-      }`}
-    >
-      {isSelected && (
-        <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500" />
-      )}
-      <div className="space-y-1.5 pl-1.5">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setViewedClientId(leadId);
-            }}
-            className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono hover:underline cursor-pointer"
-          >
-            {lead.clientId || 'N/A'}
-          </button>
-          <div className="flex items-center gap-1.5">
-            {(() => {
-              const badge = getPaymentStatus(lead);
-              return (
-                <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
-                  {badge.label}
-                </span>
-              );
-            })()}
-            {(() => {
-              const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
-              if (deadlineAlert) {
-                return (
-                  <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                    {deadlineAlert.label}
-                  </span>
-                );
-              }
-              return null;
-            })()}
+    const leadId = lead._id || lead.id;
+    const isSelected = leadId === selectedLeadId;
+    return (
+      <div
+        key={leadId}
+        onClick={() => handleSelectLead(leadId)}
+        className={`p-3.5 rounded-xl border transition-all duration-200 cursor-pointer relative overflow-hidden group ${
+          isSelected
+            ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 shadow-sm'
+            : 'border-gray-200/80 dark:border-slate-800/40 bg-white/60 hover:bg-slate-500/3 dark:bg-slate-900/20 dark:hover:bg-slate-900/40'
+        }`}
+      >
+        {isSelected && <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500" />}
+        <div className="space-y-1.5 pl-1.5">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={(e) => { e.stopPropagation(); setViewedClientId(leadId); }}
+              className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono hover:underline cursor-pointer"
+            >
+              {lead.clientId || 'N/A'}
+            </button>
+            <div className="flex items-center gap-1.5">
+              {(() => {
+                const badge = getPaymentStatus(lead);
+                return <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>{badge.label}</span>;
+              })()}
+              {(() => {
+                const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
+                if (deadlineAlert) return <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>{deadlineAlert.label}</span>;
+                return null;
+              })()}
+            </div>
           </div>
+          <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">{lead.clientName}</h4>
+          <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+            {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
+          </p>
+          <p className="text-[9px] text-gray-405 dark:text-gray-550 mt-1 font-semibold">
+            Created By: {lead.salespersonName}
+          </p>
         </div>
-        <h4 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap truncate">
-          <span>{lead.clientName}</span>
-        </h4>
-        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-          {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
-        </p>
-        <p className="text-[9px] text-gray-405 dark:text-gray-550 mt-1 font-semibold">
-          Created By: {lead.salespersonName}
-        </p>
       </div>
-    </div>
-  );
-};
+    );
+  };
+
   const getGridColsClass = () => {
     const team = user?.team;
     if (team === 'design') return 'grid grid-cols-1 sm:grid-cols-2 gap-4';
-    if (team === 'developer' || team === 'ads') return 'grid grid-cols-1 gap-4';
+    if (team === 'developer') return 'grid grid-cols-1 gap-4';
+if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
     return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4';
   };
 
   return (
     <div className="space-y-6">
-      
+
       {/* Portal Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-6 glass-card rounded-2xl gap-4 border border-indigo-500/5 relative z-30">
         <div className="flex items-center gap-4">
@@ -839,12 +781,12 @@ if (user?.team === 'developer') {
           </div>
           <div>
             <h2 className="text-lg font-bold text-gray-950 dark:text-white">Technical Team Work Portal</h2>
-            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">Logged in as: <strong className="text-gray-900 dark:text-white font-bold">{user?.name}</strong> ({user?.username})</p>
+            <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+              Logged in as: <strong className="text-gray-900 dark:text-white font-bold">{user?.name}</strong> ({user?.username})
+            </p>
           </div>
         </div>
-
         <div className="flex items-center gap-2.5">
-          {/* Notification Bell */}
           <div className="relative">
             <button
               type="button"
@@ -863,8 +805,6 @@ if (user?.team === 'developer') {
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-slate-950 animate-ping" />
               )}
             </button>
-
-            {/* Notifications Dropdown */}
             {showNotifications && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
@@ -873,7 +813,6 @@ if (user?.team === 'developer') {
                     <h3 className="font-bold text-gray-900 dark:text-white text-sm">System Operations Log</h3>
                     <span className="text-[10px] text-gray-400 font-semibold">{notifications.filter(n => n.unread).length} Unread</span>
                   </div>
-
                   <div className="space-y-2">
                     {notifications.length === 0 ? (
                       <p className="text-xs text-gray-400 dark:text-gray-550 text-center py-4">No logged operations yet.</p>
@@ -881,9 +820,7 @@ if (user?.team === 'developer') {
                       notifications.slice(0, 10).map((notif) => (
                         <div key={notif.id} className="p-2.5 rounded-xl bg-gray-50/50 dark:bg-slate-950/15 border border-gray-100/50 dark:border-slate-800/20 text-xs">
                           <p className="text-gray-700 dark:text-gray-300 font-medium leading-relaxed">{notif.message}</p>
-                          <span className="text-[10px] text-gray-400 block mt-1.5 font-normal">
-                            {new Date(notif.timestamp).toLocaleString()}
-                          </span>
+                          <span className="text-[10px] text-gray-400 block mt-1.5 font-normal">{new Date(notif.timestamp).toLocaleString()}</span>
                         </div>
                       ))
                     )}
@@ -892,14 +829,10 @@ if (user?.team === 'developer') {
               </>
             )}
           </div>
-
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              logout();
-              onAddToast('Sign Out Success', 'Technical session terminated.', 'info');
-            }}
+            onClick={() => { logout(); onAddToast('Sign Out Success', 'Technical session terminated.', 'info'); }}
             icon={LogOut}
           >
             Sign Out Portal
@@ -907,192 +840,89 @@ if (user?.team === 'developer') {
         </div>
       </div>
 
-      {/* Service Metrics Grid (Department Specific) */}
+      {/* Service Metrics Grid */}
       <div className={getGridColsClass()}>
-        {/* Posters Card */}
         {(user?.team === 'design' || user?.team === 'all') && (
           <div className="glass-card p-5 rounded-xl border border-indigo-500/5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/40 pb-2.5 mb-3">
               <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Posters</span>
-              <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg">
-                <Layers className="w-4 h-4" />
-              </div>
+              <div className="p-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg"><Layers className="w-4 h-4" /></div>
             </div>
             <div className="grid grid-cols-3 text-center text-xs font-semibold">
-              <div>
-                <span className="block text-gray-900 dark:text-white text-base font-extrabold">{totalPosters}</span>
-                Total
-              </div>
-              <div>
-                <span className="block text-emerald-500 text-base font-extrabold">{completedPosters}</span>
-                Done
-              </div>
-              <div>
-                <span className="block text-amber-500 text-base font-extrabold">{pendingPosters}</span>
-                Pending
-              </div>
+              <div><span className="block text-gray-900 dark:text-white text-base font-extrabold">{totalPosters}</span>Total</div>
+              <div><span className="block text-emerald-500 text-base font-extrabold">{completedPosters}</span>Done</div>
+              <div><span className="block text-amber-500 text-base font-extrabold">{pendingPosters}</span>Pending</div>
             </div>
           </div>
         )}
-
-        {/* Videos Card */}
         {(user?.team === 'design' || user?.team === 'all') && (
           <div className="glass-card p-5 rounded-xl border border-blue-500/5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/40 pb-2.5 mb-3">
               <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Videos</span>
-              <div className="p-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg">
-                <Film className="w-4 h-4" />
-              </div>
+              <div className="p-2 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-lg"><Film className="w-4 h-4" /></div>
             </div>
             <div className="grid grid-cols-3 text-center text-xs font-semibold">
-              <div>
-                <span className="block text-gray-900 dark:text-white text-base font-extrabold">{totalVideos}</span>
-                Total
-              </div>
-              <div>
-                <span className="block text-emerald-500 text-base font-extrabold">{completedVideos}</span>
-                Done
-              </div>
-              <div>
-                <span className="block text-amber-500 text-base font-extrabold">{pendingVideos}</span>
-                Pending
-              </div>
+              <div><span className="block text-gray-900 dark:text-white text-base font-extrabold">{totalVideos}</span>Total</div>
+              <div><span className="block text-emerald-500 text-base font-extrabold">{completedVideos}</span>Done</div>
+              <div><span className="block text-amber-500 text-base font-extrabold">{pendingVideos}</span>Pending</div>
             </div>
           </div>
         )}
-
-        {/* Websites Card */}
         {(user?.team === 'developer' || user?.team === 'all') && (
           <div className="glass-card p-5 rounded-xl border border-purple-500/5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/40 pb-2.5 mb-3">
               <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Websites</span>
-              <div className="p-2 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-lg">
-                <Globe className="w-4 h-4" />
-              </div>
+              <div className="p-2 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-lg"><Globe className="w-4 h-4" /></div>
             </div>
             <div className="grid grid-cols-3 text-center text-xs font-semibold">
-              <div>
-                <span className="block text-gray-900 dark:text-white text-base font-extrabold">{totalWebsites}</span>
-                Total
-              </div>
-              <div>
-                <span className="block text-emerald-500 text-base font-extrabold">{completedWebsites}</span>
-                Done
-              </div>
-              <div>
-                <span className="block text-amber-500 text-base font-extrabold">{pendingWebsites}</span>
-                Pending
-              </div>
+              <div><span className="block text-gray-900 dark:text-white text-base font-extrabold">{totalWebsites}</span>Total</div>
+              <div><span className="block text-emerald-500 text-base font-extrabold">{completedWebsites}</span>Done</div>
+              <div><span className="block text-amber-500 text-base font-extrabold">{pendingWebsites}</span>Pending</div>
             </div>
           </div>
         )}
-
-        {/* Campaigns Card */}
-        {(user?.team === 'ads' || user?.team === 'all') && (
-          <div className="glass-card p-5 rounded-xl border border-pink-500/5 flex flex-col justify-between">
-            <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/40 pb-2.5 mb-3">
-              <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Campaigns</span>
-              <div className="p-2 bg-pink-500/10 text-pink-600 dark:text-pink-400 rounded-lg">
-                <Sliders className="w-4 h-4" />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 text-center text-xs font-semibold">
-              <div>
-                <span className="block text-gray-900 dark:text-white text-base font-extrabold">{totalCampaigns}</span>
-                Total
-              </div>
-              <div>
-                <span className="block text-emerald-500 text-base font-extrabold">{completedCampaigns}</span>
-                Done
-              </div>
-              <div>
-                <span className="block text-amber-500 text-base font-extrabold">{pendingCampaigns}</span>
-                Pending
-              </div>
-            </div>
-          </div>
-        )}
+        
       </div>
+
       {/* Workflow Status Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-6">
-        {/* Total Clients Card */}
-        <div 
-          onClick={() => setActiveMetricsModal('total')}
-          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-indigo-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
-        >
-          <div className="p-2.5 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-xl">
-            <Users className="w-5 h-5" />
-          </div>
+        <div onClick={() => setActiveMetricsModal('total')} className="glass-card p-4 rounded-xl flex items-center gap-3 border border-indigo-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all">
+          <div className="p-2.5 bg-indigo-500/10 text-indigo-650 dark:text-indigo-400 rounded-xl"><Users className="w-5 h-5" /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-500 dark:text-gray-405 uppercase tracking-wider">Assigned Clients</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{totalClientsCount}</p>
           </div>
         </div>
-
-        {/* Claimed Clients Card */}
-        <div 
-          onClick={() => setActiveMetricsModal('claimed')}
-          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-blue-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
-        >
-          <div className="p-2.5 bg-blue-500/10 text-blue-650 dark:text-blue-400 rounded-xl">
-            <User className="w-5 h-5" />
-          </div>
+        <div onClick={() => setActiveMetricsModal('claimed')} className="glass-card p-4 rounded-xl flex items-center gap-3 border border-blue-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all">
+          <div className="p-2.5 bg-blue-500/10 text-blue-650 dark:text-blue-400 rounded-xl"><User className="w-5 h-5" /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-500 dark:text-gray-405 uppercase tracking-wider">Claimed Clients</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{claimedClientsCount}</p>
           </div>
         </div>
-
-        {/* Unclaimed Clients Card */}
-        <div 
-          onClick={() => setActiveMetricsModal('unclaimed')}
-          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-amber-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
-        >
-          <div className="p-2.5 bg-amber-500/10 text-amber-655 dark:text-amber-400 rounded-xl">
-            <Sliders className="w-5 h-5" />
-          </div>
+        <div onClick={() => setActiveMetricsModal('unclaimed')} className="glass-card p-4 rounded-xl flex items-center gap-3 border border-amber-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all">
+          <div className="p-2.5 bg-amber-500/10 text-amber-655 dark:text-amber-400 rounded-xl"><Sliders className="w-5 h-5" /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Unclaimed</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{unclaimedClientsCount}</p>
           </div>
         </div>
-
-        {/* In Progress Card */}
-        <div 
-          onClick={() => setActiveMetricsModal('in-progress')}
-          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-purple-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
-        >
-          <div className="p-2.5 bg-purple-500/10 text-purple-650 dark:text-purple-405 rounded-xl">
-            <Layers className="w-5 h-5 animate-pulse" />
-          </div>
+        <div onClick={() => setActiveMetricsModal('in-progress')} className="glass-card p-4 rounded-xl flex items-center gap-3 border border-purple-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all">
+          <div className="p-2.5 bg-purple-500/10 text-purple-650 dark:text-purple-405 rounded-xl"><Layers className="w-5 h-5 animate-pulse" /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-550 dark:text-gray-400 uppercase tracking-wider">In Progress</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{inProgressClientsCount}</p>
           </div>
         </div>
-
-        {/* Pending Card */}
-        <div 
-          onClick={() => setActiveMetricsModal('pending')}
-          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-rose-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
-        >
-          <div className="p-2.5 bg-rose-500/10 text-rose-650 dark:text-rose-455 rounded-xl">
-            <Clock className="w-5 h-5" />
-          </div>
+        <div onClick={() => setActiveMetricsModal('pending')} className="glass-card p-4 rounded-xl flex items-center gap-3 border border-rose-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all">
+          <div className="p-2.5 bg-rose-500/10 text-rose-650 dark:text-rose-455 rounded-xl"><Clock className="w-5 h-5" /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-550 dark:text-gray-400 uppercase tracking-wider">Pending</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{pendingClientsCount}</p>
           </div>
         </div>
-
-        {/* Completed Card */}
-        <div 
-          onClick={() => setActiveMetricsModal('completed')}
-          className="glass-card p-4 rounded-xl flex items-center gap-3 border border-emerald-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all"
-        >
-          <div className="p-2.5 bg-emerald-500/10 text-emerald-655 dark:text-emerald-400 rounded-xl">
-            <CheckCircle className="w-5 h-5" />
-          </div>
+        <div onClick={() => setActiveMetricsModal('completed')} className="glass-card p-4 rounded-xl flex items-center gap-3 border border-emerald-500/5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all">
+          <div className="p-2.5 bg-emerald-500/10 text-emerald-655 dark:text-emerald-400 rounded-xl"><CheckCircle className="w-5 h-5" /></div>
           <div>
             <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Completed</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{completedClientsCount}</p>
@@ -1100,12 +930,11 @@ if (user?.team === 'developer') {
         </div>
       </div>
 
-       {/* Central Clients Section */}
+      {/* Central Clients Section */}
       <div className="mt-8">
         <Card title="Client Work flow" subtitle="Central client management roster synchronized in real-time across portals">
           <div className="space-y-4 mb-6">
             <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
               <div className="relative flex-1">
                 <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <input
@@ -1116,8 +945,6 @@ if (user?.team === 'developer') {
                   className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-200 dark:border-slate-800 rounded-xl bg-white/50 dark:bg-slate-900/20 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500"
                 />
               </div>
-
-              {/* Status Filter */}
               <div className="w-full md:w-44">
                 <select
                   value={clientStatusFilter}
@@ -1131,8 +958,6 @@ if (user?.team === 'developer') {
                   <option value="Completed">Completed</option>
                 </select>
               </div>
-
-              {/* Team Filter */}
               <div className="w-full md:w-44">
                 <select
                   value={clientTeamFilter}
@@ -1147,44 +972,20 @@ if (user?.team === 'developer') {
                 </select>
               </div>
             </div>
-
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
-              {/* Date Filters */}
               <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-650 dark:text-gray-400">
                 <div className="flex items-center gap-2">
                   <span>Timeline From:</span>
-                  <input
-                    type="date"
-                    value={clientStartDateFilter}
-                    onChange={(e) => setClientStartDateFilter(e.target.value)}
-                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
-                  />
+                  <input type="date" value={clientStartDateFilter} onChange={(e) => setClientStartDateFilter(e.target.value)} className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer" />
                 </div>
                 <div className="flex items-center gap-2">
                   <span>To:</span>
-                  <input
-                    type="date"
-                    value={clientEndDateFilter}
-                    onChange={(e) => setClientEndDateFilter(e.target.value)}
-                    className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer"
-                  />
+                  <input type="date" value={clientEndDateFilter} onChange={(e) => setClientEndDateFilter(e.target.value)} className="rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2.5 bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white outline-hidden focus:border-indigo-500 cursor-pointer" />
                 </div>
               </div>
-
               <div className="flex gap-2 justify-end">
-                {/* Clear Filters */}
                 {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setClientSearchQuery('');
-                      setClientStatusFilter('All');
-                      setClientTeamFilter('All');
-                      setClientStartDateFilter('');
-                      setClientEndDateFilter('');
-                    }}
-                  >
+                  <Button variant="outline" size="sm" onClick={() => { setClientSearchQuery(''); setClientStatusFilter('All'); setClientTeamFilter('All'); setClientStartDateFilter(''); setClientEndDateFilter(''); }}>
                     Clear Filters
                   </Button>
                 )}
@@ -1207,135 +1008,68 @@ if (user?.team === 'developer') {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                 {filteredCentralClients.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-550 font-normal">
-                      No clients found matching the selected filters.
-                    </td>
-                  </tr>
+                  <tr><td colSpan="7" className="p-6 text-center text-gray-400 dark:text-gray-550 font-normal">No clients found matching the selected filters.</td></tr>
                 ) : (
-                  filteredCentralClients.map((client) => {
-                    return (
-                      <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
-                        <td className="p-3">
-                          <button
-                            onClick={() => setViewedClientId(client._id)}
-                            className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                          >
-                            {client.clientId || 'N/A'}
-                          </button>
-                        </td>
-                        <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
-                          {client.salespersonName || '—'}
-                        </td>
-                        <td className="p-3 text-gray-900 dark:text-white font-bold">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span>{client.clientName}</span>
-                            {/* {(() => {
-                              const badge = getPaymentStatus(client);
-                              return (
-                                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
-                                  {badge.label}
+                  filteredCentralClients.map((client) => (
+                    <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
+                      <td className="p-3">
+                        <button onClick={() => setViewedClientId(client._id)} className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer">
+                          {client.clientId || 'N/A'}
+                        </button>
+                      </td>
+                      <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">{client.salespersonName || '—'}</td>
+                      <td className="p-3 text-gray-900 dark:text-white font-bold">{client.clientName}</td>
+                      <td className="p-3 text-gray-900 dark:text-white font-bold">{client.companyName || '—'}</td>
+                      <td className="p-3 font-mono">{client.mobileNumber}</td>
+                      <td className="p-3">
+                        {(() => {
+                          const teams = client.assignedTeam;
+                          const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+                          const assignees = [];
+                          if (teamList.includes('ads') || teamList.includes('all')) assignees.push({ team: 'Ads', name: client.assignedAdSpecialistName || null, color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400' });
+                          if (teamList.includes('design') || teamList.includes('all')) assignees.push({ team: 'Design', name: client.assignedDesignerName || null, color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' });
+                          if (teamList.includes('developer') || teamList.includes('all')) assignees.push({ team: 'Dev', name: client.assignedDeveloperName || null, color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' });
+                          if (assignees.length === 0) return <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full text-xs font-bold">Not Assigned</span>;
+                          return (
+                            <div className="flex flex-col gap-1">
+                              {assignees.map((a, i) => (
+                                <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${a.color}`}>
+                                  {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
                                 </span>
-                              );
-                            })()}
-                            {(() => {
-                              const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
-                              if (deadlineAlert) {
-                                return (
-                                  <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                    {deadlineAlert.label}
-                                  </span>
-                                );
-                              }
-                              return null;
-                            })()} */}
-                          </div>
-                        </td>
-                        <td className="p-3 text-gray-900 dark:text-white font-bold">
-                          {client.companyName || '—'}
-                        </td>
-                        <td className="p-3 font-mono">{client.mobileNumber}</td>
-                        <td className="p-3">
-                          {(() => {
-                            const teams = client.assignedTeam;
-                            const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
-                            const assignees = [];
-                            if (teamList.includes('ads') || teamList.includes('all')) {
-                              assignees.push({
-                                team: 'Ads',
-                                name: client.assignedAdSpecialistName || null,
-                                color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400'
-                              });
-                            }
-                            if (teamList.includes('design') || teamList.includes('all')) {
-                              assignees.push({
-                                team: 'Design',
-                                name: client.assignedDesignerName || null,
-                                color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                              });
-                            }
-                            if (teamList.includes('developer') || teamList.includes('all')) {
-                              assignees.push({
-                                team: 'Dev',
-                                name: client.assignedDeveloperName || null,
-                                color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                              });
-                            }
-                            if (assignees.length === 0) {
-                              return (
-                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full text-xs font-bold">
-                                  Not Assigned
-                                </span>
-                              );
-                            }
+                              ))}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className="p-3">
+                        {(() => {
+                          const perTeam = getPerTeamStatusBadges(client);
+                          const sc = (s) => s === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
+                            : s === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/15'
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15';
+                          if (perTeam && perTeam.length > 0 && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
                             return (
                               <div className="flex flex-col gap-1">
-                                {assignees.map((a, i) => (
-                                  <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${a.color}`}>
-                                    {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
-                                  </span>
+                                {perTeam.map((t, i) => (
+                                  <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold w-max ${sc(t.status)}`}>{t.label}: {t.status}</span>
                                 ))}
                               </div>
                             );
-                          })()}
-                        </td>
-                        <td className="p-3">
-                          {(() => {
-                            const perTeam = getPerTeamStatusBadges(client);
-                            const sc = (s) => s === 'Completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
-                              : s === 'In Progress'
-                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/15'
-                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15';
-                            if (perTeam && perTeam.length > 0 && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
-                              return (
-                                <div className="flex flex-col gap-1">
-                                  {perTeam.map((t, i) => (
-                                    <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold w-max ${sc(t.status)}`}>
-                                      {t.label}: {t.status}
-                                    </span>
-                                  ))}
-                                </div>
-                              );
-                            }
-                            return (
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                client.workflowStatus === 'Completed'
-                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                  : client.workflowStatus === 'In Progress'
-                                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                    : client.workflowStatus === 'Allocated'
-                                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                              }`}>
-                                {getStatusLabel(client.workflowStatus, client.assignedTeam)}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                      </tr>
-                    );
-                  })
+                          }
+                          return (
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                              client.workflowStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                              : client.workflowStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                              : client.workflowStatus === 'Allocated' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                            }`}>
+                              {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -1347,9 +1081,9 @@ if (user?.team === 'developer') {
       <div className="w-full">
         <Card title="Assigned Client Campaigns" subtitle="Inspect briefs and update service milestones assigned to you">
           <div className="flex flex-col lg:flex-row gap-6 min-h-[600px]">
-            {/* Left Column - Client List Panel (35%) */}
+
+            {/* Left Column - Client List Panel */}
             <div className="w-full lg:w-[35%] flex flex-col border-r border-gray-150/60 dark:border-slate-800/40 pr-0 lg:pr-6 gap-4">
-              {/* Search & Filters */}
               <div className="space-y-2">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
@@ -1362,22 +1096,14 @@ if (user?.team === 'developer') {
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <select
-                    value={filterWorkflowStatus}
-                    onChange={(e) => setFilterWorkflowStatus(e.target.value)}
-                    className="rounded-xl border border-gray-205 dark:border-slate-800 py-1.5 px-2.5 text-[11px] bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
-                  >
+                  <select value={filterWorkflowStatus} onChange={(e) => setFilterWorkflowStatus(e.target.value)} className="rounded-xl border border-gray-205 dark:border-slate-800 py-1.5 px-2.5 text-[11px] bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden">
                     <option value="All">All Statuses</option>
                     <option value="Non-Allocated">Non-Allocated</option>
                     <option value="Allocated">Allocated</option>
                     <option value="In Progress">In Progress</option>
                     <option value="Completed">Completed</option>
                   </select>
-                  <select
-                    value={filterAssignedTeam}
-                    onChange={(e) => setFilterAssignedTeam(e.target.value)}
-                    className="rounded-xl border border-gray-205 dark:border-slate-800 py-1.5 px-2.5 text-[11px] bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
-                  >
+                  <select value={filterAssignedTeam} onChange={(e) => setFilterAssignedTeam(e.target.value)} className="rounded-xl border border-gray-205 dark:border-slate-800 py-1.5 px-2.5 text-[11px] bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden">
                     <option value="All">All Teams</option>
                     <option value="design">Designing Team</option>
                     <option value="developer">Developer Team</option>
@@ -1386,9 +1112,7 @@ if (user?.team === 'developer') {
                 </div>
               </div>
 
-              {/* Tasks Checklist Lists Container */}
               <div className="flex-1 overflow-y-auto max-h-[600px] space-y-4 pr-1.5 scrollbar-thin">
-                {/* Section 1: Unclaimed Pool */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b border-gray-150/40 dark:border-slate-800/40 pb-1.5">
                     <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
@@ -1396,16 +1120,11 @@ if (user?.team === 'developer') {
                       Unclaimed Tasks ({unclaimedLeads.length})
                     </span>
                   </div>
-                  {unclaimedLeads.length === 0 ? (
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">No unclaimed tasks in queue.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {unclaimedLeads.map((lead) => renderLeadCard(lead, false))}
-                    </div>
-                  )}
+                  {unclaimedLeads.length === 0
+                    ? <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">No unclaimed tasks in queue.</p>
+                    : <div className="space-y-2">{unclaimedLeads.map((lead) => renderLeadCard(lead, false))}</div>
+                  }
                 </div>
-
-                {/* Section 2: Active Claimed Checklist */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b border-gray-150/40 dark:border-slate-800/40 pb-1.5">
                     <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
@@ -1413,18 +1132,15 @@ if (user?.team === 'developer') {
                       Claimed Tasks ({claimedLeads.length})
                     </span>
                   </div>
-                  {claimedLeads.length === 0 ? (
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">No claimed tasks yet.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {claimedLeads.map((lead) => renderLeadCard(lead, true))}
-                    </div>
-                  )}
+                  {claimedLeads.length === 0
+                    ? <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center py-2">No claimed tasks yet.</p>
+                    : <div className="space-y-2">{claimedLeads.map((lead) => renderLeadCard(lead, true))}</div>
+                  }
                 </div>
               </div>
             </div>
 
-            {/* Right Column - Client Details Panel (65%) */}
+            {/* Right Column - Client Details Panel */}
             <div className="w-full lg:w-[65%] flex flex-col gap-4 bg-gray-50/50 dark:bg-slate-955/10 p-5 rounded-2xl border border-gray-150/40 dark:border-slate-800/40" id="update-milestone-panel">
               {(() => {
                 const lead = selectedLead;
@@ -1432,24 +1148,18 @@ if (user?.team === 'developer') {
                   return (
                     <div className="flex-1 flex flex-col items-center justify-center py-16 text-center">
                       <AlertCircle className="w-12 h-12 text-gray-300 dark:text-slate-750 mb-3" />
-                      <p className="text-sm font-semibold text-gray-400 dark:text-slate-500">
-                        Select a campaign card from the list to view specifications.
-                      </p>
+                      <p className="text-sm font-semibold text-gray-400 dark:text-slate-500">Select a campaign card from the list to view specifications.</p>
                     </div>
                   );
                 }
 
                 const leadId = lead._id || lead.id;
-                const teamAssignee = user?.team === 'developer'
-                  ? lead.assignedDeveloper
-                  : user?.team === 'design'
-                    ? lead.assignedDesigner
-                    : user?.team === 'ads'
-                      ? lead.assignedAdSpecialist
-                      : lead.assignedTo;
+                const teamAssignee = user?.team === 'developer' ? lead.assignedDeveloper
+                  : user?.team === 'design' ? lead.assignedDesigner
+                  : user?.team === 'ads' ? lead.assignedAdSpecialist
+                  : lead.assignedTo;
                 const isClaimed = !!teamAssignee;
-                
-                // Details calculations
+
                 const totalReq = Number(lead.postersRequired || 0) + Number(lead.videosRequired || 0) + Number(lead.adsRequired || 0) + (lead.websiteRequired ? 1 : 0);
                 const currentPostersPending = Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0));
                 const currentVideosPending = Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0));
@@ -1461,70 +1171,26 @@ if (user?.team === 'developer') {
                 return (
                   <div className="space-y-5 flex-1 flex flex-col justify-between">
                     <div className="space-y-5">
-                      {/* Header Details */}
+                      {/* Header */}
                       <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-gray-200/50 dark:border-slate-800/40 pb-4">
                         <div className="space-y-1">
                           <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                             {lead.clientId && (
-                              <button
-                                type="button"
-                                onClick={() => setViewedClientId(lead._id || lead.id)}
-                                className="text-indigo-650 dark:text-indigo-400 font-mono font-bold hover:underline cursor-pointer focus:outline-hidden"
-                              >
+                              <button type="button" onClick={() => setViewedClientId(lead._id || lead.id)} className="text-indigo-650 dark:text-indigo-400 font-mono font-bold hover:underline cursor-pointer focus:outline-hidden">
                                 [{lead.clientId}]
                               </button>
                             )}
                             {lead.clientName}
-                            {/* {(() => {
-                              const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
-                              if (payStatus === 'Partial') {
-                                return (
-                                  <span className="text-xs font-bold text-rose-600 dark:text-rose-400 ml-2">
-                                    Partial Payment Done
-                                  </span>
-                                );
-                              }
-                              if (payStatus === 'Paid') {
-                                return (
-                                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">
-                                    Full Payment Done
-                                  </span>
-                                );
-                              }
-                              return null;
-                            })()} */}
-
                             {(() => {
-  const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
-  if (payStatus === 'Paid') {
-    return (
-      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">
-        Full Payment Done
-      </span>
-    );
-  }
-  if (payStatus === 'Partial') {
-    return (
-      <span className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-2">
-        Partial Payment Done
-      </span>
-    );
-  }
-  return (
-    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 ml-2">
-      Payment Unpaid
-    </span>
-  );
-})()}
+                              const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
+                              if (payStatus === 'Paid') return <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">Full Payment Done</span>;
+                              if (payStatus === 'Partial') return <span className="text-xs font-bold text-amber-600 dark:text-amber-400 ml-2">Partial Payment Done</span>;
+                              return <span className="text-xs font-bold text-rose-600 dark:text-rose-400 ml-2">Payment Unpaid</span>;
+                            })()}
                           </h3>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                            {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
-                          </p>
-                          <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">
-                            Created By: <span className="text-gray-700 dark:text-gray-300 font-semibold">{lead.salespersonName || '—'}</span>
-                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">{lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}</p>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">Created By: <span className="text-gray-700 dark:text-gray-300 font-semibold">{lead.salespersonName || '—'}</span></p>
                         </div>
-                        
                         <div className="flex flex-wrap items-end gap-2">
                           {!isClaimed && (
                             <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15 px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider animate-pulse">
@@ -1534,11 +1200,9 @@ if (user?.team === 'developer') {
                           {(() => {
                             const perTeam = getPerTeamStatusBadges(lead);
                             if (perTeam && perTeam.length > 0) {
-                              const sc = (s) => s === 'Completed'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/15'
-                                : s === 'In Progress'
-                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/15'
-                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/15';
+                              const sc = (s) => s === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/15'
+                                : s === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/15'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/15';
                               return (
                                 <div className="flex flex-wrap gap-1">
                                   {perTeam.map((t, i) => (
@@ -1549,14 +1213,11 @@ if (user?.team === 'developer') {
                                 </div>
                               );
                             }
-                            // fallback — no per-team data yet
                             return (
                               <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border uppercase tracking-wider ${
-                                lead.workflowStatus === 'Completed'
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-500/15 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                  : lead.workflowStatus === 'In Progress'
-                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-500/15 dark:bg-indigo-950/40 dark:text-indigo-300'
-                                    : 'bg-blue-50 text-blue-700 border-blue-500/15 dark:bg-blue-955/40 dark:text-blue-300'
+                                lead.workflowStatus === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-500/15 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                : lead.workflowStatus === 'In Progress' ? 'bg-indigo-50 text-indigo-700 border-indigo-500/15 dark:bg-indigo-950/40 dark:text-indigo-300'
+                                : 'bg-blue-50 text-blue-700 border-blue-500/15 dark:bg-blue-955/40 dark:text-blue-300'
                               }`}>
                                 {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
                               </span>
@@ -1565,9 +1226,9 @@ if (user?.team === 'developer') {
                         </div>
                       </div>
 
-                      {/* Details Sections Grid */}
+                      {/* Details Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[380px] overflow-y-auto pr-1">
-                        {/* Profile Details & Contacts */}
+                        {/* Contact & Registration */}
                         <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-2.5">
                           <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider">Contact & Registration</h4>
                           <div className="text-xs space-y-2 text-gray-750 dark:text-gray-300 font-medium">
@@ -1581,54 +1242,33 @@ if (user?.team === 'developer') {
                             </div>
                             <div className="flex items-center gap-2">
                               <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              <span>Business Number: 
-                                <a 
-                                  href={`https://wa.me/${lead.mobileNumber.replace(/[^0-9]/g, '')}`} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
-                                  className="text-indigo-650 dark:text-indigo-400 hover:underline font-bold ml-1"
-                                >
+                              <span>Business Number:
+                                <a href={`https://wa.me/${lead.mobileNumber.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-indigo-650 dark:text-indigo-400 hover:underline font-bold ml-1">
                                   {lead.mobileNumber}
                                 </a>
                               </span>
-                            </div>
-                            {/* <div className="flex items-center gap-2">
-                              <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                              <span>Salesperson: <strong>{lead.salespersonName}</strong></span>
-                            </div> */}
+                            </div>  
                           </div>
                         </div>
 
-                        {/* Specs and Deliverable Info */}
+                        {/* Project Specifications */}
                         <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-2.5">
                           <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider">Project Specifications</h4>
                           <div className="text-xs space-y-2 text-gray-750 dark:text-gray-300 font-medium">
                             <div className="flex items-center gap-2">
                               <span className="text-gray-400 shrink-0">Brand Colors:</span>
                               <strong>{lead.brandColors || '—'}</strong>
-                              {lead.brandColors && (
-                                <span className="w-3.5 h-3.5 rounded-full border border-gray-205 shrink-0" style={{ backgroundColor: lead.brandColors }} />
-                              )}
+                              {lead.brandColors && <span className="w-3.5 h-3.5 rounded-full border border-gray-205 shrink-0" style={{ backgroundColor: lead.brandColors }} />}
                             </div>
-                            {/* <div>
-                              <span className="text-gray-400">Target Audience:</span> <strong>{lead.targetAudience || '—'}</strong>
-                            </div> */}
-                            <div>
-                              <span className="text-gray-400">Competitors:</span> <strong>{lead.competitors || '—'}</strong>
-                            </div>
+                        
+                            <div><span className="text-gray-400">Competitors:</span> <strong>{lead.competitors || '—'}</strong></div>
                             <div className="flex justify-between items-center text-[10px] pt-1 border-t border-gray-100 dark:border-slate-805/40">
                               <span>Start: <strong>{lead.startDate || '—'}</strong></span>
                               <span className="flex items-center gap-1.5">
                                 Deadline: <strong className="text-rose-500 font-bold">{lead.deliveryDeadline || '—'}</strong>
                                 {(() => {
                                   const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
-                                  if (deadlineAlert) {
-                                    return (
-                                      <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                        {deadlineAlert.label}
-                                      </span>
-                                    );
-                                  }
+                                  if (deadlineAlert) return <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>{deadlineAlert.label}</span>;
                                   return null;
                                 })()}
                               </span>
@@ -1636,7 +1276,7 @@ if (user?.team === 'developer') {
                           </div>
                         </div>
 
-                        {/* Deliverables Overview Checklist */}
+                        {/* Campaign Deliverables Checklist */}
                         <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-2.5 md:col-span-2">
                           <div className="flex justify-between items-center">
                             <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider">Campaign Deliverables Checklist</h4>
@@ -1646,66 +1286,123 @@ if (user?.team === 'developer') {
                             {Number(lead.postersRequired) > 0 && (
                               <div className="flex items-center justify-between p-2 bg-indigo-500/3 dark:bg-indigo-500/1 border border-indigo-500/5 rounded-lg">
                                 <span className="text-gray-700 dark:text-gray-300">Posters: <strong>{lead.postersRequired} required</strong></span>
-                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">
-                                  {lead.postersStatus} ({Number(lead.postersRequired) - currentPostersPending} Done)
-                                </span>
+                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">{lead.postersStatus} ({Number(lead.postersRequired) - currentPostersPending} Done)</span>
                               </div>
                             )}
                             {Number(lead.videosRequired) > 0 && (
                               <div className="flex items-center justify-between p-2 bg-blue-500/3 dark:bg-blue-500/1 border border-blue-500/5 rounded-lg">
                                 <span className="text-gray-700 dark:text-gray-300">Videos: <strong>{lead.videosRequired} required</strong></span>
-                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">
-                                  {lead.videosStatus} ({Number(lead.videosRequired) - currentVideosPending} Done)
-                                </span>
+                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">{lead.videosStatus} ({Number(lead.videosRequired) - currentVideosPending} Done)</span>
                               </div>
                             )}
-                            {/* {Number(lead.adsRequired) > 0 && (
-                              <div className="flex items-center justify-between p-2 bg-pink-500/3 dark:bg-pink-500/1 border border-pink-500/5 rounded-lg">
-                                <span className="text-gray-700 dark:text-gray-300">Ads/Campaigns: <strong>{lead.adsRequired} required</strong></span>
-                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">
-                                  {lead.adsStatus} ({Number(lead.adsRequired) - currentAdsPending} Done)
-                                </span>
-                              </div>
-                            )} */}
-
                             {(Number(lead.adsRequired) > 0 || (lead.platforms && lead.platforms.length > 0)) && (
-  <div className="flex flex-col gap-1.5 p-2 bg-pink-500/3 dark:bg-pink-500/1 border border-pink-500/5 rounded-lg">
-    <div className="flex items-center justify-between">
-      <span className="text-gray-700 dark:text-gray-300">
-        Ads/Campaigns: <strong>{lead.adsRequired > 0 ? `${lead.adsRequired} required` : 'Service only'}</strong>
-      </span>
-      {Number(lead.adsRequired) > 0 && (
-        <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">
-          {lead.adsStatus} ({Number(lead.adsRequired) - currentAdsPending} Done)
-        </span>
-      )}
-    </div>
-    {lead.platforms && lead.platforms.length > 0 && (
-      <div className="flex flex-wrap gap-1">
-        {lead.platforms.map((platform, idx) => (
-          <span
-            key={idx}
-            className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10"
-          >
-            {platform}
-          </span>
-        ))}
-      </div>
-    )}
-  </div>
-)}
+                              <div className="flex flex-col gap-1.5 p-2 bg-pink-500/3 dark:bg-pink-500/1 border border-pink-500/5 rounded-lg">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-gray-700 dark:text-gray-300">Ads/Campaigns: <strong>{lead.adsRequired > 0 ? `${lead.adsRequired} required` : 'Service only'}</strong></span>
+                                  {Number(lead.adsRequired) > 0 && (
+                                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">{lead.adsStatus} ({Number(lead.adsRequired) - currentAdsPending} Done)</span>
+                                  )}
+                                </div>
+                                {lead.platforms && lead.platforms.length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {lead.platforms.map((platform, idx) => (
+                                      <span key={idx} className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/10">{platform}</span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                             {lead.websiteRequired && (
                               <div className="flex items-center justify-between p-2 bg-purple-500/3 dark:bg-purple-500/1 border border-purple-500/5 rounded-lg sm:col-span-2">
                                 <span className="text-gray-700 dark:text-gray-300">Website: <strong>{lead.websiteType || 'General'} Dev</strong></span>
-                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">
-                                  {lead.websiteStatus} ({lead.websiteStatus === 'Completed' ? '1' : '0'}/1 Done)
-                                </span>
+                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-gray-500 font-bold">{lead.websiteStatus} ({lead.websiteStatus === 'Completed' ? '1' : '0'}/1 Done)</span>
                               </div>
                             )}
                           </div>
                         </div>
 
-                        {/* Notes and Instructions */}
+                        {/* Postings Card — Ads Team internal tracking only */}
+{user?.team === 'ads' && (Number(lead.postersRequired) > 0 || Number(lead.videosRequired) > 0) && (
+  <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-3 md:col-span-2">
+    <div className="flex justify-between items-center">
+      <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider">Postings</h4>
+      <span className="text-[10px] text-gray-400 dark:text-gray-500 font-semibold">Ads Team Internal Tracking</span>
+    </div>
+    <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">
+      Track how many posters and videos have been posted on client channels. This status is internal to the Ads Team and does not affect the Design Team's progress.
+    </p>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {Number(lead.postersRequired) > 0 && (
+        <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Posters Posting</span>
+            <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">{lead.postersRequired} total</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Posting Status</label>
+            <select
+              value={postingsPostersStatus}
+              onChange={(e) => setPostingsPostersStatus(e.target.value)}
+              className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+            >
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+          <div className={`text-[10px] font-bold px-2 py-1 rounded-lg text-center ${
+            postingsPostersStatus === 'Completed'
+              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
+              : postingsPostersStatus === 'In Progress'
+              ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/15'
+              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15'
+          }`}>
+            {postingsPostersStatus === 'Completed'
+              ? `All ${lead.postersRequired} posters posted`
+              : postingsPostersStatus === 'In Progress'
+              ? 'Posting in progress'
+              : 'Not yet posted'}
+          </div>
+        </div>
+      )}
+      {Number(lead.videosRequired) > 0 && (
+        <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Videos Posting</span>
+            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">{lead.videosRequired} total</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Posting Status</label>
+            <select
+              value={postingsVideosStatus}
+              onChange={(e) => setPostingsVideosStatus(e.target.value)}
+              className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+            >
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+          <div className={`text-[10px] font-bold px-2 py-1 rounded-lg text-center ${
+            postingsVideosStatus === 'Completed'
+              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
+              : postingsVideosStatus === 'In Progress'
+              ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/15'
+              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15'
+          }`}>
+            {postingsVideosStatus === 'Completed'
+              ? `All ${lead.videosRequired} videos posted`
+              : postingsVideosStatus === 'In Progress'
+              ? 'Posting in progress'
+              : 'Not yet posted'}
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
+                        {/* Notes */}
                         {lead.notes && (
                           <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-3 md:col-span-2">
                             <div className="text-xs space-y-1">
@@ -1717,46 +1414,40 @@ if (user?.team === 'developer') {
                       </div>
                     </div>
 
-                    {/* Conditional Action area based on claimed status */}
+                    {/* Action Area */}
                     <div className="border-t border-gray-200/50 dark:border-slate-800/40 pt-4 mt-2">
                       {!isClaimed ? (
                         <div className="p-4 bg-amber-500/5 border border-dashed border-amber-500/20 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
                           <div className="text-left">
                             <h4 className="text-xs font-bold text-gray-900 dark:text-white">This project is unclaimed</h4>
-                            <p className="text-[10px] text-gray-500 dark:text-gray-405 mt-0.5 leading-normal">
-                              Accept the client campaign to start tracking task milestones and saving progress updates.
-                            </p>
+                            <p className="text-[10px] text-gray-500 dark:text-gray-405 mt-0.5 leading-normal">Accept the client campaign to start tracking task milestones and saving progress updates.</p>
                           </div>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => handleAcceptClick(lead)}
-                            icon={CheckCircle}
-                            className="shrink-0 w-full sm:w-auto cursor-pointer shadow-sm"
-                          >
+                          <Button variant="primary" size="sm" onClick={() => handleAcceptClick(lead)} icon={CheckCircle} className="shrink-0 w-full sm:w-auto cursor-pointer shadow-sm">
                             Accept Client
                           </Button>
                         </div>
                       ) : (
                         <form onSubmit={handleSaveUpdates} className="space-y-4">
                           <div className="grid grid-cols-1 gap-4 max-h-[300px] overflow-y-auto pr-1">
-                            {/* Workflow Status — hidden for developer team, auto-derived from devTeamStatus */}
-{user?.team !== 'developer' && (
-  <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
-    <label className="text-xs font-bold text-gray-900 dark:text-white block">Workflow Status</label>
-    <select
-      value={editWorkflowStatus}
-      onChange={(e) => setEditWorkflowStatus(e.target.value)}
-      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-    >
-      <option value="Allocated">Pending</option>
-      <option value="In Progress">In Progress</option>
-      <option value="Completed">Completed</option>
-    </select>
-  </div>
-)}
-                            {/* Posters update */}
-                            {Number(lead.postersRequired) > 0 && (
+
+                            {/* ── Workflow Status: hidden for all specific teams, auto-derived from their team status ── */}
+                            {user?.team !== 'developer' && user?.team !== 'ads' && user?.team !== 'design' && (
+                              <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
+                                <label className="text-xs font-bold text-gray-900 dark:text-white block">Workflow Status</label>
+                                <select
+                                  value={editWorkflowStatus}
+                                  onChange={(e) => setEditWorkflowStatus(e.target.value)}
+                                  className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+                                >
+                                  <option value="Allocated">Pending</option>
+                                  <option value="In Progress">In Progress</option>
+                                  <option value="Completed">Completed</option>
+                                </select>
+                              </div>
+                            )}
+
+                            {/* Posters */}
+                            {Number(lead.postersRequired) > 0 && user?.team !== 'ads' && (
                               <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
                                 <div className="flex justify-between items-center">
                                   <span className="font-bold text-gray-900 dark:text-white">Posters Progress</span>
@@ -1765,11 +1456,7 @@ if (user?.team === 'developer') {
                                 <div className="grid grid-cols-2 gap-3">
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-405 font-bold">Status</label>
-                                    <select
-                                      value={postersStatus}
-                                      onChange={(e) => setPostersStatus(e.target.value)}
-                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer"
-                                    >
+                                    <select value={postersStatus} onChange={(e) => setPostersStatus(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer">
                                       <option value="Pending">Pending</option>
                                       <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
@@ -1778,22 +1465,15 @@ if (user?.team === 'developer') {
                                   {postersStatus !== 'Completed' && postersStatus !== 'Pending' && (
                                     <div className="flex flex-col gap-1">
                                       <label className="text-[10px] text-gray-455 font-bold">Pending Count</label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max={lead.postersRequired}
-                                        value={postersPending}
-                                        onChange={(e) => setPostersPending(Math.min(Number(lead.postersRequired), Math.max(0, Number(e.target.value))))}
-                                        className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white"
-                                      />
+                                      <input type="number" min="0" max={lead.postersRequired} value={postersPending} onChange={(e) => setPostersPending(Math.min(Number(lead.postersRequired), Math.max(0, Number(e.target.value))))} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white" />
                                     </div>
                                   )}
                                 </div>
                               </div>
                             )}
 
-                            {/* Videos update */}
-                            {Number(lead.videosRequired) > 0 && (
+                            {/* Videos */}
+                            {Number(lead.videosRequired) > 0 && user?.team !== 'ads' && (
                               <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-2">
                                 <div className="flex justify-between items-center">
                                   <span className="font-bold text-gray-900 dark:text-white">Videos Progress</span>
@@ -1802,11 +1482,7 @@ if (user?.team === 'developer') {
                                 <div className="grid grid-cols-2 gap-3">
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-405 font-bold">Status</label>
-                                    <select
-                                      value={videosStatus}
-                                      onChange={(e) => setVideosStatus(e.target.value)}
-                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer"
-                                    >
+                                    <select value={videosStatus} onChange={(e) => setVideosStatus(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer">
                                       <option value="Pending">Pending</option>
                                       <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
@@ -1815,22 +1491,15 @@ if (user?.team === 'developer') {
                                   {videosStatus !== 'Completed' && videosStatus !== 'Pending' && (
                                     <div className="flex flex-col gap-1">
                                       <label className="text-[10px] text-gray-455 font-bold">Pending Count</label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max={lead.videosRequired}
-                                        value={videosPending}
-                                        onChange={(e) => setVideosPending(Math.min(Number(lead.videosRequired), Math.max(0, Number(e.target.value))))}
-                                        className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white"
-                                      />
+                                      <input type="number" min="0" max={lead.videosRequired} value={videosPending} onChange={(e) => setVideosPending(Math.min(Number(lead.videosRequired), Math.max(0, Number(e.target.value))))} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white" />
                                     </div>
                                   )}
                                 </div>
                               </div>
                             )}
 
-                            {/* Ads update */}
-                            {Number(lead.adsRequired) > 0 && (
+                            {/* Ads Progress — hidden for ads team, managed via Postings card below */}
+                            {Number(lead.adsRequired) > 0 && user?.team !== 'ads' && (
                               <div className="p-3 bg-pink-500/5 border border-pink-500/10 rounded-xl space-y-2">
                                 <div className="flex justify-between items-center">
                                   <span className="font-bold text-gray-900 dark:text-white">Ads Progress</span>
@@ -1839,11 +1508,7 @@ if (user?.team === 'developer') {
                                 <div className="grid grid-cols-2 gap-3">
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-405 font-bold">Status</label>
-                                    <select
-                                      value={adsStatus}
-                                      onChange={(e) => setAdsStatus(e.target.value)}
-                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer"
-                                    >
+                                    <select value={adsStatus} onChange={(e) => setAdsStatus(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer">
                                       <option value="Pending">Pending</option>
                                       <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
@@ -1852,51 +1517,40 @@ if (user?.team === 'developer') {
                                   {adsStatus !== 'Completed' && adsStatus !== 'Pending' && (
                                     <div className="flex flex-col gap-1">
                                       <label className="text-[10px] text-gray-455 font-bold">Pending Count</label>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max={lead.adsRequired}
-                                        value={adsPending}
-                                        onChange={(e) => setAdsPending(Math.min(Number(lead.adsRequired), Math.max(0, Number(e.target.value))))}
-                                        className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white"
-                                      />
+                                      <input type="number" min="0" max={lead.adsRequired} value={adsPending} onChange={(e) => setAdsPending(Math.min(Number(lead.adsRequired), Math.max(0, Number(e.target.value))))} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white" />
                                     </div>
                                   )}
                                 </div>
                               </div>
                             )}
 
-                            {/* Website update — hidden for developer team, status is controlled by Dev Team Status below */}
-{lead.websiteRequired && user?.team !== 'developer' && (
-  <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
-    <div className="flex justify-between items-center">
-      <span className="font-bold text-gray-900 dark:text-white">Website Dev</span>
-      <span className="text-[10px] text-purple-650 dark:text-purple-400">{lead.websiteType || 'General'} website</span>
-    </div>
-    <div className="flex flex-col gap-1">
-      <label className="text-[10px] text-gray-405 font-bold">Website Status</label>
-      <select
-        value={websiteStatus}
-        onChange={(e) => setWebsiteStatus(e.target.value)}
-        className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer"
-      >
-        <option value="Pending">Pending</option>
-        <option value="In Progress">In Progress</option>
-        <option value="Completed">Completed</option>
-      </select>
-    </div>
-  </div>
-)}
+                            {/* ── Website Status: hidden for developer team, controlled by Dev Team Status below ── */}
+                            {lead.websiteRequired && user?.team !== 'developer' && (
+                              <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-bold text-gray-900 dark:text-white">Website Dev</span>
+                                  <span className="text-[10px] text-purple-650 dark:text-purple-400">{lead.websiteType || 'General'} website</span>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  <label className="text-[10px] text-gray-405 font-bold">Website Status</label>
+                                  <select value={websiteStatus} onChange={(e) => setWebsiteStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer">
+                                    <option value="Pending">Pending</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Completed">Completed</option>
+                                  </select>
+                                </div>
+                              </div>
+                            )}
                           </div>
 
-                          {/* Ads Team — Campaign Plan Information */}
-                          {(user?.team === 'ads' || user?.team === 'all') && (
-                            <div className="space-y-3">
-                              <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                                Ads Campaign — Plan Information
-                              </h4>
+                          {/* ── Postings Card: posters + videos for ads team — only when assigned ── */}
 
-                              {/* Budget Per Day & Target Audience — top level */}
+
+                          {/* Ads Team Section */}
+                          {(user?.team === 'ads' || user?.team === 'all') && (
+                            <div className="space-y-3 ">
+                              <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Ads Campaign — Plan Information</h4>
+
                               {(Number(lead.adBudgetPerDay || 0) > 0 || lead.targetAudience) && (
                                 <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
                                   {Number(lead.adBudgetPerDay || 0) > 0 && (
@@ -1914,7 +1568,6 @@ if (user?.team === 'developer') {
                                 </div>
                               )}
 
-                              {/* Meta Ads Campaign Card */}
                               {Number(lead.metaAdsPlanDuration || 0) > 0 && (
                                 <div className="p-3 bg-indigo-500/5 border border-indigo-500/15 rounded-xl space-y-2.5">
                                   <div className="flex items-center justify-between">
@@ -1923,32 +1576,19 @@ if (user?.team === 'developer') {
                                   </div>
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
-                                    <input
-                                      type="date"
-                                      value={editMetaStart}
-                                      onChange={(e) => setEditMetaStart(e.target.value)}
-                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
-                                    />
+                                    <input type="date" value={editMetaStart} onChange={(e) => setEditMetaStart(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer" />
                                   </div>
                                   {editMetaStart && (
                                     <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-indigo-500/10">
                                       <span className="text-gray-400">End Date:</span>
                                       <strong className="text-indigo-600 dark:text-indigo-400">
-                                        {(() => {
-                                          const d = new Date(editMetaStart);
-                                          d.setDate(d.getDate() + Number(lead.metaAdsPlanDuration));
-                                          return d.toLocaleDateString('en-IN');
-                                        })()}
+                                        {(() => { const d = new Date(editMetaStart); d.setDate(d.getDate() + Number(lead.metaAdsPlanDuration)); return d.toLocaleDateString('en-IN'); })()}
                                       </strong>
                                     </div>
                                   )}
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
-                                    <select
-                                      value={editMetaStatus}
-                                      onChange={(e) => setEditMetaStatus(e.target.value)}
-                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-                                    >
+                                    <select value={editMetaStatus} onChange={(e) => setEditMetaStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
                                       <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
@@ -1957,7 +1597,6 @@ if (user?.team === 'developer') {
                                 </div>
                               )}
 
-                              {/* Google Ads Campaign Card */}
                               {Number(lead.googleAdsPlanDuration || 0) > 0 && (
                                 <div className="p-3 bg-emerald-500/5 border border-emerald-500/15 rounded-xl space-y-2.5">
                                   <div className="flex items-center justify-between">
@@ -1966,32 +1605,19 @@ if (user?.team === 'developer') {
                                   </div>
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
-                                    <input
-                                      type="date"
-                                      value={editGoogleStart}
-                                      onChange={(e) => setEditGoogleStart(e.target.value)}
-                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
-                                    />
+                                    <input type="date" value={editGoogleStart} onChange={(e) => setEditGoogleStart(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer" />
                                   </div>
                                   {editGoogleStart && (
                                     <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-emerald-500/10">
                                       <span className="text-gray-400">End Date:</span>
                                       <strong className="text-emerald-600 dark:text-emerald-400">
-                                        {(() => {
-                                          const d = new Date(editGoogleStart);
-                                          d.setDate(d.getDate() + Number(lead.googleAdsPlanDuration));
-                                          return d.toLocaleDateString('en-IN');
-                                        })()}
+                                        {(() => { const d = new Date(editGoogleStart); d.setDate(d.getDate() + Number(lead.googleAdsPlanDuration)); return d.toLocaleDateString('en-IN'); })()}
                                       </strong>
                                     </div>
                                   )}
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
-                                    <select
-                                      value={editGoogleStatus}
-                                      onChange={(e) => setEditGoogleStatus(e.target.value)}
-                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-                                    >
+                                    <select value={editGoogleStatus} onChange={(e) => setEditGoogleStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
                                       <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
@@ -2000,7 +1626,6 @@ if (user?.team === 'developer') {
                                 </div>
                               )}
 
-                              {/* LinkedIn Ads Campaign Card */}
                               {Number(lead.linkedinAdsPlanDuration || 0) > 0 && (
                                 <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-xl space-y-2.5">
                                   <div className="flex items-center justify-between">
@@ -2009,32 +1634,19 @@ if (user?.team === 'developer') {
                                   </div>
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
-                                    <input
-                                      type="date"
-                                      value={editLinkedinStart}
-                                      onChange={(e) => setEditLinkedinStart(e.target.value)}
-                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
-                                    />
+                                    <input type="date" value={editLinkedinStart} onChange={(e) => setEditLinkedinStart(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer" />
                                   </div>
                                   {editLinkedinStart && (
                                     <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-blue-500/10">
                                       <span className="text-gray-400">End Date:</span>
                                       <strong className="text-blue-600 dark:text-blue-400">
-                                        {(() => {
-                                          const d = new Date(editLinkedinStart);
-                                          d.setDate(d.getDate() + Number(lead.linkedinAdsPlanDuration));
-                                          return d.toLocaleDateString('en-IN');
-                                        })()}
+                                        {(() => { const d = new Date(editLinkedinStart); d.setDate(d.getDate() + Number(lead.linkedinAdsPlanDuration)); return d.toLocaleDateString('en-IN'); })()}
                                       </strong>
                                     </div>
                                   )}
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
-                                    <select
-                                      value={editLinkedinStatus}
-                                      onChange={(e) => setEditLinkedinStatus(e.target.value)}
-                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-                                    >
+                                    <select value={editLinkedinStatus} onChange={(e) => setEditLinkedinStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
                                       <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
@@ -2043,7 +1655,6 @@ if (user?.team === 'developer') {
                                 </div>
                               )}
 
-                              {/* SEO Campaign Card */}
                               {Number(lead.seoPlanDuration || 0) > 0 && (
                                 <div className="p-3 bg-teal-500/5 border border-teal-500/15 rounded-xl space-y-2.5">
                                   <div className="flex items-center justify-between">
@@ -2052,32 +1663,19 @@ if (user?.team === 'developer') {
                                   </div>
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
-                                    <input
-                                      type="date"
-                                      value={editSeoStart}
-                                      onChange={(e) => setEditSeoStart(e.target.value)}
-                                      className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
-                                    />
+                                    <input type="date" value={editSeoStart} onChange={(e) => setEditSeoStart(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer" />
                                   </div>
                                   {editSeoStart && (
                                     <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-teal-500/10">
                                       <span className="text-gray-400">End Date:</span>
                                       <strong className="text-teal-600 dark:text-teal-400">
-                                        {(() => {
-                                          const d = new Date(editSeoStart);
-                                          d.setDate(d.getDate() + Number(lead.seoPlanDuration));
-                                          return d.toLocaleDateString('en-IN');
-                                        })()}
+                                        {(() => { const d = new Date(editSeoStart); d.setDate(d.getDate() + Number(lead.seoPlanDuration)); return d.toLocaleDateString('en-IN'); })()}
                                       </strong>
                                     </div>
                                   )}
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
-                                    <select
-                                      value={editSeoStatus}
-                                      onChange={(e) => setEditSeoStatus(e.target.value)}
-                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-                                    >
+                                    <select value={editSeoStatus} onChange={(e) => setEditSeoStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
                                       <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
@@ -2086,7 +1684,6 @@ if (user?.team === 'developer') {
                                 </div>
                               )}
 
-                              {/* GMB Campaign Card — one-time, no dates */}
                               {lead.platforms && lead.platforms.includes('GMB') && (
                                 <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-xl space-y-2.5">
                                   <div className="flex items-center justify-between">
@@ -2096,11 +1693,7 @@ if (user?.team === 'developer') {
                                   <p className="text-[10px] text-gray-400 dark:text-gray-500">One-time implementation — no campaign duration or dates required.</p>
                                   <div className="flex flex-col gap-1">
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Status</label>
-                                    <select
-                                      value={editGmbStatus}
-                                      onChange={(e) => setEditGmbStatus(e.target.value)}
-                                      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-                                    >
+                                    <select value={editGmbStatus} onChange={(e) => setEditGmbStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
                                       <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
@@ -2109,14 +1702,14 @@ if (user?.team === 'developer') {
                                 </div>
                               )}
 
-                              {/* Overall Ads Team Status */}
                               <div className="p-3 bg-slate-500/5 border border-slate-500/10 rounded-xl space-y-2">
                                 <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Overall Ads Team Status</label>
-                                <select
-                                  value={editAdsTeamStatus}
-                                  onChange={(e) => setEditAdsTeamStatus(e.target.value)}
-                                  className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-                                >
+                                {user?.team === 'ads' && (
+  <p className="text-[10px] text-gray-400 dark:text-gray-500">
+    Overall status becomes <strong>Completed</strong> only when both Postings (posters + videos) AND all Campaigns above are marked Completed.
+  </p>
+)}
+                                <select value={editAdsTeamStatus} onChange={(e) => setEditAdsTeamStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                   <option value="Pending">Pending</option>
                                   <option value="In Progress">In Progress</option>
                                   <option value="Completed">Completed</option>
@@ -2129,11 +1722,12 @@ if (user?.team === 'developer') {
                           {(user?.team === 'design' || user?.team === 'all') && (
                             <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
                               <label className="text-xs font-bold text-gray-900 dark:text-white block">Design Team Status</label>
-                              <select
-                                value={editDesignTeamStatus}
-                                onChange={(e) => setEditDesignTeamStatus(e.target.value)}
-                                className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-                              >
+                              {user?.team === 'design' && (
+                                <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                                  Updating this also syncs the overall workflow status automatically.
+                                </p>
+                              )}
+                              <select value={editDesignTeamStatus} onChange={(e) => setEditDesignTeamStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                 <option value="Pending">Pending</option>
                                 <option value="In Progress">In Progress</option>
                                 <option value="Completed">Completed</option>
@@ -2141,53 +1735,32 @@ if (user?.team === 'developer') {
                             </div>
                           )}
 
-                          {/* Dev Team Status */}
-{(user?.team === 'developer' || user?.team === 'all') && (
-  <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
-    <label className="text-xs font-bold text-gray-900 dark:text-white block">
-      Development Team Status
-    </label>
-    {user?.team === 'developer' && (
-      <p className="text-[10px] text-gray-400 dark:text-gray-500">
-        This also updates the overall workflow and website status automatically.
-      </p>
-    )}
-    <select
-      value={editDevTeamStatus}
-      onChange={(e) => setEditDevTeamStatus(e.target.value)}
-      className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-    >
-      <option value="Pending">Pending</option>
-      <option value="In Progress">In Progress</option>
-      <option value="Completed">Completed</option>
-    </select>
-  </div>
-)}
+                          {/* ── Dev Team Status: the single source of truth for developer team ── */}
+                          {(user?.team === 'developer' || user?.team === 'all') && (
+                            <div className="p-3 bg-purple-500/5 border border-purple-500/10 rounded-xl space-y-2">
+                              <label className="text-xs font-bold text-gray-900 dark:text-white block">Development Team Status</label>
+                              {user?.team === 'developer' && (
+                                <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                                  Updating this also syncs the overall workflow and website status automatically.
+                                </p>
+                              )}
+                              <select value={editDevTeamStatus} onChange={(e) => setEditDevTeamStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
+                                <option value="Pending">Pending</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Completed">Completed</option>
+                              </select>
+                            </div>
+                          )}
 
-                          {/* Submit actions */}
                           <div className="flex items-center justify-between gap-3 pt-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-1/2"
-                              onClick={handleCancelEdit}
-                            >
-                              Reset
-                            </Button>
-                            <Button
-                              type="submit"
-                              variant="primary"
-                              className="w-1/2"
-                              isLoading={isSubmitting}
-                              icon={Save}
-                            >
-                              Save Changes
-                            </Button>
+                            <Button type="button" variant="outline" className="w-1/2" onClick={handleCancelEdit}>Reset</Button>
+                            <Button type="submit" variant="primary" className="w-1/2" isLoading={isSubmitting} icon={Save}>Save Changes</Button>
                           </div>
                         </form>
                       )}
                     </div>
-                    {/* Client Chat panel inside details view */}
+
+                    {/* Collaboration Chat */}
                     <div className="border-t border-gray-200/50 dark:border-slate-800/40 pt-4">
                       <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider mb-2">Collaboration Chat</h4>
                       <ClientChat leadId={leadId} />
@@ -2200,81 +1773,47 @@ if (user?.team === 'developer') {
         </Card>
       </div>
 
-      {/* Detailed Client Profile View Modal (Read-Only) */}
+      {/* Client Profile Modal */}
       {viewedClientId && (() => {
         const client = leads.find(l => (l._id || l.id) === viewedClientId);
         if (!client) return null;
-
         return (
           <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
             <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
-              {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                      Client Profile Dossier
-                    </h3>
-                    <span className="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded font-mono">
-                      ID: {client.clientId || 'N/A'}
-                    </span>
-                    {(() => {
-                      const badge = getPaymentStatus(client);
-                      return (
-                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${badge.color}`}>
-                          {badge.label}
-                        </span>
-                      );
-                    })()}
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Client Profile Dossier</h3>
+                    <span className="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded font-mono">ID: {client.clientId || 'N/A'}</span>
+                    {(() => { const badge = getPaymentStatus(client); return <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${badge.color}`}>{badge.label}</span>; })()}
                   </div>
                   <p className="text-xs text-gray-400 dark:text-gray-555 mt-1">
                     Created by salesperson <strong className="text-indigo-655 dark:text-indigo-400">{client.salespersonName}</strong> on {new Date(client.createdAt || client.timestamp).toLocaleString()}
                   </p>
                 </div>
-                <button 
-                  onClick={() => setViewedClientId(null)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
-                >
+                <button onClick={() => setViewedClientId(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Modal Content */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6 text-sm text-gray-700 dark:text-gray-300">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  
-                  {/* Left Column: Client Details Forms (2/3 width) */}
                   <div className="lg:col-span-2 space-y-6">
-                    {/* Contact Info Card */}
+
+                    {/* 1. Contact */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        1. Contact Information
-                      </h4>
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">1. Contact Information</h4>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase block">Client Name</span>
-                          <strong className="text-gray-900 dark:text-white">{client.clientName}</strong>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase block">Company Name</span>
-                          <span className="text-gray-900 dark:text-white font-semibold">{client.companyName || '—'}</span>
-                        </div>
-                        <div className="mt-2">
-                           <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Business Number</span>
-                          <span className="font-mono text-gray-900 dark:text-white font-bold">{client.mobileNumber}</span>
-                        </div>
-                        <div className="mt-2">
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Email Address</span>
-                          <span className="text-gray-900 dark:text-white font-medium">{client.email || '—'}</span>
-                        </div>
+                        <div><span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase block">Client Name</span><strong className="text-gray-900 dark:text-white">{client.clientName}</strong></div>
+                        <div><span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase block">Company Name</span><span className="text-gray-900 dark:text-white font-semibold">{client.companyName || '—'}</span></div>
+                        <div className="mt-2"><span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Business Number</span><span className="font-mono text-gray-900 dark:text-white font-bold">{client.mobileNumber}</span></div>
+                        <div className="mt-2"><span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Email Address</span><span className="text-gray-900 dark:text-white font-medium">{client.email || '—'}</span></div>
                       </div>
                     </div>
 
-                    {/* Social Media Access Card */}
+                    {/* 2. Social Credentials */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        2. Social Channels Credentials
-                      </h4>
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">2. Social Channels Credentials</h4>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
                           <span className="text-[10px] font-bold text-gray-450 block mb-1">Facebook ID</span>
@@ -2283,15 +1822,9 @@ if (user?.team === 'developer') {
                             <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40 flex items-center justify-between gap-2">
                               <div>
                                 <span className="text-[10px] font-bold text-gray-450 block mb-0.5">Password</span>
-                                <span className="font-mono text-xs text-rose-500 select-all font-bold">
-                                  {showFbPass ? client.facebookPassword : '••••••••'}
-                                </span>
+                                <span className="font-mono text-xs text-rose-500 select-all font-bold">{showFbPass ? client.facebookPassword : '••••••••'}</span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setShowFbPass(!showFbPass)}
-                                className="text-gray-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors p-1"
-                              >
+                              <button type="button" onClick={() => setShowFbPass(!showFbPass)} className="text-gray-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors p-1">
                                 {showFbPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                               </button>
                             </div>
@@ -2304,15 +1837,9 @@ if (user?.team === 'developer') {
                             <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40 flex items-center justify-between gap-2">
                               <div>
                                 <span className="text-[10px] font-bold text-gray-455 block mb-0.5">Password</span>
-                                <span className="font-mono text-xs text-rose-500 select-all font-bold">
-                                  {showIgPass ? client.instagramPassword : '••••••••'}
-                                </span>
+                                <span className="font-mono text-xs text-rose-500 select-all font-bold">{showIgPass ? client.instagramPassword : '••••••••'}</span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setShowIgPass(!showIgPass)}
-                                className="text-gray-400 hover:text-indigo-655 dark:hover:text-indigo-400 transition-colors p-1"
-                              >
+                              <button type="button" onClick={() => setShowIgPass(!showIgPass)} className="text-gray-400 hover:text-indigo-655 dark:hover:text-indigo-400 transition-colors p-1">
                                 {showIgPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                               </button>
                             </div>
@@ -2320,184 +1847,102 @@ if (user?.team === 'developer') {
                         </div>
                       </div>
                     </div>
-                    {/* Financials Card - Ads Team Only (Since Technical role cannot see payments) */}
+
+                    {/* 3. Financials — Ads only */}
                     {(user?.team === 'ads' || user?.team === 'all') && (
                       <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                          3. Financial Overview
-                        </h4>
-                        <div className="grid grid-cols-1 gap-4">
-                          <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
-                            {user?.team === 'ads' ? (
-                              <>
-                                <span className="text-[10px] font-bold text-gray-455 block uppercase">Daily Ads Budget</span>
-                                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                  {client.adBudgetPerDay > 0 ? `₹${client.adBudgetPerDay.toLocaleString()}/day` : '—'}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="text-[10px] font-bold text-gray-455 block uppercase">Ad Campaign Budget</span>
-                                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                  ₹{(client.adBudget || 0).toLocaleString()}
-                                  {client.adBudgetPerDay > 0 && ` (₹${client.adBudgetPerDay.toLocaleString()}/day)`}
-                                </span>
-                              </>
-                            )}
-                          </div>
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">3. Financial Overview</h4>
+                        <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
+                          {user?.team === 'ads' ? (
+                            <>
+                              <span className="text-[10px] font-bold text-gray-455 block uppercase">Daily Ads Budget</span>
+                              <span className="text-sm font-bold text-gray-900 dark:text-white">{client.adBudgetPerDay > 0 ? `₹${client.adBudgetPerDay.toLocaleString()}/day` : '—'}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-[10px] font-bold text-gray-455 block uppercase">Ad Campaign Budget</span>
+                              <span className="text-sm font-bold text-gray-900 dark:text-white">₹{(client.adBudget || 0).toLocaleString()}{client.adBudgetPerDay > 0 && ` (₹${client.adBudgetPerDay.toLocaleString()}/day)`}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}
 
-
-                    {/* Deliverables Card */}
+                    {/* 4. Deliverables */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        4. Deliverables Tracking & Milestones
-                      </h4>
-                      
-                      {/* Posters */}
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">4. Deliverables Tracking & Milestones</h4>
                       {Number(client.postersRequired || 0) > 0 && (
                         <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800/40 pb-2.5">
                           <div>
                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Graphic Posters</span>
-                            <span className="text-[10px] text-gray-450 font-medium">
-                              Required: {client.postersRequired} • Pending: {client.postersPending ?? (client.postersStatus === 'Completed' ? 0 : client.postersRequired)}
-                            </span>
+                            <span className="text-[10px] text-gray-450 font-medium">Required: {client.postersRequired} • Pending: {client.postersPending ?? (client.postersStatus === 'Completed' ? 0 : client.postersRequired)}</span>
                           </div>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
-                            client.postersStatus === 'Completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                              : client.postersStatus === 'In Progress'
-                                ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
-                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                          }`}>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${client.postersStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : client.postersStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
                             {client.postersStatus || 'Pending'}
                           </span>
                         </div>
                       )}
-
-                      {/* Videos */}
                       {Number(client.videosRequired || 0) > 0 && (
                         <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800/40 pb-2.5">
                           <div>
                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Reels & Videos</span>
-                            <span className="text-[10px] text-gray-455 font-medium">
-                              Required: {client.videosRequired} • Pending: {client.videosPending ?? (client.videosStatus === 'Completed' ? 0 : client.videosRequired)}
-                            </span>
+                            <span className="text-[10px] text-gray-455 font-medium">Required: {client.videosRequired} • Pending: {client.videosPending ?? (client.videosStatus === 'Completed' ? 0 : client.videosRequired)}</span>
                           </div>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
-                            client.videosStatus === 'Completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                              : client.videosStatus === 'In Progress'
-                                ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
-                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                          }`}>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${client.videosStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : client.videosStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
                             {client.videosStatus || 'Pending'}
                           </span>
                         </div>
                       )}
-
-                      {/* Ads */}
                       {Number(client.adsRequired || 0) > 0 && (
                         <div className="flex justify-between items-center border-b border-gray-100 dark:border-slate-800/40 pb-2.5">
                           <div>
                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Ads Campaigns</span>
-                            <span className="text-[10px] text-gray-450 font-medium">
-                              Required: {client.adsRequired} • Pending: {client.adsPending ?? (client.adsStatus === 'Completed' ? 0 : client.adsRequired)}
-                            </span>
+                            <span className="text-[10px] text-gray-450 font-medium">Required: {client.adsRequired} • Pending: {client.adsPending ?? (client.adsStatus === 'Completed' ? 0 : client.adsRequired)}</span>
                           </div>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
-                            client.adsStatus === 'Completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                              : client.adsStatus === 'In Progress'
-                                ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
-                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                          }`}>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${client.adsStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : client.adsStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
                             {client.adsStatus || 'Pending'}
                           </span>
                         </div>
                       )}
-
-                      {/* Website */}
                       {client.websiteRequired && (
                         <div className="flex justify-between items-center pb-1">
                           <div>
                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Website Development ({client.websiteType || 'General'})</span>
-                            <span className="text-[10px] text-gray-450 font-medium">
-                              Pending Tasks: {client.websitePending || 0}
-                            </span>
+                            <span className="text-[10px] text-gray-450 font-medium">Pending Tasks: {client.websitePending || 0}</span>
                           </div>
-                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${
-                            client.websiteStatus === 'Completed'
-                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
-                              : client.websiteStatus === 'In Progress'
-                                ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20'
-                                : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
-                          }`}>
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border uppercase tracking-wider ${client.websiteStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20' : client.websiteStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' : 'bg-amber-500/10 text-amber-600 border-amber-500/20'}`}>
                             {client.websiteStatus || 'Pending'}
                           </span>
                         </div>
                       )}
-
-                      {/* Other Tools */}
                       {client.otherTools && client.otherTools.length > 0 && (
                         <div className="flex justify-between items-center pb-1 border-t border-gray-100 dark:border-slate-800/40 pt-2 mt-2">
                           <div>
                             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Other Required Tools</span>
-                            <span className="text-[10px] text-gray-400 font-medium">
-                              {(Array.isArray(client.otherTools) ? client.otherTools : [client.otherTools]).join(', ')}
-                            </span>
+                            <span className="text-[10px] text-gray-400 font-medium">{(Array.isArray(client.otherTools) ? client.otherTools : [client.otherTools]).join(', ')}</span>
                           </div>
-                          <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">
-                            Required
-                          </span>
+                          <span className="text-[10px] font-bold text-indigo-650 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded">Required</span>
                         </div>
                       )}
-
                     </div>
 
-                    {/* Specifications Card */}
+                    {/* 5. Specifications */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        5. Campaign Specifications
-                      </h4>
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">5. Campaign Specifications</h4>
                       <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Business Category</span>
-                          <span className="text-gray-905 dark:text-white font-semibold">{client.businessCategory || '—'}</span>
-                        </div>
+                        <div><span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Business Category</span><span className="text-gray-905 dark:text-white font-semibold">{client.businessCategory || '—'}</span></div>
                         <div>
                           <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Website Link</span>
-                          {client.websiteUrl ? (
-                            <a href={client.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline break-all font-semibold block">
-                              {client.websiteUrl}
-                            </a>
-                          ) : (
-                            <span className="text-gray-450 block">—</span>
-                          )}
+                          {client.websiteUrl ? <a href={client.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline break-all font-semibold block">{client.websiteUrl}</a> : <span className="text-gray-450 block">—</span>}
                         </div>
                         {user?.team !== 'ads' && (
                           <>
-                            <div>
-                              <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Start Date</span>
-                              <span className="text-gray-905 dark:text-white font-bold">{client.startDate || '—'}</span>
-                            </div>
+                            <div><span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Start Date</span><span className="text-gray-905 dark:text-white font-bold">{client.startDate || '—'}</span></div>
                             <div>
                               <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Delivery Deadline</span>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className="text-rose-600 dark:text-rose-400 font-bold">{client.deliveryDeadline || '—'}</span>
-                                 {(() => {
-                                   const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline, client.workflowStatus);
-                                   if (deadlineAlert) {
-                                     return (
-                                       <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                         {deadlineAlert.label}
-                                       </span>
-                                     );
-                                   }
-                                   return null;
-                                 })()}
+                                {(() => { const da = checkDeadlineAlert(client.deliveryDeadline, client.workflowStatus); if (da) return <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${da.color}`}>{da.label}</span>; return null; })()}
                               </div>
                             </div>
                           </>
@@ -2506,91 +1951,50 @@ if (user?.team === 'developer') {
                       <div>
                         <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase mb-1">Brand Colors</span>
                         <div className="flex gap-2 items-center">
-                          <span 
-                            style={{ backgroundColor: client.brandColors }}
-                            className="w-4 h-4 rounded border border-gray-250/60 block" 
-                          />
+                          <span style={{ backgroundColor: client.brandColors }} className="w-4 h-4 rounded border border-gray-250/60 block" />
                           <span className="text-xs font-mono text-gray-905 dark:text-white font-semibold">{client.brandColors || '—'}</span>
                         </div>
                       </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Target Audience</span>
-                        <span className="text-gray-900 dark:text-white font-medium block mt-0.5">{client.targetAudience || '—'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Key Competitors</span>
-                        <span className="text-gray-900 dark:text-white font-medium block mt-0.5">{client.competitors || '—'}</span>
-                      </div>
+                      <div><span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Target Audience</span><span className="text-gray-900 dark:text-white font-medium block mt-0.5">{client.targetAudience || '—'}</span></div>
+                      <div><span className="text-[10px] font-bold text-gray-400 dark:text-gray-555 block uppercase">Key Competitors</span><span className="text-gray-900 dark:text-white font-medium block mt-0.5">{client.competitors || '—'}</span></div>
                     </div>
 
-                    {/* Comments & Remarks Card */}
+                    {/* 6. Notes */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                        6. Notes & Internal Remarks
-                      </h4>
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">6. Notes & Internal Remarks</h4>
                       <div>
                         <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Salesperson Onboarding Notes</span>
-                        <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-800/60">
-                          {client.notes || 'No notes provided.'}
-                        </p>
+                        <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-800/60">{client.notes || 'No notes provided.'}</p>
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Internal Production Remarks</span>
-                        <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-805 font-medium">
-                          {client.remarks || 'No internal remarks.'}
-                        </p>
+                        <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-805 font-medium">{client.remarks || 'No internal remarks.'}</p>
                       </div>
                     </div>
-
                   </div>
 
-                  {/* Right Column: Shared Communication Chat (1/3 width) */}
-                  <div className="space-y-6 lg:col-span-1 flex flex-col justify-between ">
-                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 flex-1 flex flex-col ">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">
-                        6. Shared Communication Chat
-                      </h4>
+                  {/* Chat Column */}
+                  <div className="space-y-6 lg:col-span-1 flex flex-col justify-between">
+                    <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 flex-1 flex flex-col">
+                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider mb-2">6. Shared Communication Chat</h4>
                       <ClientChat leadId={client._id || client.id} layout="stack" />
                     </div>
                   </div>
-
                 </div>
               </div>
 
-              {/* Modal Footer */}
               <div className="flex justify-end gap-3 p-5 border-t border-gray-100 dark:border-slate-800/80">
-                {!(user?.team === 'developer'
-                  ? client.assignedDeveloper
-                  : user?.team === 'design'
-                    ? client.assignedDesigner
-                    : user?.team === 'ads'
-                      ? client.assignedAdSpecialist
-                      : client.assignedTo) && (
-                  <Button
-                    onClick={async () => {
-                      await handleAcceptClick(client);
-                    }}
-                    variant="primary"
-                    size="sm"
-                  >
-                    Self Claim
-                  </Button>
+                {!(user?.team === 'developer' ? client.assignedDeveloper : user?.team === 'design' ? client.assignedDesigner : user?.team === 'ads' ? client.assignedAdSpecialist : client.assignedTo) && (
+                  <Button onClick={async () => { await handleAcceptClick(client); }} variant="primary" size="sm">Self Claim</Button>
                 )}
-                <Button
-                  onClick={() => setViewedClientId(null)}
-                  variant="outline"
-                  size="sm"
-                >
-                  Close Dossier
-                </Button>
+                <Button onClick={() => setViewedClientId(null)} variant="outline" size="sm">Close Dossier</Button>
               </div>
-
             </div>
           </div>
         );
       })()}
 
-      {/* Metrics List Modal */}
+      {/* Metrics Modal */}
       <AnimatePresence>
         {activeMetricsModal && (() => {
           const { title, list } = getMetricsModalTitleAndList();
@@ -2602,26 +2006,18 @@ if (user?.team === 'developer') {
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
               >
-                {/* Modal Header */}
                 <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                   <div>
                     <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
                     <p className="text-xs text-gray-400 dark:text-gray-555 mt-0.5">Showing {list.length} matching client briefs</p>
                   </div>
-                  <button 
-                    onClick={() => setActiveMetricsModal(null)}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
-                  >
+                  <button onClick={() => setActiveMetricsModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
-
-                {/* Modal Content - Table */}
                 <div className="p-6 overflow-y-auto flex-1">
                   {list.length === 0 ? (
-                    <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-                      No client records match this category.
-                    </div>
+                    <div className="text-center py-12 text-gray-400 dark:text-gray-500">No client records match this category.</div>
                   ) : (
                     <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
                       <table className="w-full text-left text-sm border-collapse">
@@ -2639,59 +2035,28 @@ if (user?.team === 'developer') {
                           {list.map((client) => (
                             <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
                               <td className="p-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveMetricsModal(null);
-                                    setViewedClientId(client._id || client.id);
-                                  }}
-                                  className="font-bold text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer"
-                                >
+                                <button type="button" onClick={() => { setActiveMetricsModal(null); setViewedClientId(client._id || client.id); }} className="font-bold text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer">
                                   {client.clientId || 'N/A'}
                                 </button>
                               </td>
                               <td className="p-3 text-gray-900 dark:text-white font-bold">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span>{client.clientName}</span>
-                                  {(() => {
-                                    const badge = getPaymentStatus(client);
-                                    return (
-                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
-                                        {badge.label}
-                                      </span>
-                                    );
-                                  })()}
+                                  {(() => { const badge = getPaymentStatus(client); return <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>{badge.label}</span>; })()}
                                 </div>
-                                {client.companyName && (
-                                  <div className="text-xs text-gray-405 dark:text-gray-550 font-normal mt-0.5">
-                                    {client.companyName}
-                                  </div>
-                                )}
+                                {client.companyName && <div className="text-xs text-gray-405 dark:text-gray-550 font-normal mt-0.5">{client.companyName}</div>}
                               </td>
                               <td className="p-3 font-mono">{client.mobileNumber}</td>
                               <td className="p-3">
-                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                  client.workflowStatus === 'Completed'
-                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                    : client.workflowStatus === 'In Progress'
-                                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                      : client.workflowStatus === 'Allocated'
-                                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                                }`}>
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${client.workflowStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : client.workflowStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : client.workflowStatus === 'Allocated' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
                                   {client.workflowStatus === 'Allocated' ? 'Pending' : (client.workflowStatus || 'Non-Allocated')}
                                 </span>
                               </td>
                               <td className="p-3">
-                                {client.assignedToName ? (
-                                  <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">
-                                    👤 {client.assignedToName}
-                                  </span>
-                                ) : (
-                                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                                    Unclaimed ({getTeamDisplayLabel(client.assignedTeam)})
-                                  </span>
-                                )}
+                                {client.assignedToName
+                                  ? <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max">👤 {client.assignedToName}</span>
+                                  : <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">Unclaimed ({getTeamDisplayLabel(client.assignedTeam)})</span>
+                                }
                               </td>
                               <td className="p-3 text-xs text-gray-500 font-semibold">{client.salespersonName}</td>
                             </tr>
@@ -2701,18 +2066,9 @@ if (user?.team === 'developer') {
                     </div>
                   )}
                 </div>
-
-                {/* Modal Footer */}
                 <div className="flex justify-end p-5 border-t border-gray-100 dark:border-slate-800/80">
-                  <Button
-                    onClick={() => setActiveMetricsModal(null)}
-                    variant="outline"
-                    size="sm"
-                  >
-                    Close
-                  </Button>
+                  <Button onClick={() => setActiveMetricsModal(null)} variant="outline" size="sm">Close</Button>
                 </div>
-
               </motion.div>
             </div>
           );

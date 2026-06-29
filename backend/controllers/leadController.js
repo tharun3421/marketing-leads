@@ -203,13 +203,13 @@ const redactLeadForTechnicalUser = (lead, team) => {
     delete leadObj.websiteStatus;
     delete leadObj.websitePending;
     delete leadObj.websiteUrl;
-    delete leadObj.postersRequired;
-    delete leadObj.postersPending;
-    delete leadObj.postersStatus;
-    delete leadObj.videosRequired;
-    delete leadObj.videosPending;
-    delete leadObj.videosStatus;
-    delete leadObj.brandColors;
+    // delete leadObj.postersRequired;
+    // delete leadObj.postersPending;
+    // delete leadObj.postersStatus;
+    // delete leadObj.videosRequired;
+    // delete leadObj.videosPending;
+    // delete leadObj.videosStatus;
+    // delete leadObj.brandColors;
     delete leadObj.adBudget;
     // platforms is intentionally kept so ads team can see GMB, SEO etc.
   }

@@ -266,6 +266,17 @@ const leadSchema = new mongoose.Schema({
     enum: ['Pending', 'In Progress', 'Completed'],
     default: 'Pending'
   },
+  // Ads Team internal postings tracking (does not affect Design Team)
+postingsPostersStatus: {
+  type: String,
+  enum: ['Pending', 'In Progress', 'Completed'],
+  default: 'Pending'
+},
+postingsVideosStatus: {
+  type: String,
+  enum: ['Pending', 'In Progress', 'Completed'],
+  default: 'Pending'
+},
   // Plan dates for Ads campaigns
   planStartDate: {
     type: String,

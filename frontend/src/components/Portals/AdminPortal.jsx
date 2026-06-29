@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   Users, 
   UserPlus, 
@@ -25,7 +26,9 @@ import {
   KeyRound,
   Sliders,
   AlertCircle,
-  Edit3
+  Edit3,
+  BarChart3,
+  Sheet
 } from 'lucide-react';
 import Card from '../UI/Card';
 import Button from '../UI/Button';
@@ -207,8 +210,20 @@ export default function AdminPortal({
   // Relocated header config modals states
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
+
+  // Sales Report modal state
+  const [isSalesReportOpen, setIsSalesReportOpen] = useState(false);
+  const [salesReportSearch, setSalesReportSearch] = useState('');
+  const [salesReportSheetsLoading, setSalesReportSheetsLoading] = useState(false);
   const [repSearchQuery, setRepSearchQuery] = useState('');
   const [techSearchQuery, setTechSearchQuery] = useState('');
+
+  const [salesReportRepFilter, setSalesReportRepFilter] = useState('All');
+const [salesReportDateMode, setSalesReportDateMode] = useState('all'); // 'all' | 'monthly' | 'custom'
+const [salesReportMonth, setSalesReportMonth] = useState(new Date().getMonth() + 1);
+const [salesReportYear, setSalesReportYear] = useState(new Date().getFullYear());
+const [salesReportStartDate, setSalesReportStartDate] = useState('');
+const [salesReportEndDate, setSalesReportEndDate] = useState('');
 
   // Central Clients Management filter states
   const [clientSearchQuery, setClientSearchQuery] = useState('');
@@ -726,6 +741,55 @@ export default function AdminPortal({
     });
   }, [inspectedLeads, filterWorkflowStatus, filterAssignedTeam]);
 
+  const filteredSalesReportLeads = useMemo(() => {
+  return leads.filter(lead => {
+    // 1. Client name / ID / business / phone search
+    const q = salesReportSearch.toLowerCase().trim();
+    if (q) {
+      const match =
+        (lead.clientId || '').toLowerCase().includes(q) ||
+        (lead.clientName || '').toLowerCase().includes(q) ||
+        (lead.companyName || '').toLowerCase().includes(q) ||
+        (lead.salespersonName || '').toLowerCase().includes(q) ||
+        (lead.mobileNumber || '').toLowerCase().includes(q);
+      if (!match) return false;
+    }
+
+    // 2. Salesperson filter
+    if (salesReportRepFilter !== 'All' && lead.salespersonName !== salesReportRepFilter) {
+      return false;
+    }
+
+    // 3. Date filter
+    const createdAt = lead.createdAt ? new Date(lead.createdAt) : null;
+    if (salesReportDateMode === 'monthly' && createdAt) {
+      if (
+        createdAt.getMonth() + 1 !== salesReportMonth ||
+        createdAt.getFullYear() !== salesReportYear
+      ) return false;
+    }
+    if (salesReportDateMode === 'custom') {
+      if (salesReportStartDate && createdAt) {
+        const start = new Date(salesReportStartDate);
+        start.setHours(0, 0, 0, 0);
+        if (createdAt < start) return false;
+      }
+      if (salesReportEndDate && createdAt) {
+        const end = new Date(salesReportEndDate);
+        end.setHours(23, 59, 59, 999);
+        if (createdAt > end) return false;
+      }
+    }
+
+    return true;
+  });
+}, [leads, salesReportSearch, salesReportRepFilter, salesReportDateMode, salesReportMonth, salesReportYear, salesReportStartDate, salesReportEndDate]);
+
+  const salesReportTotals = useMemo(() => ({
+    totalPlan: filteredSalesReportLeads.reduce((s, l) => s + Number(l.planAmount || 0), 0),
+    totalPayable: filteredSalesReportLeads.reduce((s, l) => s + Number(l.pendingAmount || 0), 0),
+  }), [filteredSalesReportLeads]);
+
   if (isLoading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center text-gray-905 dark:text-white">
@@ -736,6 +800,134 @@ export default function AdminPortal({
       </div>
     );
   }
+
+  // ── SALES REPORT NON-HOOK HELPERS ─────────────────────────────────────────
+
+  const getCampaignSchedule = (lead) => {
+    const platforms = lead.platforms || [];
+    const schedules = [];
+
+    if (platforms.includes('Meta Ads') || lead.metaAdsPlanDuration > 0) {
+      schedules.push({
+        service: 'Meta Ads',
+        start: lead.metaAdsStartDate || lead.planStartDate || '—',
+        end: lead.metaAdsEndDate || lead.planEndDate || '—',
+      });
+    }
+    if (platforms.includes('Google Ads') || lead.googleAdsPlanDuration > 0) {
+      schedules.push({
+        service: 'Google Ads',
+        start: lead.googleAdsStartDate || lead.planStartDate || '—',
+        end: lead.googleAdsEndDate || lead.planEndDate || '—',
+      });
+    }
+    if (platforms.includes('LinkedIn Ads') || lead.linkedinAdsPlanDuration > 0) {
+      schedules.push({
+        service: 'LinkedIn Ads',
+        start: lead.linkedinAdsStartDate || '—',
+        end: lead.linkedinAdsEndDate || '—',
+      });
+    }
+    if (platforms.includes('SEO') || lead.seoPlanDuration > 0) {
+      schedules.push({
+        service: 'SEO',
+        start: lead.seoStartDate || '—',
+        end: lead.seoEndDate || '—',
+      });
+    }
+    if (schedules.length === 0 && (lead.planStartDate || lead.startDate)) {
+      schedules.push({
+        service: 'Campaign',
+        start: lead.planStartDate || lead.startDate || '—',
+        end: lead.planEndDate || lead.deliveryDeadline || '—',
+      });
+    }
+    return schedules;
+  };
+
+  const handleSalesReportExcelDownload = () => {
+    const rows = filteredSalesReportLeads.map(lead => {
+      const schedules = getCampaignSchedule(lead);
+      const scheduleStr = schedules.length > 0
+        ? schedules.map(s => `${s.service}: ${s.start} → ${s.end}`).join(' | ')
+        : '—';
+      return {
+        'Client ID': lead.clientId || '—',
+        'Created Date': lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-IN') : '—',
+        'Created By': lead.salespersonName || '—',
+        'Client Name': lead.clientName || '—',
+        'Business Name': lead.companyName || '—',
+        'Business Number': lead.mobileNumber || '—',
+        'Plan Schedule': scheduleStr,
+        'Plan Amount (₹)': Number(lead.planAmount || 0),
+        'Advance Amount (₹)': Number(lead.advanceAmount || 0),
+        'Pending Amount (₹)': Number(lead.pendingAmount || 0),
+      };
+    });
+
+    // Summary row
+    rows.push({});
+    rows.push({
+      'Client ID': 'SUMMARY',
+      'Created Date': '',
+      'Created By': '',
+      'Client Name': `Total Clients: ${filteredSalesReportLeads.length}`,
+      'Business Name': '',
+      'Business Number': '',
+      'Plan Schedule': '',
+      'Plan Amount (₹)': salesReportTotals.totalPlan,
+      'Advance Amount (₹)': '',
+      'Pending Amount (₹)': salesReportTotals.totalPayable,
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sales Report');
+    XLSX.writeFile(wb, `sales_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handleSalesReportSheetsSync = async () => {
+    if (!appsScriptUrl) {
+      onAddToast('Sheets Not Configured', 'Please configure Google Sheets URL in Sheets Config first.', 'warning');
+      return;
+    }
+    setSalesReportSheetsLoading(true);
+    try {
+      const payload = filteredSalesReportLeads.map(lead => {
+        const schedules = getCampaignSchedule(lead);
+        const scheduleStr = schedules.length > 0
+          ? schedules.map(s => `${s.service}: ${s.start} → ${s.end}`).join(' | ')
+          : '—';
+        return {
+          clientId: lead.clientId || '—',
+          createdDate: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-IN') : '—',
+          createdBy: lead.salespersonName || '—',
+          clientName: lead.clientName || '—',
+          businessName: lead.companyName || '—',
+          businessNumber: lead.mobileNumber || '—',
+          planSchedule: scheduleStr,
+          planAmount: Number(lead.planAmount || 0),
+          advanceAmount: Number(lead.advanceAmount || 0),
+          pendingAmount: Number(lead.pendingAmount || 0),
+        };
+      });
+
+      const res = await fetch(appsScriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'sales_report', data: payload })
+      });
+      onAddToast('Synced to Sheets', 'Sales report data sent to Google Sheets successfully.', 'success');
+    } catch (err) {
+      console.error(err);
+      onAddToast('Sync Failed', 'Could not send data to Google Sheets. Check your Apps Script URL.', 'error');
+    } finally {
+      setSalesReportSheetsLoading(false);
+    }
+  };
+
+  // ── END SALES REPORT HELPERS ───────────────────────────────────────────────
 
   // Export specific Salesperson's clients to CSV
   const handleExportRepCSV = () => {
@@ -1508,6 +1700,16 @@ const handleClientFieldChange = (field, value) => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Sales Report Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsSalesReportOpen(true)}
+            icon={BarChart3}
+          >
+            Sales Report
+          </Button>
+
           {/* Register Staff Button */}
           <Button
             variant="outline"
@@ -3549,6 +3751,334 @@ const handleClientFieldChange = (field, value) => {
         </div>
       )}
 
+
+      {/* ── SALES REPORT MODAL ───────────────────────────────────────────────── */}
+{isSalesReportOpen && (() => {
+  // All filter state is driven by: salesReportSearch, salesReportDateMode,
+  // salesReportMonth, salesReportYear, salesReportStartDate, salesReportEndDate,
+  // salesReportRepFilter — declared at top of component (add them there).
+  return (
+    <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-start justify-center p-4 z-150 overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-7xl my-6 shadow-2xl flex flex-col">
+
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 rounded-t-2xl z-10">
+          <div>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <BarChart3 className="w-4.5 h-4.5 text-indigo-500" /> Sales Report
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Filtered client payment &amp; campaign overview — {filteredSalesReportLeads.length} client{filteredSalesReportLeads.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-2.5">
+            {/* Google Sheets Sync */}
+            <button
+              onClick={handleSalesReportSheetsSync}
+              disabled={salesReportSheetsLoading}
+              title="Sync to Google Sheets"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {salesReportSheetsLoading
+                ? <div className="w-3.5 h-3.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                : <Sheet className="w-3.5 h-3.5" />
+              }
+              Google Sheets
+            </button>
+            {/* Excel Download */}
+            <button
+              onClick={handleSalesReportExcelDownload}
+              title="Download Excel"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/40 transition-all cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download Excel
+            </button>
+            {/* Close */}
+            <button
+              onClick={() => {
+                setIsSalesReportOpen(false);
+                setSalesReportSearch('');
+                setSalesReportRepFilter('All');
+                setSalesReportDateMode('all');
+                setSalesReportMonth(new Date().getMonth() + 1);
+                setSalesReportYear(new Date().getFullYear());
+                setSalesReportStartDate('');
+                setSalesReportEndDate('');
+              }}
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── FILTER BAR ── */}
+        <div className="px-6 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800/60 bg-gray-50/40 dark:bg-slate-900/50 space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+
+            {/* Client Name Search */}
+            <div className="flex flex-col gap-1 min-w-[180px] flex-1">
+              <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Client Name</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search client, business, ID..."
+                  value={salesReportSearch}
+                  onChange={e => setSalesReportSearch(e.target.value)}
+                  className="pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 w-full transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Salesperson Filter */}
+            <div className="flex flex-col gap-1 min-w-[160px]">
+              <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sales Person</label>
+              <select
+                value={salesReportRepFilter}
+                onChange={e => setSalesReportRepFilter(e.target.value)}
+                className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer transition-all"
+              >
+                <option value="All">All Sales Persons</option>
+                {salespersonsList.map(sp => (
+                  <option key={sp._id || sp.id} value={sp.name}>{sp.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Mode Toggle */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Date Filter Mode</label>
+              <div className="flex rounded-xl overflow-hidden border border-gray-200 dark:border-slate-700 text-xs font-semibold">
+                {[
+                  { val: 'all', label: 'All Time' },
+                  { val: 'monthly', label: 'Monthly' },
+                  { val: 'custom', label: 'Custom Range' },
+                ].map(opt => (
+                  <button
+                    key={opt.val}
+                    type="button"
+                    onClick={() => setSalesReportDateMode(opt.val)}
+                    className={`px-3 py-2 transition-all cursor-pointer ${
+                      salesReportDateMode === opt.val
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Monthly Picker */}
+            {salesReportDateMode === 'monthly' && (
+              <div className="flex flex-col gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Month & Year</label>
+                <div className="flex gap-2">
+                  <select
+                    value={salesReportMonth}
+                    onChange={e => setSalesReportMonth(Number(e.target.value))}
+                    className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer"
+                  >
+                    {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                      <option key={i} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={salesReportYear}
+                    onChange={e => setSalesReportYear(Number(e.target.value))}
+                    className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer"
+                  >
+                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(yr => (
+                      <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Custom Date Range */}
+            {salesReportDateMode === 'custom' && (
+              <div className="flex flex-col gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Date Range</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={salesReportStartDate}
+                    onChange={e => setSalesReportStartDate(e.target.value)}
+                    className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-400 font-semibold">to</span>
+                  <input
+                    type="date"
+                    value={salesReportEndDate}
+                    onChange={e => setSalesReportEndDate(e.target.value)}
+                    className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Reset Filters */}
+            {(salesReportSearch || salesReportRepFilter !== 'All' || salesReportDateMode !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSalesReportSearch('');
+                  setSalesReportRepFilter('All');
+                  setSalesReportDateMode('all');
+                  setSalesReportStartDate('');
+                  setSalesReportEndDate('');
+                }}
+                className="self-end py-2 px-3 text-xs font-semibold rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+
+          {/* Active filter summary chips */}
+          {(salesReportRepFilter !== 'All' || salesReportDateMode !== 'all') && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {salesReportRepFilter !== 'All' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold">
+                  Rep: {salesReportRepFilter}
+                  <button onClick={() => setSalesReportRepFilter('All')} className="hover:text-indigo-800 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              {salesReportDateMode === 'monthly' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold">
+                  Month: {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][salesReportMonth - 1]} {salesReportYear}
+                  <button onClick={() => setSalesReportDateMode('all')} className="hover:text-indigo-800 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              {salesReportDateMode === 'custom' && (salesReportStartDate || salesReportEndDate) && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold">
+                  Range: {salesReportStartDate || '...'} → {salesReportEndDate || '...'}
+                  <button onClick={() => { setSalesReportStartDate(''); setSalesReportEndDate(''); setSalesReportDateMode('all'); }} className="hover:text-indigo-800 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Table */}
+        <div className="overflow-auto flex-1 px-1">
+          {filteredSalesReportLeads.length === 0 ? (
+            <div className="text-center py-16 text-sm text-gray-400">
+              No clients match your filters.
+            </div>
+          ) : (
+            <table className="min-w-[1100px] w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 z-[5]">
+                <tr className="bg-gray-50 dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800">
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">#</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client ID</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Created Date</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Created By</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client Name</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Business Name</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Business Number</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Plan Schedule</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Plan Amount</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Advance</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Pending</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800/50">
+                {filteredSalesReportLeads.map((lead, idx) => {
+                  const schedules = getCampaignSchedule(lead);
+                  const plan = Number(lead.planAmount || 0);
+                  const advance = Number(lead.advanceAmount || 0);
+                  const pending = Number(lead.pendingAmount || 0);
+                  const payStatus = getPaymentStatus(lead);
+                  return (
+                    <tr key={lead._id || idx} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/3 transition-colors">
+                      <td className="px-4 py-3 text-gray-400 dark:text-gray-500 font-medium">{idx + 1}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{lead.clientId || '—'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                        {lead.createdAt
+                          ? new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium whitespace-nowrap">
+                        {lead.salespersonName || '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{lead.clientName || '—'}</div>
+                        <span className={`inline-block mt-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${payStatus.color}`}>
+                          {payStatus.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.companyName || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.mobileNumber || '—'}</td>
+                      <td className="px-4 py-3 min-w-[200px]">
+                        {schedules.length > 0 ? (
+                          <div className="space-y-1">
+                            {schedules.map((s, si) => (
+                              <div key={si} className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-1.5 py-0.5 bg-indigo-500/10 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 rounded-md font-semibold text-[10px] whitespace-nowrap">
+                                  {s.service}
+                                </span>
+                                <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                  {s.start !== '—' || s.end !== '—' ? `${s.start} → ${s.end}` : 'Dates TBD'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                        {plan > 0 ? `₹${plan.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                        {advance > 0 ? `₹${advance.toLocaleString('en-IN')}` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold whitespace-nowrap">
+                        {pending > 0
+                          ? <span className="text-amber-600 dark:text-amber-400">₹{pending.toLocaleString('en-IN')}</span>
+                          : <span className="text-gray-400">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer Summary */}
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/60 rounded-b-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Showing <span className="font-bold text-gray-700 dark:text-gray-300">{filteredSalesReportLeads.length}</span> of <span className="font-bold text-gray-700 dark:text-gray-300">{leads.length}</span> total clients
+          </p>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Plan Amount</p>
+              <p className="text-base font-extrabold text-gray-900 dark:text-white">
+                ₹{salesReportTotals.totalPlan.toLocaleString('en-IN')}
+              </p>
+            </div>
+            <div className="w-px h-8 bg-gray-200 dark:bg-slate-700" />
+            <div className="text-right">
+              <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Total Payable (Pending)</p>
+              <p className="text-base font-extrabold text-amber-600 dark:text-amber-400">
+                ₹{salesReportTotals.totalPayable.toLocaleString('en-IN')}
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+})()}
 
       {/* Register Staff Member Modal */}
       {isRegisterModalOpen && (
