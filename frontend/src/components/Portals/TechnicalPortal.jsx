@@ -56,14 +56,10 @@ const hasTeamVal = (teamVal, team) => {
   return teamVal === team || teamVal === 'all';
 };
 
-const getStatusLabel = (status, team) => {
-  if (status === 'Allocated') {
-    if (!team) return 'Assigned to Specific Team';
-    const label = getTeamDisplayLabel(team);
-    if (label === 'Not Assigned') return 'Assigned to Specific Team';
-    return `Assigned to ${label}`;
-  }
-  return status || 'Non-Allocated';
+const getStatusLabel = (status) => {
+  if (status === 'Completed') return 'Completed';
+  if (status === 'In Progress') return 'In Progress';
+  return 'Pending';
 };
 
 const getPerTeamStatusBadges = (lead) => {
@@ -143,8 +139,12 @@ export default function TechnicalPortal({
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [clientStatusFilter, setClientStatusFilter] = useState('All');
   const [clientTeamFilter, setClientTeamFilter] = useState('All');
+  const [clientCreatedByFilter, setClientCreatedByFilter] = useState('All');
+  const [clientAssignedToFilter, setClientAssignedToFilter] = useState('All');
   const [clientStartDateFilter, setClientStartDateFilter] = useState('');
   const [clientEndDateFilter, setClientEndDateFilter] = useState('');
+  const [salespersonsList, setSalespersonsList] = useState([]);
+  const [technicalList, setTechnicalList] = useState([]);
 
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const [listSearchQuery, setListSearchQuery] = useState('');
@@ -179,7 +179,9 @@ export default function TechnicalPortal({
   const [editSeoStatus, setEditSeoStatus] = useState('Pending');
   const [editGmbStatus, setEditGmbStatus] = useState('Pending');
   const [postingsPostersStatus, setPostingsPostersStatus] = useState('Pending');
+  const [postingsPostersPending, setPostingsPostersPending] = useState(0);
   const [postingsVideosStatus, setPostingsVideosStatus] = useState('Pending');
+  const [postingsVideosPending, setPostingsVideosPending] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const isFirstLoadRef = React.useRef(true);
@@ -206,8 +208,26 @@ export default function TechnicalPortal({
     }
   };
 
+  const fetchEmployees = async () => {
+    try {
+      const salespersonsRes = await authFetch('/api/auth/salespersons');
+      if (salespersonsRes.ok) {
+        const salespersonsData = await salespersonsRes.json();
+        setSalespersonsList(salespersonsData);
+      }
+      const technicalRes = await authFetch('/api/auth/technical');
+      if (technicalRes.ok) {
+        const technicalData = await technicalRes.json();
+        setTechnicalList(technicalData);
+      }
+    } catch (err) {
+      console.error('Fetch employees failed:', err);
+    }
+  };
+
   useEffect(() => {
     fetchAssignedLeads();
+    fetchEmployees();
     const interval = setInterval(fetchAssignedLeads, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -249,7 +269,9 @@ export default function TechnicalPortal({
       setEditSeoStatus(selectedLead.seoCampaignStatus || 'Pending');
       setEditGmbStatus(selectedLead.gmbCampaignStatus || 'Pending');
       setPostingsPostersStatus(selectedLead.postingsPostersStatus || 'Pending');
+      setPostingsPostersPending(Number(selectedLead.postingsPostersPending ?? selectedLead.postersRequired ?? 0));
       setPostingsVideosStatus(selectedLead.postingsVideosStatus || 'Pending');
+      setPostingsVideosPending(Number(selectedLead.postingsVideosPending ?? selectedLead.videosRequired ?? 0));
     } else {
       setPostersStatus('Pending');
       setPostersPending(0);
@@ -275,7 +297,9 @@ export default function TechnicalPortal({
       setEditSeoStatus('Pending');
       setEditGmbStatus('Pending');
       setPostingsPostersStatus('Pending');
+      setPostingsPostersPending(0);
       setPostingsVideosStatus('Pending');
+      setPostingsVideosPending(0);
     }
   }, [selectedLeadId, teamAssigneeId]);
 
@@ -331,9 +355,11 @@ export default function TechnicalPortal({
       const updatePayload = {};
 
        if (user?.team === 'ads') {
-  updatePayload.postingsPostersStatus = postingsPostersStatus;
-  updatePayload.postingsVideosStatus = postingsVideosStatus;
-}
+         updatePayload.postingsPostersStatus = postingsPostersStatus;
+         updatePayload.postingsPostersPending = postingsPostersStatus === 'Completed' ? 0 : (postingsPostersStatus === 'Pending' ? Number(selectedLead.postersRequired || 0) : Number(postingsPostersPending));
+         updatePayload.postingsVideosStatus = postingsVideosStatus;
+         updatePayload.postingsVideosPending = postingsVideosStatus === 'Completed' ? 0 : (postingsVideosStatus === 'Pending' ? Number(selectedLead.videosRequired || 0) : Number(postingsVideosPending));
+       }
 
       if (selectedLead.postersRequired !== undefined) {
         const postersPendingCount = postersStatus === 'Completed' ? 0 : (postersStatus === 'Pending' ? Number(selectedLead.postersRequired || 0) : Number(postersPending));
@@ -362,70 +388,57 @@ export default function TechnicalPortal({
       }
 
       // Auto-derive team status and workflowStatus from postings/tasks completion
+      // Auto-derive team status and workflowStatus from postings/tasks completion
       if (user?.team === 'developer') {
-        updatePayload.workflowStatus = editDevTeamStatus === 'Completed'
-          ? 'Completed' : editDevTeamStatus === 'In Progress' ? 'In Progress' : 'Allocated';
+        updatePayload.workflowStatus = editDevTeamStatus === 'Completed' ? 'Completed' : 'In Progress';
 
       } else if (user?.team === 'design') {
-  // Auto-derive designTeamStatus from posters + videos completion
-  const hasPosters = Number(selectedLead.postersRequired || 0) > 0;
-  const hasVideos = Number(selectedLead.videosRequired || 0) > 0;
-  // Both must exist AND be Completed to reach Completed; if neither assigned, allow Completed
-  const postersAllDone = !hasPosters || postersStatus === 'Completed';
-  const videosAllDone = !hasVideos || videosStatus === 'Completed';
-  const anyAssigned = hasPosters || hasVideos;
-  const postersStarted = hasPosters && (postersStatus === 'In Progress' || postersStatus === 'Completed');
-  const videosStarted = hasVideos && (videosStatus === 'In Progress' || videosStatus === 'Completed');
-  // Only Completed when ALL assigned deliverables are done
-  const allPostingsDone = postersAllDone && videosAllDone;
-  const autoDesignStatus = allPostingsDone
-    ? 'Completed'
-    : (postersStarted || videosStarted) ? 'In Progress' : 'Pending';
-  updatePayload.designTeamStatus = autoDesignStatus;
-  // Overall workflow only Completed when all postings done; otherwise In Progress if any started
-  updatePayload.workflowStatus = allPostingsDone
-    ? 'Completed'
-    : (postersStarted || videosStarted) ? 'In Progress' : 'Allocated';
+        const hasPosters = Number(selectedLead.postersRequired || 0) > 0;
+        const hasVideos = Number(selectedLead.videosRequired || 0) > 0;
+        const postersAllDone = !hasPosters || postersStatus === 'Completed';
+        const videosAllDone = !hasVideos || videosStatus === 'Completed';
+        const allPostingsDone = postersAllDone && videosAllDone;
+        updatePayload.designTeamStatus = allPostingsDone ? 'Completed' : 'Pending';
+        updatePayload.workflowStatus = allPostingsDone ? 'Completed' : 'In Progress';
 
       } else if (user?.team === 'ads') {
-        // Auto-derive adsTeamStatus from Postings tracking (postingsPostersStatus / postingsVideosStatus)
         const hasAdsPosters = Number(selectedLead.postersRequired || 0) > 0;
         const hasAdsVideos = Number(selectedLead.videosRequired || 0) > 0;
-        const adsPostersAllDone = !hasAdsPosters || postingsPostersStatus === 'Completed';
-        const adsVideosAllDone = !hasAdsVideos || postingsVideosStatus === 'Completed';
-        const adsPostersStarted = hasAdsPosters && (postingsPostersStatus === 'In Progress' || postingsPostersStatus === 'Completed');
-        const adsVideosStarted = hasAdsVideos && (postingsVideosStatus === 'In Progress' || postingsVideosStatus === 'Completed');
-        const autoAdsPostingsStatus = (adsPostersAllDone && adsVideosAllDone)
-          ? 'Completed'
-          : (adsPostersStarted || adsVideosStarted) ? 'In Progress' : 'Pending';
-        const hasCampaigns = Number(selectedLead.metaAdsPlanDuration || 0) > 0
-  || Number(selectedLead.googleAdsPlanDuration || 0) > 0
-  || Number(selectedLead.linkedinAdsPlanDuration || 0) > 0
-  || Number(selectedLead.seoPlanDuration || 0) > 0
-  || (selectedLead.platforms && selectedLead.platforms.includes('GMB'));
+        const postingsPostersAllDone = !hasAdsPosters || postingsPostersStatus === 'Completed';
+        const postingsVideosAllDone = !hasAdsVideos || postingsVideosStatus === 'Completed';
+        const postingsCompleted = postingsPostersAllDone && postingsVideosAllDone;
 
-const hasPostings = Number(selectedLead.postersRequired || 0) > 0 || Number(selectedLead.videosRequired || 0) > 0;
+        const hasMeta = Number(selectedLead.metaAdsPlanDuration || 0) > 0;
+        const hasGoogle = Number(selectedLead.googleAdsPlanDuration || 0) > 0;
+        const hasYoutube = Number(selectedLead.youtubeAdsPlanDuration || 0) > 0;
+        const hasLinkedin = Number(selectedLead.linkedinAdsPlanDuration || 0) > 0;
+        const hasSeo = Number(selectedLead.seoPlanDuration || 0) > 0;
+        const hasGmb = selectedLead.platforms && selectedLead.platforms.includes('GMB');
 
-// Postings completeness (for ads team)
-const adsPostingsCompleted = autoAdsPostingsStatus === 'Completed';
-const adsPostingsInProgress = autoAdsPostingsStatus === 'In Progress';
+        const metaAdsAllDone = !hasMeta || editMetaStatus === 'Completed';
+        const googleAdsAllDone = !hasGoogle || editGoogleStatus === 'Completed';
+        const youtubeAdsAllDone = !hasYoutube || editYoutubeStatus === 'Completed';
+        const linkedinAdsAllDone = !hasLinkedin || editLinkedinStatus === 'Completed';
+        const seoAllDone = !hasSeo || editSeoStatus === 'Completed';
+        const gmbAllDone = !hasGmb || editGmbStatus === 'Completed';
 
-// Campaigns completeness — use the manually set editAdsTeamStatus when campaigns exist
-const campaignsCompleted = !hasCampaigns || editAdsTeamStatus === 'Completed';
-const campaignsInProgress = hasCampaigns && editAdsTeamStatus === 'In Progress';
+        const campaignsCompleted = metaAdsAllDone && googleAdsAllDone && youtubeAdsAllDone && linkedinAdsAllDone && seoAllDone && gmbAllDone;
+        const allDone = postingsCompleted && campaignsCompleted;
 
-// Overall: Completed only when BOTH postings AND campaigns are fully done
-const allDone = (!hasPostings || adsPostingsCompleted) && campaignsCompleted;
-const anyInProgress = adsPostingsInProgress || campaignsInProgress
-  || (hasPostings && adsPostingsCompleted) || (hasCampaigns && editAdsTeamStatus === 'Completed' && hasPostings && !adsPostingsCompleted);
+         // Calculate pending count of campaigns
+         let pendingCampaigns = 0;
+         if (hasMeta && editMetaStatus !== 'Completed') pendingCampaigns++;
+         if (hasGoogle && editGoogleStatus !== 'Completed') pendingCampaigns++;
+         if (hasYoutube && editYoutubeStatus !== 'Completed') pendingCampaigns++;
+         if (hasLinkedin && editLinkedinStatus !== 'Completed') pendingCampaigns++;
+         if (hasSeo && editSeoStatus !== 'Completed') pendingCampaigns++;
+         if (hasGmb && editGmbStatus !== 'Completed') pendingCampaigns++;
 
-const finalAdsTeamStatus = allDone ? 'Completed' : (adsPostingsInProgress || campaignsInProgress || (hasPostings && !adsPostingsCompleted && hasCampaigns)) ? 'In Progress' : (hasCampaigns ? editAdsTeamStatus : autoAdsPostingsStatus);
-
-updatePayload.adsTeamStatus = finalAdsTeamStatus;
-updatePayload.workflowStatus = allDone
-  ? 'Completed'
-  : (adsPostingsInProgress || campaignsInProgress || (hasCampaigns && hasPostings)) ? 'In Progress' : 'Allocated';
-
+         const currentAdsStatus = allDone ? 'Completed' : 'In Progress';
+         updatePayload.adsStatus = currentAdsStatus;
+         updatePayload.adsTeamStatus = currentAdsStatus;
+         updatePayload.adsPending = pendingCampaigns;
+         updatePayload.workflowStatus = allDone ? 'Completed' : 'In Progress';
       } else if (editWorkflowStatus !== selectedLead.workflowStatus) {
         updatePayload.workflowStatus = editWorkflowStatus;
       }
@@ -513,13 +526,24 @@ updatePayload.workflowStatus = allDone
   const handleAcceptClick = async (lead) => {
     setIsLoading(true);
     try {
+       const claimPayload = {
+        assignedTo: userId,
+        assignedToName: user?.name,
+        workflowStatus: 'In Progress'
+      };
+      if (user?.team === 'developer') {
+        claimPayload.devTeamStatus = 'In Progress';
+        claimPayload.websiteStatus = 'In Progress';
+      } else if (user?.team === 'design') {
+        claimPayload.designTeamStatus = 'In Progress';
+      } else if (user?.team === 'ads') {
+        claimPayload.adsTeamStatus = 'In Progress';
+        claimPayload.adsStatus = 'In Progress';
+      }
+
       const res = await authFetch(`/api/leads/${lead._id || lead.id}`, {
         method: 'PUT',
-        body: JSON.stringify({
-          assignedTo: userId,
-          assignedToName: user?.name,
-          workflowStatus: 'In Progress'
-        })
+        body: JSON.stringify(claimPayload)
       });
       if (res.ok) {
         onAddToast('Client Accepted', `Successfully accepted folder for ${lead.clientName}.`, 'success');
@@ -602,7 +626,7 @@ updatePayload.workflowStatus = allDone
   }).length, [teamLeads, user?.team]);
 
   const inProgressClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'In Progress').length, [teamLeads]);
-  const pendingClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'Allocated').length, [teamLeads]);
+  const pendingClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus !== 'In Progress' && l.workflowStatus !== 'Completed').length, [teamLeads]);
   const completedClientsCount = useMemo(() => teamLeads.filter(l => l.workflowStatus === 'Completed').length, [teamLeads]);
 
   const getMetricsModalTitleAndList = () => {
@@ -627,7 +651,7 @@ updatePayload.workflowStatus = allDone
         })
       };
       case 'in-progress': return { title: 'In-Progress Campaigns', list: teamLeads.filter(l => l.workflowStatus === 'In Progress') };
-      case 'pending': return { title: 'Pending Campaigns', list: teamLeads.filter(l => l.workflowStatus === 'Allocated') };
+      case 'pending': return { title: 'Pending Campaigns', list: teamLeads.filter(l => l.workflowStatus !== 'In Progress' && l.workflowStatus !== 'Completed') };
       case 'completed': return { title: 'Completed Campaigns', list: teamLeads.filter(l => l.workflowStatus === 'Completed') };
       default: return { title: '', list: [] };
     }
@@ -658,7 +682,10 @@ updatePayload.workflowStatus = allDone
         if (!nameMatch && !companyMatch && !idMatch && !phoneMatch && !createdByMatch && !assignedToMatch) return false;
       }
 
-      if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) return false;
+      if (filterWorkflowStatus !== 'All') {
+        const mapped = (lead.workflowStatus === 'Completed' || lead.workflowStatus === 'In Progress') ? lead.workflowStatus : 'Pending';
+        if (mapped !== filterWorkflowStatus) return false;
+      }
       if (filterAssignedTeam !== 'All' && !hasTeamVal(lead.assignedTeam, filterAssignedTeam)) return false;
 
       return true;
@@ -706,8 +733,32 @@ updatePayload.workflowStatus = allDone
         const assignedToMatch = assignedToName.toLowerCase().includes(q) || assignedTeamLabel.toLowerCase().includes(q);
         if (!nameMatch && !phoneMatch && !idMatch && !createdByMatch && !businessMatch && !assignedToMatch) return false;
       }
-      if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) return false;
+      if (clientStatusFilter !== 'All') {
+        const mapped = (lead.workflowStatus === 'Completed' || lead.workflowStatus === 'In Progress') ? lead.workflowStatus : 'Pending';
+        if (mapped !== clientStatusFilter) return false;
+      }
       if (clientTeamFilter !== 'All' && !hasTeamVal(lead.assignedTeam, clientTeamFilter)) return false;
+      
+      if (clientCreatedByFilter !== 'All' && lead.salespersonName !== clientCreatedByFilter) {
+        return false;
+      }
+
+      if (clientAssignedToFilter !== 'All') {
+        if (clientAssignedToFilter === 'Unassigned') {
+          if (lead.assignedDeveloper || lead.assignedDesigner || lead.assignedAdSpecialist || lead.assignedTo) {
+            return false;
+          }
+        } else {
+          const devId = (lead.assignedDeveloper?._id || lead.assignedDeveloper || '').toString();
+          const designId = (lead.assignedDesigner?._id || lead.assignedDesigner || '').toString();
+          const adsId = (lead.assignedAdSpecialist?._id || lead.assignedAdSpecialist || '').toString();
+          const assignedToId = (lead.assignedTo?._id || lead.assignedTo || '').toString();
+          if (devId !== clientAssignedToFilter && designId !== clientAssignedToFilter && adsId !== clientAssignedToFilter && assignedToId !== clientAssignedToFilter) {
+            return false;
+          }
+        }
+      }
+
       if (clientStartDateFilter) {
         const start = new Date(clientStartDateFilter);
         start.setHours(0, 0, 0, 0);
@@ -720,7 +771,7 @@ updatePayload.workflowStatus = allDone
       }
       return true;
     });
-  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientStartDateFilter, clientEndDateFilter]);
+  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientCreatedByFilter, clientAssignedToFilter, clientStartDateFilter, clientEndDateFilter]);
 
   if (isLoading) {
     return (
@@ -969,8 +1020,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                   className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                 >
                   <option value="All">All Statuses</option>
-                  <option value="Non-Allocated">Non-Allocated</option>
-                  <option value="Allocated">Assigned to Specific Team</option>
+                  <option value="Pending">Pending</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Completed">Completed</option>
                 </select>
@@ -988,6 +1038,37 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                   <option value="all">All Teams</option>
                 </select>
               </div>
+
+              {/* Created By Filter */}
+              <div className="w-full md:w-44">
+                <select
+                  value={clientCreatedByFilter}
+                  onChange={(e) => setClientCreatedByFilter(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+                >
+                  <option value="All">All Creators</option>
+                  {salespersonsList.map(sp => (
+                    <option key={sp._id || sp.id} value={sp.name}>{sp.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Assigned To Filter */}
+              <div className="w-full md:w-44">
+                <select
+                  value={clientAssignedToFilter}
+                  onChange={(e) => setClientAssignedToFilter(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+                >
+                  <option value="All">All Assignees</option>
+                  <option value="Unassigned">Unassigned</option>
+                  {technicalList.map(tech => (
+                    <option key={tech._id || tech.id} value={tech._id || tech.id}>
+                      {tech.name} ({tech.team === 'design' ? 'Design' : tech.team === 'developer' ? 'Dev' : 'Ads'})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-150/40 dark:border-slate-800/40 pt-4">
               <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-gray-650 dark:text-gray-400">
@@ -1001,8 +1082,8 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
-                {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
-                  <Button variant="outline" size="sm" onClick={() => { setClientSearchQuery(''); setClientStatusFilter('All'); setClientTeamFilter('All'); setClientStartDateFilter(''); setClientEndDateFilter(''); }}>
+                {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientCreatedByFilter !== 'All' || clientAssignedToFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
+                  <Button variant="outline" size="sm" onClick={() => { setClientSearchQuery(''); setClientStatusFilter('All'); setClientTeamFilter('All'); setClientCreatedByFilter('All'); setClientAssignedToFilter('All'); setClientStartDateFilter(''); setClientEndDateFilter(''); }}>
                     Clear Filters
                   </Button>
                 )}
@@ -1077,10 +1158,9 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                               client.workflowStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                               : client.workflowStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                              : client.workflowStatus === 'Allocated' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
                               : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                             }`}>
-                              {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                              {getStatusLabel(client.workflowStatus)}
                             </span>
                           );
                         })()}
@@ -1115,8 +1195,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                 <div className="grid grid-cols-2 gap-2">
                   <select value={filterWorkflowStatus} onChange={(e) => setFilterWorkflowStatus(e.target.value)} className="rounded-xl border border-gray-205 dark:border-slate-800 py-1.5 px-2.5 text-[11px] bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden">
                     <option value="All">All Statuses</option>
-                    <option value="Non-Allocated">Non-Allocated</option>
-                    <option value="Allocated">Allocated</option>
+                    <option value="Pending">Pending</option>
                     <option value="In Progress">In Progress</option>
                     <option value="Completed">Completed</option>
                   </select>
@@ -1234,9 +1313,9 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                               <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border uppercase tracking-wider ${
                                 lead.workflowStatus === 'Completed' ? 'bg-emerald-50 text-emerald-700 border-emerald-500/15 dark:bg-emerald-950/40 dark:text-emerald-300'
                                 : lead.workflowStatus === 'In Progress' ? 'bg-indigo-50 text-indigo-700 border-indigo-500/15 dark:bg-indigo-950/40 dark:text-indigo-300'
-                                : 'bg-blue-50 text-blue-700 border-blue-500/15 dark:bg-blue-955/40 dark:text-blue-300'
+                                : 'bg-amber-50 text-amber-700 border-amber-500/15 dark:bg-amber-955/40 dark:text-amber-300'
                               }`}>
-                                {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
+                                {getStatusLabel(lead.workflowStatus)}
                               </span>
                             );
                           })()}
@@ -1355,30 +1434,40 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
             <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Posters Posting</span>
             <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">{lead.postersRequired} total</span>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Posting Status</label>
-            <select
-              value={postingsPostersStatus}
-              onChange={(e) => setPostingsPostersStatus(e.target.value)}
-              className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-            >
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Posting Status</label>
+              <select
+                value={postingsPostersStatus}
+                onChange={(e) => setPostingsPostersStatus(e.target.value)}
+                className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+              >
+                <option value="Pending">Pending</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
+            {postingsPostersStatus === 'Pending' && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-gray-455 font-bold">Pending Count</label>
+                <input
+                  type="number"
+                  min="0"
+                  max={lead.postersRequired}
+                  value={postingsPostersPending}
+                  onChange={(e) => setPostingsPostersPending(Math.min(Number(lead.postersRequired), Math.max(0, Number(e.target.value))))}
+                  className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs"
+                />
+              </div>
+            )}
           </div>
           <div className={`text-[10px] font-bold px-2 py-1 rounded-lg text-center ${
             postingsPostersStatus === 'Completed'
               ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
-              : postingsPostersStatus === 'In Progress'
-              ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/15'
               : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15'
           }`}>
             {postingsPostersStatus === 'Completed'
               ? `All ${lead.postersRequired} posters posted`
-              : postingsPostersStatus === 'In Progress'
-              ? 'Posting in progress'
-              : 'Not yet posted'}
+              : `${postingsPostersPending} of ${lead.postersRequired} posters remaining to post`}
           </div>
         </div>
       )}
@@ -1388,30 +1477,40 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
             <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Videos Posting</span>
             <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">{lead.videosRequired} total</span>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Posting Status</label>
-            <select
-              value={postingsVideosStatus}
-              onChange={(e) => setPostingsVideosStatus(e.target.value)}
-              className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
-            >
-              <option value="Pending">Pending</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Posting Status</label>
+              <select
+                value={postingsVideosStatus}
+                onChange={(e) => setPostingsVideosStatus(e.target.value)}
+                className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+              >
+                <option value="Pending">Pending</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
+            {postingsVideosStatus === 'Pending' && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-gray-455 font-bold">Pending Count</label>
+                <input
+                  type="number"
+                  min="0"
+                  max={lead.videosRequired}
+                  value={postingsVideosPending}
+                  onChange={(e) => setPostingsVideosPending(Math.min(Number(lead.videosRequired), Math.max(0, Number(e.target.value))))}
+                  className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs"
+                />
+              </div>
+            )}
           </div>
           <div className={`text-[10px] font-bold px-2 py-1 rounded-lg text-center ${
             postingsVideosStatus === 'Completed'
               ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/15'
-              : postingsVideosStatus === 'In Progress'
-              ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/15'
               : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/15'
           }`}>
             {postingsVideosStatus === 'Completed'
               ? `All ${lead.videosRequired} videos posted`
-              : postingsVideosStatus === 'In Progress'
-              ? 'Posting in progress'
-              : 'Not yet posted'}
+              : `${postingsVideosPending} of ${lead.videosRequired} videos remaining to post`}
           </div>
         </div>
       )}
@@ -1475,11 +1574,10 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                     <label className="text-[10px] text-gray-405 font-bold">Status</label>
                                     <select value={postersStatus} onChange={(e) => setPostersStatus(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer">
                                       <option value="Pending">Pending</option>
-                                      <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
                                     </select>
                                   </div>
-                                  {postersStatus !== 'Completed' && postersStatus !== 'Pending' && (
+                                  {postersStatus === 'Pending' && (
                                     <div className="flex flex-col gap-1">
                                       <label className="text-[10px] text-gray-455 font-bold">Pending Count</label>
                                       <input type="number" min="0" max={lead.postersRequired} value={postersPending} onChange={(e) => setPostersPending(Math.min(Number(lead.postersRequired), Math.max(0, Number(e.target.value))))} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white" />
@@ -1501,11 +1599,10 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                     <label className="text-[10px] text-gray-405 font-bold">Status</label>
                                     <select value={videosStatus} onChange={(e) => setVideosStatus(e.target.value)} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer">
                                       <option value="Pending">Pending</option>
-                                      <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
                                     </select>
                                   </div>
-                                  {videosStatus !== 'Completed' && videosStatus !== 'Pending' && (
+                                  {videosStatus === 'Pending' && (
                                     <div className="flex flex-col gap-1">
                                       <label className="text-[10px] text-gray-455 font-bold">Pending Count</label>
                                       <input type="number" min="0" max={lead.videosRequired} value={videosPending} onChange={(e) => setVideosPending(Math.min(Number(lead.videosRequired), Math.max(0, Number(e.target.value))))} className="rounded-lg border border-gray-250 dark:border-slate-800 py-1 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white" />
@@ -1564,7 +1661,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
 
 
                           {/* Ads Team Section */}
-                          {(user?.team === 'ads' || user?.team === 'all') && (
+                          {(user?.team === 'ads' || user?.team === 'all') && !!selectedLead?.assignedAdSpecialist && (
                             <div className="space-y-3 ">
                               <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Ads Campaign — Plan Information</h4>
 
@@ -1607,7 +1704,6 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
                                     <select value={editMetaStatus} onChange={(e) => setEditMetaStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
-                                      <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
                                     </select>
                                   </div>
@@ -1636,7 +1732,6 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
                                     <select value={editGoogleStatus} onChange={(e) => setEditGoogleStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
-                                      <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
                                     </select>
                                   </div>
@@ -1678,7 +1773,6 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
         className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
       >
         <option value="Pending">Pending</option>
-        <option value="In Progress">In Progress</option>
         <option value="Completed">Completed</option>
       </select>
     </div>
@@ -1707,7 +1801,6 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
                                     <select value={editLinkedinStatus} onChange={(e) => setEditLinkedinStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
-                                      <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
                                     </select>
                                   </div>
@@ -1736,7 +1829,6 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
                                     <select value={editSeoStatus} onChange={(e) => setEditSeoStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
-                                      <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
                                     </select>
                                   </div>
@@ -1754,45 +1846,17 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Status</label>
                                     <select value={editGmbStatus} onChange={(e) => setEditGmbStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                       <option value="Pending">Pending</option>
-                                      <option value="In Progress">In Progress</option>
                                       <option value="Completed">Completed</option>
                                     </select>
                                   </div>
                                 </div>
                               )}
 
-                              <div className="p-3 bg-slate-500/5 border border-slate-500/10 rounded-xl space-y-2">
-                                <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Overall Ads Team Status</label>
-                                {user?.team === 'ads' && (
-  <p className="text-[10px] text-gray-400 dark:text-gray-500">
-    Overall status becomes <strong>Completed</strong> only when both Postings (posters + videos) AND all Campaigns above are marked Completed.
-  </p>
-)}
-                                <select value={editAdsTeamStatus} onChange={(e) => setEditAdsTeamStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
-                                  <option value="Pending">Pending</option>
-                                  <option value="In Progress">In Progress</option>
-                                  <option value="Completed">Completed</option>
-                                </select>
-                              </div>
+
                             </div>
                           )}
 
-                          {/* Design Team Status */}
-                          {(user?.team === 'design' || user?.team === 'all') && (
-                            <div className="p-3 bg-indigo-500/5 border border-indigo-500/10 rounded-xl space-y-2">
-                              <label className="text-xs font-bold text-gray-900 dark:text-white block">Design Team Status</label>
-                              {user?.team === 'design' && (
-                                <p className="text-[10px] text-gray-400 dark:text-gray-500">
-                                  Updating this also syncs the overall workflow status automatically.
-                                </p>
-                              )}
-                              <select value={editDesignTeamStatus} onChange={(e) => setEditDesignTeamStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
-                                <option value="Pending">Pending</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Completed">Completed</option>
-                              </select>
-                            </div>
-                          )}
+
 
                           {/* ── Dev Team Status: the single source of truth for developer team ── */}
                           {(user?.team === 'developer' || user?.team === 'all') && (
@@ -1805,7 +1869,6 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                               )}
                               <select value={editDevTeamStatus} onChange={(e) => setEditDevTeamStatus(e.target.value)} className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs">
                                 <option value="Pending">Pending</option>
-                                <option value="In Progress">In Progress</option>
                                 <option value="Completed">Completed</option>
                               </select>
                             </div>
@@ -2107,8 +2170,8 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                               </td>
                               <td className="p-3 font-mono">{client.mobileNumber}</td>
                               <td className="p-3">
-                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${client.workflowStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : client.workflowStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : client.workflowStatus === 'Allocated' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
-                                  {client.workflowStatus === 'Allocated' ? 'Pending' : (client.workflowStatus || 'Non-Allocated')}
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${client.workflowStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : client.workflowStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
+                                  {getStatusLabel(client.workflowStatus)}
                                 </span>
                               </td>
                               <td className="p-3">

@@ -28,7 +28,8 @@ import {
   AlertCircle,
   Edit3,
   BarChart3,
-  Sheet
+  Sheet,
+  ExternalLink
 } from 'lucide-react';
 import Card from '../UI/Card';
 import Button from '../UI/Button';
@@ -201,6 +202,7 @@ export default function AdminPortal({
 
   // Metrics modal states
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
+  const [activeSummaryModal, setActiveSummaryModal] = useState(null);
 
   // Client Details modal states
   const [viewedClientId, setViewedClientId] = useState(null);
@@ -438,6 +440,30 @@ export default function AdminPortal({
   let totalWebsiteInProgress = 0;
   let totalWebsiteCompleted = 0;
 
+  let totalMetaPending = 0;
+  let totalMetaInProgress = 0;
+  let totalMetaCompleted = 0;
+
+  let totalGooglePending = 0;
+  let totalGoogleInProgress = 0;
+  let totalGoogleCompleted = 0;
+
+  let totalYoutubePending = 0;
+  let totalYoutubeInProgress = 0;
+  let totalYoutubeCompleted = 0;
+
+  let totalLinkedinPending = 0;
+  let totalLinkedinInProgress = 0;
+  let totalLinkedinCompleted = 0;
+
+  let totalGmbPending = 0;
+  let totalGmbInProgress = 0;
+  let totalGmbCompleted = 0;
+
+  let totalSeoPending = 0;
+  let totalSeoInProgress = 0;
+  let totalSeoCompleted = 0;
+
   leads.forEach(lead => {
     if (Number(lead.postersRequired) > 0) {
       const s = lead.postersStatus || 'Pending';
@@ -463,7 +489,105 @@ export default function AdminPortal({
       else if (s === 'In Progress') { totalInProgressServices++; totalWebsiteInProgress++; }
       else { totalPendingServices++; totalWebsitePending++; }
     }
+    if (Number(lead.metaAdsPlanDuration || 0) > 0) {
+      const s = lead.metaAdsCampaignStatus || 'Pending';
+      if (s === 'Completed') totalMetaCompleted++;
+      else if (s === 'In Progress') totalMetaInProgress++;
+      else totalMetaPending++;
+    }
+    if (Number(lead.googleAdsPlanDuration || 0) > 0) {
+      const s = lead.googleAdsCampaignStatus || 'Pending';
+      if (s === 'Completed') totalGoogleCompleted++;
+      else if (s === 'In Progress') totalGoogleInProgress++;
+      else totalGooglePending++;
+    }
+    if (Number(lead.youtubeAdsPlanDuration || 0) > 0) {
+      const s = lead.youtubeAdsCampaignStatus || 'Pending';
+      if (s === 'Completed') totalYoutubeCompleted++;
+      else if (s === 'In Progress') totalYoutubeInProgress++;
+      else totalYoutubePending++;
+    }
+    if (Number(lead.linkedinAdsPlanDuration || 0) > 0) {
+      const s = lead.linkedinAdsCampaignStatus || 'Pending';
+      if (s === 'Completed') totalLinkedinCompleted++;
+      else if (s === 'In Progress') totalLinkedinInProgress++;
+      else totalLinkedinPending++;
+    }
+    if (lead.platforms && lead.platforms.includes('GMB')) {
+      const s = lead.gmbCampaignStatus || 'Pending';
+      if (s === 'Completed') totalGmbCompleted++;
+      else if (s === 'In Progress') totalGmbInProgress++;
+      else totalGmbPending++;
+    }
+    if (Number(lead.seoPlanDuration || 0) > 0) {
+      const s = lead.seoCampaignStatus || 'Pending';
+      if (s === 'Completed') totalSeoCompleted++;
+      else if (s === 'In Progress') totalSeoInProgress++;
+      else totalSeoPending++;
+    }
   });
+
+  const getSummaryClients = (categoryKey, status) => {
+    return leads.filter(lead => {
+      let isRequired = false;
+      let currentStatus = 'Pending';
+
+      switch (categoryKey) {
+        case 'Posters Delivery':
+          isRequired = Number(lead.postersRequired) > 0;
+          currentStatus = lead.postersStatus || 'Pending';
+          break;
+        case 'Video Production':
+          isRequired = Number(lead.videosRequired) > 0;
+          currentStatus = lead.videosStatus || 'Pending';
+          break;
+        case 'Ad Campaigns':
+          isRequired = Number(lead.adsRequired) > 0;
+          currentStatus = lead.adsStatus || 'Pending';
+          break;
+        case 'Website Development':
+          isRequired = !!lead.websiteRequired;
+          currentStatus = lead.websiteStatus || 'Pending';
+          break;
+        case 'Meta Ad Campaign':
+          isRequired = Number(lead.metaAdsPlanDuration || 0) > 0;
+          currentStatus = lead.metaAdsCampaignStatus || 'Pending';
+          break;
+        case 'Google Ad Campaign':
+          isRequired = Number(lead.googleAdsPlanDuration || 0) > 0;
+          currentStatus = lead.googleAdsCampaignStatus || 'Pending';
+          break;
+        case 'YouTube Campaign':
+          isRequired = Number(lead.youtubeAdsPlanDuration || 0) > 0;
+          currentStatus = lead.youtubeAdsCampaignStatus || 'Pending';
+          break;
+        case 'LinkedIn Campaign':
+          isRequired = Number(lead.linkedinAdsPlanDuration || 0) > 0;
+          currentStatus = lead.linkedinAdsCampaignStatus || 'Pending';
+          break;
+        case 'GMB (Google Business Profile)':
+          isRequired = lead.platforms && lead.platforms.includes('GMB');
+          currentStatus = lead.gmbCampaignStatus || 'Pending';
+          break;
+        case 'SEO':
+          isRequired = Number(lead.seoPlanDuration || 0) > 0;
+          currentStatus = lead.seoCampaignStatus || 'Pending';
+          break;
+        default:
+          break;
+      }
+      return isRequired && currentStatus === status;
+    });
+  };
+
+  const handleSummaryCountClick = (categoryName, status) => {
+    const matchingClients = getSummaryClients(categoryName, status);
+    setActiveSummaryModal({
+      categoryName,
+      status,
+      clients: matchingClients
+    });
+  };
 
   // Rep Stats Mapper
   const repStats = salespersonsList.map(rep => {
@@ -3110,15 +3234,39 @@ const handleClientFieldChange = (field, value) => {
                 { name: 'Posters Delivery', pending: totalPostersPending, inProgress: totalPostersInProgress, completed: totalPostersCompleted },
                 { name: 'Video Production', pending: totalVideosPending, inProgress: totalVideosInProgress, completed: totalVideosCompleted },
                 { name: 'Ad Campaigns', pending: totalAdsPending, inProgress: totalAdsInProgress, completed: totalAdsCompleted },
-                { name: 'Website Development', pending: totalWebsitePending, inProgress: totalWebsiteInProgress, completed: totalWebsiteCompleted }
+                { name: 'Website Development', pending: totalWebsitePending, inProgress: totalWebsiteInProgress, completed: totalWebsiteCompleted },
+                { name: 'Meta Ad Campaign', pending: totalMetaPending, inProgress: totalMetaInProgress, completed: totalMetaCompleted },
+                { name: 'Google Ad Campaign', pending: totalGooglePending, inProgress: totalGoogleInProgress, completed: totalGoogleCompleted },
+                { name: 'YouTube Campaign', pending: totalYoutubePending, inProgress: totalYoutubeInProgress, completed: totalYoutubeCompleted },
+                { name: 'LinkedIn Campaign', pending: totalLinkedinPending, inProgress: totalLinkedinInProgress, completed: totalLinkedinCompleted },
+                { name: 'GMB (Google Business Profile)', pending: totalGmbPending, inProgress: totalGmbInProgress, completed: totalGmbCompleted },
+                { name: 'SEO', pending: totalSeoPending, inProgress: totalSeoInProgress, completed: totalSeoCompleted }
               ].map((row, idx) => {
                 const total = row.pending + row.inProgress + row.completed;
                 return (
                   <tr key={idx} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
                     <td className="p-3 font-bold text-gray-900 dark:text-white">{row.name}</td>
-                    <td className="p-3 text-center text-amber-600 dark:text-amber-400 font-bold">{row.pending}</td>
-                    <td className="p-3 text-center text-indigo-600 dark:text-indigo-400 font-bold">{row.inProgress}</td>
-                    <td className="p-3 text-center text-emerald-600 dark:text-emerald-400 font-bold">{row.completed}</td>
+                    <td 
+                      onClick={() => handleSummaryCountClick(row.name, 'Pending')}
+                      className="p-3 text-center text-amber-600 dark:text-amber-400 font-bold cursor-pointer hover:bg-amber-500/10 active:bg-amber-500/20 transition-all rounded-lg select-none"
+                      title={`View Pending clients for ${row.name}`}
+                    >
+                      {row.pending}
+                    </td>
+                    <td 
+                      onClick={() => handleSummaryCountClick(row.name, 'In Progress')}
+                      className="p-3 text-center text-indigo-600 dark:text-indigo-400 font-bold cursor-pointer hover:bg-indigo-500/10 active:bg-indigo-500/20 transition-all rounded-lg select-none"
+                      title={`View In Progress clients for ${row.name}`}
+                    >
+                      {row.inProgress}
+                    </td>
+                    <td 
+                      onClick={() => handleSummaryCountClick(row.name, 'Completed')}
+                      className="p-3 text-center text-emerald-600 dark:text-emerald-400 font-bold cursor-pointer hover:bg-emerald-500/10 active:bg-emerald-500/20 transition-all rounded-lg select-none"
+                      title={`View Completed clients for ${row.name}`}
+                    >
+                      {row.completed}
+                    </td>
                     <td className="p-3 text-center text-gray-900 dark:text-white font-extrabold">{total}</td>
                   </tr>
                 );
@@ -3549,9 +3697,18 @@ const handleClientFieldChange = (field, value) => {
                     (l.assignedToName && l.assignedToName.includes(tech.name))
                   );
                   const claimed = techLeads.length;
-                  const completed = techLeads.filter(l => l.workflowStatus === 'Completed').length;
-                  const inProgress = techLeads.filter(l => l.workflowStatus === 'In Progress').length;
-                  const pending = techLeads.filter(l => l.workflowStatus === 'Allocated' || (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated').length;
+                  const completed = techLeads.filter(l => {
+                    const status = tech.team === 'design' ? l.designTeamStatus : tech.team === 'ads' ? l.adsTeamStatus : tech.team === 'developer' ? l.devTeamStatus : l.workflowStatus;
+                    return (status || 'Pending') === 'Completed';
+                  }).length;
+                  const inProgress = techLeads.filter(l => {
+                    const status = tech.team === 'design' ? l.designTeamStatus : tech.team === 'ads' ? l.adsTeamStatus : tech.team === 'developer' ? l.devTeamStatus : l.workflowStatus;
+                    return (status || 'Pending') === 'In Progress';
+                  }).length;
+                  const pending = techLeads.filter(l => {
+                    const status = tech.team === 'design' ? l.designTeamStatus : tech.team === 'ads' ? l.adsTeamStatus : tech.team === 'developer' ? l.devTeamStatus : l.workflowStatus;
+                    return (status || 'Pending') === 'Pending';
+                  }).length;
 
                   return (
                     <div 
@@ -5179,7 +5336,105 @@ const handleClientFieldChange = (field, value) => {
         </div>
       )}
 
+      {/* Marketing Campaign Services Summary Modal */}
+      {activeSummaryModal && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-3xl p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <span>{activeSummaryModal.categoryName}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                    activeSummaryModal.status === 'Completed'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      : activeSummaryModal.status === 'In Progress'
+                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  }`}>
+                    {activeSummaryModal.status}
+                  </span>
+                </h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  Showing {activeSummaryModal.clients.length} client{activeSummaryModal.clients.length !== 1 ? 's' : ''} in this category and status
+                </p>
+              </div>
+              <button 
+                onClick={() => setActiveSummaryModal(null)}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-655 dark:hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
+            <div className="max-h-[400px] overflow-y-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+              {activeSummaryModal.clients.length === 0 ? (
+                <div className="p-8 text-center text-gray-405 dark:text-gray-500 font-semibold text-sm">
+                  No clients found matching this status.
+                </div>
+              ) : (
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business / Brand</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Payment Status</th>
+                      <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
+                    {activeSummaryModal.clients.map((client) => {
+                      const clientPayment = getPaymentStatus(client);
+                      return (
+                        <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
+                          <td className="p-3 text-indigo-650 dark:text-indigo-400 font-bold font-mono">
+                            {client.clientId || 'N/A'}
+                          </td>
+                          <td className="p-3 text-gray-900 dark:text-white font-bold">
+                            {client.clientName || 'N/A'}
+                          </td>
+                          <td className="p-3">
+                            {client.businessName || 'N/A'}
+                          </td>
+                          <td className="p-3">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${clientPayment.color}`}>
+                              {clientPayment.label}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => {
+                                setViewedClientId(client._id || client.id);
+                                setIsEditingClient(false);
+                                setEditedClientFields({});
+                                setActiveSummaryModal(null);
+                              }}
+                              className="px-3 py-1 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-850 rounded-lg shadow-sm transition-all cursor-pointer inline-flex items-center gap-1.5"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Inspect</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-150 dark:border-slate-800/40">
+              <Button 
+                onClick={() => setActiveSummaryModal(null)}
+                variant="outline" 
+                size="sm"
+              >
+                Close Window
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

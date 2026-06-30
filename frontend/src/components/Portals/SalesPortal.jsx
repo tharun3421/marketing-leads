@@ -73,14 +73,10 @@ const hasTeamVal = (teamVal, team) => {
   return teamVal === team || teamVal === 'all';
 };
 
-const getStatusLabel = (status, team) => {
-  if (status === 'Allocated') {
-    if (!team) return 'Assigned to Specific Team';
-    const label = getTeamDisplayLabel(team);
-    if (label === 'Not Assigned') return 'Assigned to Specific Team';
-    return `Assigned to ${label}`;
-  }
-  return status || 'Non-Allocated';
+const getStatusLabel = (status) => {
+  if (status === 'Completed') return 'Completed';
+  if (status === 'In Progress') return 'In Progress';
+  return 'Pending';
 };
 
 // Render per-team status badges for a lead
@@ -315,8 +311,12 @@ export default function SalesPortal({
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [clientStatusFilter, setClientStatusFilter] = useState('All');
   const [clientTeamFilter, setClientTeamFilter] = useState('All');
+  const [clientCreatedByFilter, setClientCreatedByFilter] = useState('All');
+  const [clientAssignedToFilter, setClientAssignedToFilter] = useState('All');
   const [clientStartDateFilter, setClientStartDateFilter] = useState('');
   const [clientEndDateFilter, setClientEndDateFilter] = useState('');
+  const [salespersonsList, setSalespersonsList] = useState([]);
+  const [technicalList, setTechnicalList] = useState([]);
 
   // Master-detail Layout States
   const [listSearchQuery, setListSearchQuery] = useState('');
@@ -349,8 +349,26 @@ export default function SalesPortal({
     }
   };
 
+  const fetchEmployees = async () => {
+    try {
+      const salespersonsRes = await authFetch('/api/auth/salespersons');
+      if (salespersonsRes.ok) {
+        const salespersonsData = await salespersonsRes.json();
+        setSalespersonsList(salespersonsData);
+      }
+      const technicalRes = await authFetch('/api/auth/technical');
+      if (technicalRes.ok) {
+        const technicalData = await technicalRes.json();
+        setTechnicalList(technicalData);
+      }
+    } catch (err) {
+      console.error('Fetch employees failed:', err);
+    }
+  };
+
   useEffect(() => {
     fetchLeads();
+    fetchEmployees();
     const interval = setInterval(fetchLeads, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -438,8 +456,15 @@ export default function SalesPortal({
       }
 
       // 2. Status filter
-      if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
-        return false;
+      if (filterWorkflowStatus !== 'All') {
+        const leadStatus = lead.workflowStatus === 'Completed'
+          ? 'Completed'
+          : lead.workflowStatus === 'In Progress'
+            ? 'In Progress'
+            : 'Pending';
+        if (leadStatus !== filterWorkflowStatus) {
+          return false;
+        }
       }
 
       // 3. Assigned Team filter
@@ -481,13 +506,34 @@ export default function SalesPortal({
         if (!nameMatch && !phoneMatch && !idMatch && !createdByMatch && !businessMatch && !assignedToMatch) return false;
       }
 
-      if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
-        return false;
+      if (clientStatusFilter !== 'All') {
+        const mapped = (lead.workflowStatus === 'Completed' || lead.workflowStatus === 'In Progress') ? lead.workflowStatus : 'Pending';
+        if (mapped !== clientStatusFilter) return false;
       }
 
       if (clientTeamFilter !== 'All') {
         if (!hasTeamVal(lead.assignedTeam, clientTeamFilter)) {
           return false;
+        }
+      }
+
+      if (clientCreatedByFilter !== 'All' && lead.salespersonName !== clientCreatedByFilter) {
+        return false;
+      }
+
+      if (clientAssignedToFilter !== 'All') {
+        if (clientAssignedToFilter === 'Unassigned') {
+          if (lead.assignedDeveloper || lead.assignedDesigner || lead.assignedAdSpecialist || lead.assignedTo) {
+            return false;
+          }
+        } else {
+          const devId = (lead.assignedDeveloper?._id || lead.assignedDeveloper || '').toString();
+          const designId = (lead.assignedDesigner?._id || lead.assignedDesigner || '').toString();
+          const adsId = (lead.assignedAdSpecialist?._id || lead.assignedAdSpecialist || '').toString();
+          const assignedToId = (lead.assignedTo?._id || lead.assignedTo || '').toString();
+          if (devId !== clientAssignedToFilter && designId !== clientAssignedToFilter && adsId !== clientAssignedToFilter && assignedToId !== clientAssignedToFilter) {
+            return false;
+          }
         }
       }
 
@@ -506,7 +552,7 @@ export default function SalesPortal({
 
       return true;
     });
-  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientStartDateFilter, clientEndDateFilter]);
+  }, [leads, clientSearchQuery, clientStatusFilter, clientTeamFilter, clientCreatedByFilter, clientAssignedToFilter, clientStartDateFilter, clientEndDateFilter]);
 
   // Metrics
   const totalMyClients = salespersonLeads.length;
@@ -1081,8 +1127,7 @@ export default function SalesPortal({
                       className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                     >
                       <option value="All">All Statuses</option>
-                      <option value="Non-Allocated">Non-Allocated</option>
-                      <option value="Allocated">Assigned to Specific Team</option>
+                      <option value="Pending">Pending</option>
                       <option value="In Progress">In Progress</option>
                       <option value="Completed">Completed</option>
                     </select>
@@ -1100,6 +1145,37 @@ export default function SalesPortal({
                       <option value="developer">Development Team</option>
                       <option value="ads">Ads Team</option>
                       <option value="all">All Teams</option>
+                    </select>
+                  </div>
+
+                  {/* Created By Filter */}
+                  <div className="w-full md:w-44">
+                    <select
+                      value={clientCreatedByFilter}
+                      onChange={(e) => setClientCreatedByFilter(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+                    >
+                      <option value="All">All Creators</option>
+                      {salespersonsList.map(sp => (
+                        <option key={sp._id || sp.id} value={sp.name}>{sp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Assigned To Filter */}
+                  <div className="w-full md:w-44">
+                    <select
+                      value={clientAssignedToFilter}
+                      onChange={(e) => setClientAssignedToFilter(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+                    >
+                      <option value="All">All Assignees</option>
+                      <option value="Unassigned">Unassigned</option>
+                      {technicalList.map(tech => (
+                        <option key={tech._id || tech.id} value={tech._id || tech.id}>
+                          {tech.name} ({tech.team === 'design' ? 'Design' : tech.team === 'developer' ? 'Dev' : 'Ads'})
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1129,7 +1205,7 @@ export default function SalesPortal({
 
                   <div className="flex gap-2 justify-end">
                     {/* Clear Filters */}
-                    {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
+                    {(clientSearchQuery || clientStatusFilter !== 'All' || clientTeamFilter !== 'All' || clientCreatedByFilter !== 'All' || clientAssignedToFilter !== 'All' || clientStartDateFilter || clientEndDateFilter) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -1137,6 +1213,8 @@ export default function SalesPortal({
                           setClientSearchQuery('');
                           setClientStatusFilter('All');
                           setClientTeamFilter('All');
+                          setClientCreatedByFilter('All');
+                          setClientAssignedToFilter('All');
                           setClientStartDateFilter('');
                           setClientEndDateFilter('');
                         }}
@@ -1243,11 +1321,9 @@ export default function SalesPortal({
                                       ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                                       : client.workflowStatus === 'In Progress'
                                         ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                        : client.workflowStatus === 'Allocated'
-                                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                                   }`}>
-                                    {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                                    {getStatusLabel(client.workflowStatus)}
                                   </span>
                                 );
                               })()}
@@ -1291,8 +1367,7 @@ export default function SalesPortal({
                       className="rounded-xl border border-gray-205 dark:border-slate-800 py-1.5 px-2.5 text-[11px] bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
                     >
                       <option value="All">All Statuses</option>
-                      <option value="Non-Allocated">Non-Allocated</option>
-                      <option value="Allocated">Allocated</option>
+                      <option value="Pending">Pending</option>
                       <option value="In Progress">In Progress</option>
                       <option value="Completed">Completed</option>
                     </select>
@@ -1363,17 +1438,6 @@ export default function SalesPortal({
                                   }
                                   return null;
                                 })()}
-                                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
-                                  lead.workflowStatus === 'Completed'
-                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                    : lead.workflowStatus === 'In Progress'
-                                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                      : lead.workflowStatus === 'Allocated'
-                                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                                }`}>
-                                  {lead.workflowStatus || 'Non-Allocated'}
-                                </span>
                               </div>
                             </div>
                             <h4 className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5 flex-wrap truncate">
@@ -1434,24 +1498,6 @@ export default function SalesPortal({
                                 </button>
                               )}
                               {lead.clientName}
-                              {/* {(() => {
-                                const payStatus = lead.paymentStatus || (Number(lead.planAmount || 0) > 0 && Number(lead.advanceAmount || 0) >= Number(lead.planAmount || 0) ? 'Paid' : (Number(lead.advanceAmount || 0) > 0 ? 'Partial' : 'Unpaid'));
-                                if (payStatus === 'Partial') {
-                                  return (
-                                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 ml-2">
-                                      Partial Payment Done
-                                    </span>
-                                  );
-                                }
-                                if (payStatus === 'Paid') {
-                                  return (
-                                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-2">
-                                      Full Payment Done
-                                    </span>
-                                  );
-                                }
-                                return null;
-                              })()} */}
 
                               {(() => {
   const payStatus = lead.paymentStatus || (
@@ -1491,25 +1537,7 @@ export default function SalesPortal({
                           </div>
                           
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-lg border uppercase tracking-wider ${
-                              lead.status === 'Submitted to Admin'
-                                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/10'
-                                : 'bg-slate-500/10 text-slate-600 border-slate-500/10'
-                            }`}>
-                              {lead.status === 'Submitted to Admin' ? 'Synced' : 'Draft'}
-                            </span>
-                            <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border uppercase tracking-wider ${
-                              lead.workflowStatus === 'Completed'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-500/15 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                : lead.workflowStatus === 'In Progress'
-                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-500/15 dark:bg-indigo-950/40 dark:text-indigo-300'
-                                  : lead.workflowStatus === 'Allocated'
-                                    ? 'bg-blue-50 text-blue-700 border-blue-500/15 dark:bg-blue-955/40 dark:text-blue-300'
-                                    : 'bg-amber-50 text-amber-700 border-amber-500/15 dark:bg-amber-955/40 dark:text-amber-300'
-                            }`}>
-                              {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
-                            </span>
-                            {/* Per-team status badges */}
+                  
                             {(() => {
                               const perTeam = getPerTeamStatusBadges(lead);
                               if (!perTeam || perTeam.length === 0) return null;
@@ -1933,11 +1961,9 @@ export default function SalesPortal({
                                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                                         : client.workflowStatus === 'In Progress'
                                           ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                          : client.workflowStatus === 'Allocated'
-                                            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                                     }`}>
-                                      {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+                                      {getStatusLabel(client.workflowStatus)}
                                     </span>
                                   );
                                 })()}

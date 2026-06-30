@@ -699,15 +699,21 @@ const updateLead = async (req, res) => {
     // Intercept technical user claim/accept actions
     if (req.user.role === 'technical') {
       if (req.body.assignedTo !== undefined) {
+        updatedData.workflowStatus = 'In Progress';
         if (req.user.team === 'developer') {
           updatedData.assignedDeveloper = req.body.assignedTo;
           updatedData.assignedDeveloperName = req.body.assignedToName;
+          updatedData.devTeamStatus = 'In Progress';
+          updatedData.websiteStatus = 'In Progress';
         } else if (req.user.team === 'design') {
           updatedData.assignedDesigner = req.body.assignedTo;
           updatedData.assignedDesignerName = req.body.assignedToName;
+          updatedData.designTeamStatus = 'In Progress';
         } else if (req.user.team === 'ads') {
           updatedData.assignedAdSpecialist = req.body.assignedTo;
           updatedData.assignedAdSpecialistName = req.body.assignedToName;
+          updatedData.adsTeamStatus = 'In Progress';
+          updatedData.adsStatus = 'In Progress';
         }
         // Legacy fields for backward compatibility
         updatedData.assignedTo = req.body.assignedTo;
@@ -796,8 +802,17 @@ const updateLead = async (req, res) => {
           if (websiteRequired) activeStatuses.push(websiteStatus || 'Pending');
         }
 
+        const isClaimed = !!(
+          (updatedData.assignedDeveloper !== undefined ? updatedData.assignedDeveloper : lead.assignedDeveloper) ||
+          (updatedData.assignedDesigner !== undefined ? updatedData.assignedDesigner : lead.assignedDesigner) ||
+          (updatedData.assignedAdSpecialist !== undefined ? updatedData.assignedAdSpecialist : lead.assignedAdSpecialist) ||
+          (updatedData.assignedTo !== undefined ? updatedData.assignedTo : lead.assignedTo)
+        );
+
         if (activeStatuses.length === 0 || activeStatuses.every(s => s === 'Completed')) {
           calculatedWorkflowStatus = 'Completed';
+        } else if (isClaimed) {
+          calculatedWorkflowStatus = 'In Progress';
         } else if (activeStatuses.every(s => s === 'Pending')) {
           calculatedWorkflowStatus = 'Allocated';
         } else {

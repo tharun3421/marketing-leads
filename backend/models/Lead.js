@@ -283,10 +283,18 @@ postingsPostersStatus: {
   enum: ['Pending', 'In Progress', 'Completed'],
   default: 'Pending'
 },
+postingsPostersPending: {
+  type: Number,
+  default: 0
+},
 postingsVideosStatus: {
   type: String,
   enum: ['Pending', 'In Progress', 'Completed'],
   default: 'Pending'
+},
+postingsVideosPending: {
+  type: Number,
+  default: 0
 },
   // Plan dates for Ads campaigns
   planStartDate: {
