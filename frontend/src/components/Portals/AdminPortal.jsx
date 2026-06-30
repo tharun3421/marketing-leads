@@ -1216,7 +1216,7 @@ export default function AdminPortal({
             {/* Company + Representative */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase block">Company</span>
+                <span className="text-[6px] text-gray-400 dark:text-gray-550 font-bold uppercase block">Company</span>
                 <span className="text-gray-700 dark:text-gray-300 font-medium">{lead.companyName || '—'}</span>
                 <div className="text-[10px] text-gray-400 dark:text-gray-500">{lead.businessCategory || '—'}</div>
               </div>
@@ -1228,7 +1228,7 @@ export default function AdminPortal({
 
             {/* Assignee */}
 <div className="border-t border-gray-100 dark:border-slate-800/40 pt-2.5 space-y-1.5">
-  <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase block">Assignee</span>
+  <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase block">AssignedTo</span>
   {(() => {
     const teams = lead.assignedTeam;
     const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
@@ -1342,26 +1342,26 @@ export default function AdminPortal({
     <div className="hidden lg:block overflow-auto max-h-[500px] border border-gray-100 dark:border-slate-800/60 rounded-xl scrollbar-thin">
       <table className="w-full text-left text-sm border-collapse table-fixed">
         <colgroup>
-          <col className="w-[9%]" />
-          <col className="w-[16%]" />
-          <col className="w-[13%]" />
-          <col className="w-[12%]" />
-          <col className="w-[14%]" />
-          <col className="w-[11%]" />
-          <col className="w-[14%]" />
-          <col className="w-[7%]" />
-          <col className="w-[4%]" />
-        </colgroup>
+  <col className="w-[9%]" />
+  <col className="w-[11%]" />
+  <col className="w-[13%]" />
+  <col className="w-[10%]" />
+  <col className="w-[15%]" />
+  <col className="w-[11%]" />
+  <col className="w-[13%]" />
+  <col className="w-[14%]" />
+  <col className="w-[4%]" />
+</colgroup>
         <thead>
           <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60 sticky top-0 z-10">
             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Contact</th>
             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Company & Sector</th>
             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Representative</th>
-            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assignee</th>
+            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Timestamp</th>
             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Deliverables</th>
-            <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Workflow</th>
+            <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Status</th>
             <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">•</th>
           </tr>
         </thead>
@@ -1381,15 +1381,15 @@ export default function AdminPortal({
                   {lead.clientId || 'N/A'}
                 </button>
               </td>
-              <td className="p-3 font-medium text-gray-900 dark:text-white overflow-hidden">
+              <td className="p-3 font-medium text-gray-900 dark:text-white overflow-hidden ">
                 <div className="truncate" title={lead.clientName}>{lead.clientName}</div>
-                <div className="text-xs text-gray-400 dark:text-gray-555 truncate" title={lead.email}>{lead.email}</div>
+                <div className="text-xs text-gray-400 dark:text-gray-555 " title={lead.email}>{lead.email}</div>
               </td>
               <td className="p-3 text-gray-650 dark:text-gray-300 overflow-hidden">
-                <div className="truncate" title={lead.companyName}>{lead.companyName || '—'}</div>
-                <div className="text-xs text-gray-400 dark:text-gray-500 truncate">{lead.businessCategory || '—'}</div>
+                <div className="text-xs" title={lead.companyName}>{lead.companyName || '—'}</div>
+                <div className="text-xs text-gray-400 dark:text-gray-500 ">{lead.businessCategory || '—'}</div>
               </td>
-              <td className="p-3 text-sm text-indigo-650 dark:text-indigo-400 font-bold truncate" title={lead.salespersonName}>
+              <td className="p-3 text-[12px] text-indigo-650 dark:text-indigo-400 font-medium " title={lead.salespersonName}>
                 {lead.salespersonName}
               </td>
               <td className="p-3 text-xs overflow-hidden">
@@ -1404,7 +1404,7 @@ export default function AdminPortal({
     return (
       <div className="flex flex-col gap-1">
         {assignees.map((a, i) => (
-          <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold truncate ${a.color}`}>
+          <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold  ${a.color}`}>
             {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
           </span>
         ))}
@@ -1478,7 +1478,7 @@ export default function AdminPortal({
                     return (
                       <div className="flex flex-col gap-0.5 items-start">
                         {perTeam.map((t, i) => (
-                          <span key={i} className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${sc(t.status)} truncate max-w-full`}>
+                          <span key={i} className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${sc(t.status)}  `}>
                             {t.label}: {t.status}
                           </span>
                         ))}
@@ -3500,11 +3500,11 @@ const handleClientFieldChange = (field, value) => {
                     </div>
                     <div>
                       <span className="block text-emerald-500 text-xs font-bold">{rep.completed}</span>
-                      Done
+                      Completed
                     </div>
                     <div>
                       <span className="block text-indigo-500 text-xs font-bold">{rep.inProgress}</span>
-                      Active
+                      In progress
                     </div>
                     <div>
                       <span className="block text-amber-500 text-xs font-bold">{rep.pending}</span>
@@ -3631,11 +3631,11 @@ const handleClientFieldChange = (field, value) => {
                         </div>
                         <div>
                           <span className="block text-emerald-500 text-xs font-bold">{completed}</span>
-                          Done
+                          Completed
                         </div>
                         <div>
                           <span className="block text-indigo-505 text-xs font-bold">{inProgress}</span>
-                          Active
+                          In progress
                         </div>
                         <div>
                           <span className="block text-amber-500 text-xs font-bold">{pending}</span>
