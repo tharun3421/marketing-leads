@@ -39,7 +39,8 @@ const sanitizeNumberFields = (body) => {
     'advanceAmount', 'pendingAmount',
     'adBudget', 'adBudgetPerDay',
     'metaAdsPlanDuration', 'googleAdsPlanDuration',
-    'linkedinAdsPlanDuration', 'seoPlanDuration'
+    'linkedinAdsPlanDuration', 'seoPlanDuration',
+    'youtubeAdsPlanDuration'
   ];
   numberFields.forEach(field => {
     if (body[field] === '') {
@@ -68,7 +69,8 @@ const sanitizeNumberFields = (body) => {
     'googleAdsCampaignStatus',
     'linkedinAdsCampaignStatus',
     'seoCampaignStatus',
-    'gmbCampaignStatus'
+    'gmbCampaignStatus',
+    'youtubeAdsCampaignStatus'
   ];
   enumFields.forEach(field => {
     if (body[field] === '') {

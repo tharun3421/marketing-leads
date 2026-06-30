@@ -217,13 +217,15 @@ export default function AdminPortal({
   const [salesReportSheetsLoading, setSalesReportSheetsLoading] = useState(false);
   const [repSearchQuery, setRepSearchQuery] = useState('');
   const [techSearchQuery, setTechSearchQuery] = useState('');
+  const [editingAdvanceFor, setEditingAdvanceFor] = useState(null);
+  const [editingAdvanceValue, setEditingAdvanceValue] = useState('');
 
   const [salesReportRepFilter, setSalesReportRepFilter] = useState('All');
-const [salesReportDateMode, setSalesReportDateMode] = useState('all'); // 'all' | 'monthly' | 'custom'
-const [salesReportMonth, setSalesReportMonth] = useState(new Date().getMonth() + 1);
-const [salesReportYear, setSalesReportYear] = useState(new Date().getFullYear());
-const [salesReportStartDate, setSalesReportStartDate] = useState('');
-const [salesReportEndDate, setSalesReportEndDate] = useState('');
+  const [salesReportDateMode, setSalesReportDateMode] = useState('all'); // 'all' | 'monthly' | 'custom'
+  const [salesReportMonth, setSalesReportMonth] = useState(new Date().getMonth() + 1);
+  const [salesReportYear, setSalesReportYear] = useState(new Date().getFullYear());
+  const [salesReportStartDate, setSalesReportStartDate] = useState('');
+  const [salesReportEndDate, setSalesReportEndDate] = useState('');
 
   // Central Clients Management filter states
   const [clientSearchQuery, setClientSearchQuery] = useState('');
@@ -821,6 +823,13 @@ const [salesReportEndDate, setSalesReportEndDate] = useState('');
         end: lead.googleAdsEndDate || lead.planEndDate || '—',
       });
     }
+    if (platforms.includes('YouTube Ads') || lead.youtubeAdsPlanDuration > 0) {
+      schedules.push({
+        service: 'YouTube Ads',
+        start: lead.youtubeAdsStartDate || lead.planStartDate || '—',
+        end: lead.youtubeAdsEndDate || lead.planEndDate || '—',
+      });
+    }
     if (platforms.includes('LinkedIn Ads') || lead.linkedinAdsPlanDuration > 0) {
       schedules.push({
         service: 'LinkedIn Ads',
@@ -885,6 +894,40 @@ const [salesReportEndDate, setSalesReportEndDate] = useState('');
     XLSX.utils.book_append_sheet(wb, ws, 'Sales Report');
     XLSX.writeFile(wb, `sales_report_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
+
+  const handleSaveAdvanceAmount = async (lead) => {
+  const newAdvance = Number(editingAdvanceValue) || 0;
+  const plan = Number(lead.planAmount || 0);
+  const newPending = Math.max(0, plan - newAdvance);
+
+  let newPaymentStatus = 'Unpaid';
+  if (plan > 0 && newAdvance >= plan) newPaymentStatus = 'Paid';
+  else if (newAdvance > 0 && newAdvance < plan) newPaymentStatus = 'Partial';
+
+  try {
+    const res = await authFetch(`/api/leads/${lead._id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        advanceAmount: newAdvance,
+        pendingAmount: newPending,
+        paymentStatus: newPaymentStatus
+      })
+    });
+
+    if (res.ok) {
+      onAddToast('Advance Updated', `Advance amount updated for ${lead.clientName}. Pending balance recalculated.`, 'success');
+      setEditingAdvanceFor(null);
+      setEditingAdvanceValue('');
+      await fetchData();
+    } else {
+      const errData = await res.json();
+      onAddToast('Update Failed', errData.message || 'Could not update advance amount.', 'error');
+    }
+  } catch (err) {
+    console.error('Advance amount update error:', err);
+    onAddToast('Update Failed', 'Network error updating advance amount.', 'error');
+  }
+};
 
   const handleSalesReportSheetsSync = async () => {
     if (!appsScriptUrl) {
@@ -1116,224 +1159,363 @@ const [salesReportEndDate, setSalesReportEndDate] = useState('');
             </div>
           </div>
 
-          {filteredInspectedLeads.length === 0 ? (
-            <div className="text-center py-12 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
-              <Users className="w-10 h-10 text-gray-300 dark:text-slate-700 mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                {inspectedLeads.length === 0 
-                  ? `${selectedRep ? (selectedRep === 'All' ? 'System' : selectedRep) : selectedTech.name} has no client records yet.` 
-                  : 'No client folders match the search query.'}
-              </p>
+      {filteredInspectedLeads.length === 0 ? (
+  <div className="text-center py-12 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
+    <Users className="w-10 h-10 text-gray-300 dark:text-slate-700 mx-auto mb-3" />
+    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+      {inspectedLeads.length === 0 
+        ? `${selectedRep ? (selectedRep === 'All' ? 'System' : selectedRep) : selectedTech.name} has no client records yet.` 
+        : 'No client folders match the search query.'}
+    </p>
+  </div>
+) : (
+  <>
+    {/* MOBILE / TABLET: Card layout (hidden on lg and up) */}
+    <div className="lg:hidden space-y-3 max-h-[600px] overflow-y-auto pr-1 scrollbar-thin">
+      {filteredInspectedLeads.map((lead, idx) => {
+        const sc = (s) => s === 'Completed'
+          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+          : s === 'In Progress'
+            ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+        const perTeam = getPerTeamStatusBadges(lead);
+        const hasDesign = Number(lead.postersRequired || 0) > 0 || Number(lead.videosRequired || 0) > 0;
+        const hasAds = Number(lead.adsRequired || 0) > 0;
+        const hasDev = !!lead.websiteRequired;
+
+        return (
+          <div
+            key={idx}
+            className="p-4 rounded-2xl border border-gray-150 dark:border-slate-800/60 bg-white/60 dark:bg-slate-900/30 space-y-3"
+          >
+            {/* Header row: Client ID + Name + Action */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <button
+                  onClick={() => {
+                    setViewedClientId(lead._id);
+                    setIsEditingClient(false);
+                    setEditedClientFields({});
+                  }}
+                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer text-xs font-mono"
+                >
+                  {lead.clientId || 'N/A'}
+                </button>
+                <h4 className="font-bold text-gray-900 dark:text-white text-sm truncate mt-0.5">{lead.clientName}</h4>
+                <p className="text-xs text-gray-400 dark:text-gray-555 truncate">{lead.email}</p>
+              </div>
+              <button
+                onClick={() => setSelectedLead(lead)}
+                className="p-2 rounded-lg hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 transition-colors shrink-0 cursor-pointer"
+                title="Inspect Lead"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
             </div>
-          ) : (
-            <div className="overflow-auto max-h-[450px] border border-gray-100 dark:border-slate-800/60 rounded-xl scrollbar-thin">
-              <table className="min-w-[900px] w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
-                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Contact</th>
-                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Company & Sector</th>
-                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Representative</th>
-                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assignee</th>
-                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Timestamp</th>
-                    <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Deliverables Status</th>
-                    <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Workflow Status</th>
-                    <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40">
-                  {filteredInspectedLeads.map((lead, idx) => (
-                    <tr key={idx} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/2 transition-colors">
-                      <td className="p-3">
-                        <button
-                          onClick={() => {
-                            setViewedClientId(lead._id);
-                            setIsEditingClient(false);
-                            setEditedClientFields({});
-                          }}
-                          className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                        >
-                          {lead.clientId || 'N/A'}
-                        </button>
-                      </td>
-                      <td className="p-3 font-medium text-gray-900 dark:text-white">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span>{lead.clientName}</span>
-                          {(() => {
-                            const badge = getPaymentStatus(lead);
-                            return (
-                              <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
-                                {badge.label}
-                              </span>
-                            );
-                          })()}
-                          {(() => {
-  const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
-  if (deadlineAlert) {
+
+            {/* Company + Representative */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase block">Company</span>
+                <span className="text-gray-700 dark:text-gray-300 font-medium">{lead.companyName || '—'}</span>
+                <div className="text-[10px] text-gray-400 dark:text-gray-500">{lead.businessCategory || '—'}</div>
+              </div>
+              <div>
+                <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase block">Rep</span>
+                <span className="text-indigo-650 dark:text-indigo-400 font-bold">{lead.salespersonName}</span>
+              </div>
+            </div>
+
+            {/* Assignee */}
+<div className="border-t border-gray-100 dark:border-slate-800/40 pt-2.5 space-y-1.5">
+  <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase block">Assignee</span>
+  {(() => {
+    const teams = lead.assignedTeam;
+    const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+    const assignees = [];
+    if (teamList.includes('ads') || teamList.includes('all')) assignees.push({ team: 'Ads', name: lead.assignedAdSpecialistName || null, color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400' });
+    if (teamList.includes('design') || teamList.includes('all')) assignees.push({ team: 'Design', name: lead.assignedDesignerName || null, color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' });
+    if (teamList.includes('developer') || teamList.includes('all')) assignees.push({ team: 'Dev', name: lead.assignedDeveloperName || null, color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' });
+    if (assignees.length === 0) return <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full text-xs font-bold inline-block">Not Assigned</span>;
     return (
-      <span className="flex flex-col gap-0.5 mt-0.5">
-        <span className="inline-flex items-center gap-1 text-[9px] font-extrabold">
-          <span className={`w-1.5 h-1.5 rounded-full ${deadlineAlert.dotColor}`} />
-          <span className={deadlineAlert.color}>{deadlineAlert.label}</span>
-        </span>
-        {deadlineAlert.date && (
-          <span className={`text-[9px] ${deadlineAlert.color} opacity-80 pl-2.5`}>
-            {deadlineAlert.date}
+      <div className="flex flex-col gap-1">
+        {assignees.map((a, i) => (
+          <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold w-fit ${a.color}`}>
+            {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
           </span>
-        )}
-      </span>
+        ))}
+      </div>
     );
-  }
-  return null;
-})()}
-                        </div>
-                        <div className="text-xs text-gray-400 dark:text-gray-555">{lead.email}</div>
-                      </td>
-                      <td className="p-3 text-gray-650 dark:text-gray-300">
-                        <div>{lead.companyName || '—'}</div>
-                        <div className="text-xs text-gray-400 dark:text-gray-500">{lead.businessCategory || '—'}</div>
-                      </td>
-                      <td className="p-3 text-sm text-indigo-650 dark:text-indigo-400 font-bold">
-                        {lead.salespersonName}
-                      </td>
-                      <td className="p-3 text-xs">
-                        {lead.assignedToName ? (
-                          <div className="space-y-1">
-                            <span className="bg-indigo-500/10 dark:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-2 py-0.5 font-bold text-indigo-655 dark:text-indigo-400 block w-fit">
-                              👤 {lead.assignedToName}
-                            </span>
-                            <span className="text-[10px] text-gray-455 dark:text-gray-555 block font-semibold">
-                              Team: {getTeamDisplayLabel(lead.assignedTeam)}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="space-y-1">
-                            <span className="text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 border border-amber-500/20 rounded-lg px-2 py-0.5 block w-fit">
-                              Queue: {getTeamDisplayLabel(lead.assignedTeam)}
-                            </span>
-                            <span className="text-[10px] text-gray-400 dark:text-gray-555 italic block font-semibold">
-                              Unclaimed
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3 text-xs text-gray-400 dark:text-gray-550 whitespace-nowrap">
-                        {(lead.createdAt || lead.timestamp) ? new Date(lead.createdAt || lead.timestamp).toLocaleString() : 'N/A'}
-                      </td>
-                      <td className="p-3 text-xs">
-                        <div className="space-y-1">
-                          {/* Design Team Deliverables (Posters & Videos) */}
-                          {(!selectedTech || selectedTech.team === 'design') && (
-                            <>
-                              {Number(lead.postersRequired || 0) > 0 && (
-                                <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                  <span>Posters: </span>
-                                  <span className="font-bold text-gray-900 dark:text-white">
-                                    {Number(lead.postersRequired || 0) - (Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)))} Comp / {Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0))} Pend
-                                  </span>
-                                </div>
-                              )}
-                              {Number(lead.videosRequired || 0) > 0 && (
-                                <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                  <span>Videos: </span>
-                                  <span className="font-bold text-gray-900 dark:text-white">
-                                    {Number(lead.videosRequired || 0) - (Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)))} Comp / {Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0))} Pend
-                                  </span>
-                                </div>
-                              )}
-                            </>
-                          )}
+  })()}
+</div>
 
-                          {/* Ads Team Deliverables */}
-                          {(!selectedTech || selectedTech.team === 'ads') && Number(lead.adsRequired || 0) > 0 && (
-                            <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                              <span>Ads: </span>
-                              <span className="font-bold text-gray-900 dark:text-white">
-                                {Number(lead.adsRequired || 0) - (Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0)))} Comp / {Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0))} Pend
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Developer Team Deliverables */}
-                          {(!selectedTech || selectedTech.team === 'developer') && lead.websiteRequired && (
-                            <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium">
-                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                              <span>Website: </span>
-                              <span className="font-bold text-gray-900 dark:text-white">
-                                {lead.websiteStatus === 'Completed' ? '1' : '0'} Comp / {lead.websiteStatus === 'Completed' ? '0' : '1'} Pend ({lead.websiteStatus || 'Pending'})
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Fallback if no deliverables are displayed for this view */}
-                          {(() => {
-                            const hasDesign = Number(lead.postersRequired || 0) > 0 || Number(lead.videosRequired || 0) > 0;
-                            const hasAds = Number(lead.adsRequired || 0) > 0;
-                            const hasDev = !!lead.websiteRequired;
-
-                            if (selectedTech) {
-                              if (selectedTech.team === 'design' && !hasDesign) return <span className="text-gray-400">—</span>;
-                              if (selectedTech.team === 'ads' && !hasAds) return <span className="text-gray-400">—</span>;
-                              if (selectedTech.team === 'developer' && !hasDev) return <span className="text-gray-400">—</span>;
-                            } else {
-                              if (!hasDesign && !hasAds && !hasDev) return <span className="text-gray-400">—</span>;
-                            }
-                            return null;
-                          })()}
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        {(() => {
-                          const sc = (s) => s === 'Completed'
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                            : s === 'In Progress'
-                              ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
-                              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-                          const perTeam = getPerTeamStatusBadges(lead);
-                          if (perTeam && (lead.workflowStatus === 'In Progress' || lead.workflowStatus === 'Completed' || lead.workflowStatus === 'Allocated')) {
-                            return (
-                              <div className="flex flex-col gap-0.5 items-start">
-                                {perTeam.map((t, i) => (
-                                  <span key={i} className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${sc(t.status)}`}>
-                                    {t.label}: {t.status}
-                                  </span>
-                                ))}
-                              </div>
-                            );
-                          }
-                          return (
-                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider ${
-                              lead.workflowStatus === 'Completed'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                                : lead.workflowStatus === 'In Progress'
-                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
-                                  : lead.workflowStatus === 'Allocated'
-                                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                            }`}>
-                              {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className="p-3 text-center">
-                        <button
-                          onClick={() => setSelectedLead(lead)}
-                          className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 transition-colors inline-flex cursor-pointer"
-                          title="Inspect Lead"
-                        >
-                          <Eye className="w-4.5 h-4.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Deliverables */}
+            <div className="border-t border-gray-100 dark:border-slate-800/40 pt-2.5 space-y-1">
+              <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase block mb-1">Deliverables</span>
+              {(!selectedTech || selectedTech.team === 'design') && (
+                <>
+                  {Number(lead.postersRequired || 0) > 0 && (
+                    <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium text-xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                      <span>Posters: </span>
+                      <span className="font-bold text-gray-900 dark:text-white">
+                        {Number(lead.postersRequired || 0) - (Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)))} Comp / {Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0))} Pend
+                      </span>
+                    </div>
+                  )}
+                  {Number(lead.videosRequired || 0) > 0 && (
+                    <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium text-xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                      <span>Videos: </span>
+                      <span className="font-bold text-gray-900 dark:text-white">
+                        {Number(lead.videosRequired || 0) - (Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)))} Comp / {Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0))} Pend
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+              {(!selectedTech || selectedTech.team === 'ads') && Number(lead.adsRequired || 0) > 0 && (
+                <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium text-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                  <span>Ads: </span>
+                  <span className="font-bold text-gray-900 dark:text-white">
+                    {Number(lead.adsRequired || 0) - (Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0)))} Comp / {Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0))} Pend
+                  </span>
+                </div>
+              )}
+              {(!selectedTech || selectedTech.team === 'developer') && lead.websiteRequired && (
+                <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium text-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                  <span>Website: </span>
+                  <span className="font-bold text-gray-900 dark:text-white">
+                    {lead.websiteStatus === 'Completed' ? '1' : '0'} Comp / {lead.websiteStatus === 'Completed' ? '0' : '1'} Pend ({lead.websiteStatus || 'Pending'})
+                  </span>
+                </div>
+              )}
+              {(() => {
+                if (selectedTech) {
+                  if (selectedTech.team === 'design' && !hasDesign) return <span className="text-gray-400 text-xs">—</span>;
+                  if (selectedTech.team === 'ads' && !hasAds) return <span className="text-gray-400 text-xs">—</span>;
+                  if (selectedTech.team === 'developer' && !hasDev) return <span className="text-gray-400 text-xs">—</span>;
+                } else {
+                  if (!hasDesign && !hasAds && !hasDev) return <span className="text-gray-400 text-xs">—</span>;
+                }
+                return null;
+              })()}
             </div>
-          )}
+
+            {/* Workflow Status */}
+            <div className="border-t border-gray-100 dark:border-slate-800/40 pt-2.5">
+              <span className="text-[10px] text-gray-400 dark:text-gray-550 font-bold uppercase block mb-1.5">Status</span>
+              {perTeam && (lead.workflowStatus === 'In Progress' || lead.workflowStatus === 'Completed' || lead.workflowStatus === 'Allocated') ? (
+                <div className="flex flex-wrap gap-1">
+                  {perTeam.map((t, i) => (
+                    <span key={i} className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${sc(t.status)}`}>
+                      {t.label}: {t.status}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider inline-block ${
+                  lead.workflowStatus === 'Completed'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                    : lead.workflowStatus === 'In Progress'
+                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                      : lead.workflowStatus === 'Allocated'
+                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                }`}>
+                  {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
+                </span>
+              )}
+            </div>
+
+            <div className="text-[10px] text-gray-400 dark:text-gray-550 pt-1">
+              {(lead.createdAt || lead.timestamp) ? new Date(lead.createdAt || lead.timestamp).toLocaleString() : 'N/A'}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    {/* DESKTOP: Table layout (hidden below lg) */}
+    <div className="hidden lg:block overflow-auto max-h-[500px] border border-gray-100 dark:border-slate-800/60 rounded-xl scrollbar-thin">
+      <table className="w-full text-left text-sm border-collapse table-fixed">
+        <colgroup>
+          <col className="w-[9%]" />
+          <col className="w-[16%]" />
+          <col className="w-[13%]" />
+          <col className="w-[12%]" />
+          <col className="w-[14%]" />
+          <col className="w-[11%]" />
+          <col className="w-[14%]" />
+          <col className="w-[7%]" />
+          <col className="w-[4%]" />
+        </colgroup>
+        <thead>
+          <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60 sticky top-0 z-10">
+            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Contact</th>
+            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Company & Sector</th>
+            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Representative</th>
+            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assignee</th>
+            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Timestamp</th>
+            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Deliverables</th>
+            <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">Workflow</th>
+            <th className="p-3 font-bold text-center text-gray-700 dark:text-gray-300">•</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40">
+          {filteredInspectedLeads.map((lead, idx) => (
+            <tr key={idx} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/2 transition-colors align-top">
+              <td className="p-3 truncate">
+                <button
+                  onClick={() => {
+                    setViewedClientId(lead._id);
+                    setIsEditingClient(false);
+                    setEditedClientFields({});
+                  }}
+                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer truncate block"
+                  title={lead.clientId}
+                >
+                  {lead.clientId || 'N/A'}
+                </button>
+              </td>
+              <td className="p-3 font-medium text-gray-900 dark:text-white overflow-hidden">
+                <div className="truncate" title={lead.clientName}>{lead.clientName}</div>
+                <div className="text-xs text-gray-400 dark:text-gray-555 truncate" title={lead.email}>{lead.email}</div>
+              </td>
+              <td className="p-3 text-gray-650 dark:text-gray-300 overflow-hidden">
+                <div className="truncate" title={lead.companyName}>{lead.companyName || '—'}</div>
+                <div className="text-xs text-gray-400 dark:text-gray-500 truncate">{lead.businessCategory || '—'}</div>
+              </td>
+              <td className="p-3 text-sm text-indigo-650 dark:text-indigo-400 font-bold truncate" title={lead.salespersonName}>
+                {lead.salespersonName}
+              </td>
+              <td className="p-3 text-xs overflow-hidden">
+  {(() => {
+    const teams = lead.assignedTeam;
+    const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+    const assignees = [];
+    if (teamList.includes('ads') || teamList.includes('all')) assignees.push({ team: 'Ads', name: lead.assignedAdSpecialistName || null, color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400' });
+    if (teamList.includes('design') || teamList.includes('all')) assignees.push({ team: 'Design', name: lead.assignedDesignerName || null, color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' });
+    if (teamList.includes('developer') || teamList.includes('all')) assignees.push({ team: 'Dev', name: lead.assignedDeveloperName || null, color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' });
+    if (assignees.length === 0) return <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full text-[10px] font-bold">Not Assigned</span>;
+    return (
+      <div className="flex flex-col gap-1">
+        {assignees.map((a, i) => (
+          <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold truncate ${a.color}`}>
+            {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
+          </span>
+        ))}
+      </div>
+    );
+  })()}
+</td>
+              <td className="p-3 text-xs text-gray-400 dark:text-gray-550">
+                {(lead.createdAt || lead.timestamp) ? new Date(lead.createdAt || lead.timestamp).toLocaleString() : 'N/A'}
+              </td>
+              <td className="p-3 text-xs overflow-hidden">
+                <div className="space-y-1">
+                  {(!selectedTech || selectedTech.team === 'design') && (
+                    <>
+                      {Number(lead.postersRequired || 0) > 0 && (
+                        <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium truncate">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                          <span className="truncate">Posters: <span className="font-bold text-gray-900 dark:text-white">
+                            {Number(lead.postersRequired || 0) - (Number(lead.postersPending ?? (lead.postersStatus === 'Completed' ? 0 : lead.postersRequired || 0)))}/{lead.postersRequired}
+                          </span></span>
+                        </div>
+                      )}
+                      {Number(lead.videosRequired || 0) > 0 && (
+                        <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium truncate">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                          <span className="truncate">Videos: <span className="font-bold text-gray-900 dark:text-white">
+                            {Number(lead.videosRequired || 0) - (Number(lead.videosPending ?? (lead.videosStatus === 'Completed' ? 0 : lead.videosRequired || 0)))}/{lead.videosRequired}
+                          </span></span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {(!selectedTech || selectedTech.team === 'ads') && Number(lead.adsRequired || 0) > 0 && (
+                    <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium truncate">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                      <span className="truncate">Ads: <span className="font-bold text-gray-900 dark:text-white">
+                        {Number(lead.adsRequired || 0) - (Number(lead.adsPending ?? (lead.adsStatus === 'Completed' ? 0 : lead.adsRequired || 0)))}/{lead.adsRequired}
+                      </span></span>
+                    </div>
+                  )}
+                  {(!selectedTech || selectedTech.team === 'developer') && lead.websiteRequired && (
+                    <div className="flex items-center gap-1.5 text-gray-650 dark:text-gray-400 font-medium truncate">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                      <span className="truncate">Web: <span className="font-bold text-gray-900 dark:text-white">{lead.websiteStatus || 'Pending'}</span></span>
+                    </div>
+                  )}
+                  {(() => {
+                    const hasDesign = Number(lead.postersRequired || 0) > 0 || Number(lead.videosRequired || 0) > 0;
+                    const hasAds = Number(lead.adsRequired || 0) > 0;
+                    const hasDev = !!lead.websiteRequired;
+                    if (selectedTech) {
+                      if (selectedTech.team === 'design' && !hasDesign) return <span className="text-gray-400">—</span>;
+                      if (selectedTech.team === 'ads' && !hasAds) return <span className="text-gray-400">—</span>;
+                      if (selectedTech.team === 'developer' && !hasDev) return <span className="text-gray-400">—</span>;
+                    } else {
+                      if (!hasDesign && !hasAds && !hasDev) return <span className="text-gray-400">—</span>;
+                    }
+                    return null;
+                  })()}
+                </div>
+              </td>
+              <td className="p-3 text-center">
+                {(() => {
+                  const sc = (s) => s === 'Completed'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                    : s === 'In Progress'
+                      ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+                  const perTeam = getPerTeamStatusBadges(lead);
+                  if (perTeam && (lead.workflowStatus === 'In Progress' || lead.workflowStatus === 'Completed' || lead.workflowStatus === 'Allocated')) {
+                    return (
+                      <div className="flex flex-col gap-0.5 items-start">
+                        {perTeam.map((t, i) => (
+                          <span key={i} className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${sc(t.status)} truncate max-w-full`}>
+                            {t.label}: {t.status}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return (
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase tracking-wider inline-block ${
+                      lead.workflowStatus === 'Completed'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                        : lead.workflowStatus === 'In Progress'
+                          ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                          : lead.workflowStatus === 'Allocated'
+                            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                    }`}>
+                      {getStatusLabel(lead.workflowStatus, lead.assignedTeam)}
+                    </span>
+                  );
+                })()}
+              </td>
+              <td className="p-3 text-center">
+                <button
+                  onClick={() => setSelectedLead(lead)}
+                  className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 transition-colors inline-flex cursor-pointer"
+                  title="Inspect Lead"
+                >
+                  <Eye className="w-4.5 h-4.5" />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </>
+)}
 
           {/* Details Modal */}
           {selectedLead && (
@@ -1552,10 +1734,702 @@ const [salesReportEndDate, setSalesReportEndDate] = useState('');
                     Close View
                   </Button>
                 </div>
-              </div>
+             </div>
             </div>
           )}
         </Card>
+
+        {/* Detailed Client Profile Editor Modal (shared with main Client Workflow view) */}
+        {viewedClientId && (() => {
+          const client = leads.find(l => l._id === viewedClientId);
+          if (!client) return null;
+
+          return (
+            <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-[160] overflow-y-auto">
+              <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
+                {/* Modal Header */}
+                <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                        Client Profile & Edit Console
+                      </h3>
+                      <span className="bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-650 dark:text-indigo-400 text-[10px] font-bold px-2 py-0.5 rounded font-mono">
+                        ID: {client.clientId || 'N/A'}
+                      </span>
+                      {(() => {
+                        const badge = getPaymentStatus({ ...client, ...editedClientFields });
+                        return (
+                          <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${badge.color}`}>
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-gray-550 mt-1">
+                      Created by salesperson <strong className="text-indigo-650 dark:text-indigo-405">{client.salespersonName}</strong> on {new Date(client.createdAt || client.timestamp).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => {
+                        setViewedClientId(null);
+                        setIsEditingClient(false);
+                        setEditedClientFields({});
+                      }}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Modal Content Form */}
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    await handleSaveClientDetails();
+                    setViewedClientId(null);
+                  }} 
+                  className="flex-1 overflow-y-auto p-6 space-y-6"
+                >
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    
+                    {/* Left Column: Form Details (3/5 width) */}
+                    <div className="lg:col-span-3 space-y-6">
+                      {/* Contact Info Card */}
+                      <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          1. Contact Information
+                        </h4>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase">Client Name *</label>
+                          <input 
+                            type="text" 
+                            required
+                            value={editedClientFields.clientName ?? client.clientName ?? ''}
+                            onChange={(e) => handleClientFieldChange('clientName', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase">Company Name</label>
+                          <input 
+                            type="text" 
+                            value={editedClientFields.companyName ?? client.companyName ?? ''}
+                            onChange={(e) => handleClientFieldChange('companyName', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">WhatsApp Mobile *</label>
+                          <input 
+                            type="text" 
+                            required
+                            value={editedClientFields.mobileNumber ?? client.mobileNumber ?? ''}
+                            onChange={(e) => handleClientFieldChange('mobileNumber', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Email Address</label>
+                          <input 
+                            type="email" 
+                            value={editedClientFields.email ?? client.email ?? ''}
+                            onChange={(e) => handleClientFieldChange('email', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Social Media Access Card */}
+                      <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          2. Social Channels Credentials
+                        </h4>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">FB Page Status</label>
+                            <select 
+                              value={editedClientFields.facebookAccountStatus ?? client.facebookAccountStatus ?? 'Existing'}
+                              onChange={(e) => handleClientFieldChange('facebookAccountStatus', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="Existing">Existing Account</option>
+                              <option value="New">Create New Account</option>
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Facebook ID</label>
+                            <input 
+                              type="text" 
+                              value={editedClientFields.facebookId ?? client.facebookId ?? ''}
+                              onChange={(e) => handleClientFieldChange('facebookId', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Facebook Password</label>
+                            <input 
+                              type="text" 
+                              value={editedClientFields.facebookPassword ?? client.facebookPassword ?? ''}
+                              onChange={(e) => handleClientFieldChange('facebookPassword', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">IG Page Status</label>
+                            <select 
+                              value={editedClientFields.instagramAccountStatus ?? client.instagramAccountStatus ?? 'Existing'}
+                              onChange={(e) => handleClientFieldChange('instagramAccountStatus', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="Existing">Existing Account</option>
+                              <option value="New">Create New Account</option>
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Instagram ID</label>
+                            <input 
+                              type="text" 
+                              value={editedClientFields.instagramId ?? client.instagramId ?? ''}
+                              onChange={(e) => handleClientFieldChange('instagramId', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Instagram Password</label>
+                            <input 
+                              type="text" 
+                              value={editedClientFields.instagramPassword ?? client.instagramPassword ?? ''}
+                              onChange={(e) => handleClientFieldChange('instagramPassword', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Financials Card */}
+                      <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          3. Financial Information
+                        </h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Plan Amount (₹)</label>
+                            <input 
+                              type="number" 
+                              min="0"
+                              value={editedClientFields.planAmount ?? client.planAmount ?? 0}
+                              onChange={(e) => handleClientFieldChange('planAmount', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Advance Amount (₹)</label>
+                            <input 
+                              type="number" 
+                              min="0"
+                              value={editedClientFields.advanceAmount ?? client.advanceAmount ?? 0}
+                              onChange={(e) => handleClientFieldChange('advanceAmount', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase font-extrabold text-indigo-650 dark:text-indigo-405">Pending Balance (₹)</label>
+                            <input 
+                              type="number" 
+                              min="0"
+                              value={editedClientFields.pendingAmount ?? client.pendingAmount ?? 0}
+                              onChange={(e) => handleClientFieldChange('pendingAmount', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white/70 dark:bg-slate-955/20 text-gray-900 dark:text-white font-bold"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Ad Budget (₹)</label>
+                            <input 
+                              type="number" 
+                              min="0"
+                              value={editedClientFields.adBudget ?? client.adBudget ?? 0}
+                              onChange={(e) => handleClientFieldChange('adBudget', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Ad Budget/Day (₹)</label>
+                            <input 
+                              type="number" 
+                              min="0"
+                              value={editedClientFields.adBudgetPerDay ?? client.adBudgetPerDay ?? 0}
+                              onChange={(e) => handleClientFieldChange('adBudgetPerDay', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase font-extrabold">Payment Status</label>
+                            <select 
+                              value={editedClientFields.paymentStatus ?? client.paymentStatus ?? 'Unpaid'}
+                              onChange={(e) => handleClientFieldChange('paymentStatus', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-bold"
+                            >
+                              <option value="Unpaid">Unpaid</option>
+                              <option value="Partial">Partially Paid</option>
+                              <option value="Paid">Fully Paid</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Deliverables Card */}
+                      <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          4. Requested Assets & Milestones
+                        </h4>
+                        
+                        {/* Posters */}
+                        <div className="border-b border-gray-100 dark:border-slate-800/40 pb-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Graphic Posters</span>
+                            <select
+                              value={editedClientFields.postersStatus ?? client.postersStatus ?? 'Pending'}
+                              onChange={(e) => handleClientFieldChange('postersStatus', e.target.value)}
+                              className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Completed">Completed</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-gray-400 uppercase">Total Req</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={editedClientFields.postersRequired ?? client.postersRequired ?? 0}
+                                onChange={(e) => handleClientFieldChange('postersRequired', e.target.value)}
+                                className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[11px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-gray-400 uppercase">Pending</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={editedClientFields.postersPending ?? client.postersPending ?? 0}
+                                onChange={(e) => handleClientFieldChange('postersPending', e.target.value)}
+                                className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[11px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Videos */}
+                        <div className="border-b border-gray-100 dark:border-slate-800/40 pb-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Reels & Videos</span>
+                            <select
+                              value={editedClientFields.videosStatus ?? client.videosStatus ?? 'Pending'}
+                              onChange={(e) => handleClientFieldChange('videosStatus', e.target.value)}
+                              className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Completed">Completed</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-gray-400 uppercase">Total Req</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={editedClientFields.videosRequired ?? client.videosRequired ?? 0}
+                                onChange={(e) => handleClientFieldChange('videosRequired', e.target.value)}
+                                className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[11px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-gray-400 uppercase">Pending</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={editedClientFields.videosPending ?? client.videosPending ?? 0}
+                                onChange={(e) => handleClientFieldChange('videosPending', e.target.value)}
+                                className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[11px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Ads */}
+                        <div className="border-b border-gray-100 dark:border-slate-800/40 pb-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Ads Campaigns</span>
+                            <select
+                              value={editedClientFields.adsStatus ?? client.adsStatus ?? 'Pending'}
+                              onChange={(e) => handleClientFieldChange('adsStatus', e.target.value)}
+                              className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Completed">Completed</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-gray-400 uppercase">Total Req</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={editedClientFields.adsRequired ?? client.adsRequired ?? 0}
+                                onChange={(e) => handleClientFieldChange('adsRequired', e.target.value)}
+                                className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[11px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-gray-400 uppercase">Pending</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={editedClientFields.adsPending ?? client.adsPending ?? 0}
+                                onChange={(e) => handleClientFieldChange('adsPending', e.target.value)}
+                                className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[11px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Website */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="checkbox"
+                                checked={editedClientFields.websiteRequired ?? client.websiteRequired ?? false}
+                                onChange={(e) => handleClientFieldChange('websiteRequired', e.target.checked)}
+                                className="rounded border-gray-200 dark:border-slate-800 text-indigo-600"
+                              />
+                              <span className="text-xs font-bold text-gray-800 dark:text-gray-200">Website Development</span>
+                            </div>
+                            <select
+                              value={editedClientFields.websiteStatus ?? client.websiteStatus ?? 'Pending'}
+                              onChange={(e) => handleClientFieldChange('websiteStatus', e.target.value)}
+                              className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Completed">Completed</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-gray-400 uppercase">Website Type</label>
+                              <input 
+                                type="text" 
+                                value={editedClientFields.websiteType ?? client.websiteType ?? ''}
+                                onChange={(e) => handleClientFieldChange('websiteType', e.target.value)}
+                                placeholder="e.g. E-Commerce"
+                                className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[11px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-[9px] text-gray-400 uppercase">Pending Count</label>
+                              <input 
+                                type="number" 
+                                min="0"
+                                value={editedClientFields.websitePending ?? client.websitePending ?? 0}
+                                onChange={(e) => handleClientFieldChange('websitePending', e.target.value)}
+                                className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[11px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Specifications Card */}
+                      <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          5. Project Specifications
+                        </h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-550 uppercase">Business Category</label>
+                            <input 
+                              type="text" 
+                              value={editedClientFields.businessCategory ?? client.businessCategory ?? ''}
+                              onChange={(e) => handleClientFieldChange('businessCategory', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Website URL</label>
+                            <input 
+                              type="text" 
+                              value={editedClientFields.websiteUrl ?? client.websiteUrl ?? ''}
+                              onChange={(e) => handleClientFieldChange('websiteUrl', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Start Date</label>
+                            <input 
+                              type="date" 
+                              value={editedClientFields.startDate ?? client.startDate ?? ''}
+                              onChange={(e) => handleClientFieldChange('startDate', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Delivery Deadline</label>
+                            <input 
+                              type="date" 
+                              value={editedClientFields.deliveryDeadline ?? client.deliveryDeadline ?? ''}
+                              onChange={(e) => handleClientFieldChange('deliveryDeadline', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Brand Colors (e.g. #ff0000, #0000ff)</label>
+                          <div className="flex gap-2 items-center">
+                            <input 
+                              type="color" 
+                              value={((editedClientFields.brandColors ?? client.brandColors ?? '').startsWith('#') && (editedClientFields.brandColors ?? client.brandColors ?? '').length === 7) ? (editedClientFields.brandColors ?? client.brandColors ?? '') : '#6366f1'}
+                              onChange={(e) => handleClientFieldChange('brandColors', e.target.value)}
+                              className="w-8 h-8 rounded border border-gray-200 dark:border-slate-800 shrink-0 bg-transparent"
+                            />
+                            <input 
+                              type="text" 
+                              value={editedClientFields.brandColors ?? client.brandColors ?? ''}
+                              onChange={(e) => handleClientFieldChange('brandColors', e.target.value)}
+                              className="flex-1 rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="space-y-2 col-span-1">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase font-semibold">Audience Status</label>
+                            <select 
+                              value={editedClientFields.targetAudienceRequired ?? client.targetAudienceRequired ?? 'Required'}
+                              onChange={(e) => handleClientFieldChange('targetAudienceRequired', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="Required">Required</option>
+                              <option value="Not Required">Not Required</option>
+                            </select>
+                          </div>
+                          <div className="space-y-2 col-span-2">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Target Audience Description</label>
+                            <input 
+                              type="text" 
+                              value={editedClientFields.targetAudience ?? client.targetAudience ?? ''}
+                              onChange={(e) => handleClientFieldChange('targetAudience', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Key Competitors</label>
+                          <input 
+                            type="text" 
+                            value={editedClientFields.competitors ?? client.competitors ?? ''}
+                            onChange={(e) => handleClientFieldChange('competitors', e.target.value)}
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Comments & Remarks Card */}
+                      <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                          6. Client Notes & Remarks
+                        </h4>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Salesperson Client Notes</label>
+                          <textarea 
+                            value={editedClientFields.notes ?? client.notes ?? ''}
+                            onChange={(e) => handleClientFieldChange('notes', e.target.value)}
+                            rows="2"
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white resize-y"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Internal Remarks (Admin/Team)</label>
+                          <textarea 
+                            value={editedClientFields.remarks ?? client.remarks ?? ''}
+                            onChange={(e) => handleClientFieldChange('remarks', e.target.value)}
+                            rows="2"
+                            className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white resize-y font-medium"
+                          />
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Right Column: Collaboration Chat (2/5 width) */}
+                    <div className="space-y-6 lg:col-span-2 flex flex-col justify-between">
+                      <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-805 flex-1 flex flex-col">
+                        <h4 className="text-xs font-bold text-indigo-650 dark:text-indigo-400 uppercase tracking-wider mb-2">
+                          Collaboration Chat
+                        </h4>
+                        <ClientChat leadId={client._id || client.id} layout="stack" />
+                      </div>
+                    </div>
+   
+                  </div>
+
+                  {/* CRM Assignment Control Section */}
+                  <div className="bg-indigo-500/5 dark:bg-slate-900/40 p-4 rounded-xl border border-indigo-500/20 dark:border-slate-800/80 space-y-4">
+                    <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                      ⚙️ CRM Technical Assignment Console
+                    </h4>
+                    
+                    {/* Assign to Team */}
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Assign to Team(s)</label>
+                      <div className="flex flex-wrap gap-4 text-xs text-gray-700 dark:text-gray-300 font-semibold mt-1">
+                        {['design', 'developer', 'ads'].map((team) => {
+                          const currentTeams = editedClientFields.assignedTeam ?? client.assignedTeam ?? [];
+                          const isChecked = Array.isArray(currentTeams) 
+                            ? currentTeams.includes(team) 
+                            : currentTeams === team;
+                          
+                          return (
+                            <label key={team} className="flex items-center gap-2 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  let nextTeams = [];
+                                  const baseTeams = Array.isArray(currentTeams) ? currentTeams : (currentTeams ? [currentTeams] : []);
+                                  if (e.target.checked) {
+                                    nextTeams = [...baseTeams, team];
+                                  } else {
+                                    nextTeams = baseTeams.filter(t => t !== team);
+                                  }
+                                  handleClientFieldChange('assignedTeam', nextTeams);
+                                }}
+                                className="rounded border-gray-200 dark:border-slate-800 text-indigo-650"
+                              />
+                              <span className="capitalize">{team === 'ads' ? 'Ads Campaign' : team === 'design' ? 'Graphic Design' : 'Developer'}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Assign to Individual Person */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                      {/* Developer Team */}
+                      {(() => {
+                        const currentTeams = editedClientFields.assignedTeam ?? client.assignedTeam ?? [];
+                        const hasDev = Array.isArray(currentTeams) ? currentTeams.includes('developer') : currentTeams === 'developer';
+                        if (!hasDev) return null;
+
+                        const devsList = technicalList.filter(m => m.team === 'developer');
+                        return (
+                          <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-100">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Developer Specialist</label>
+                            <select
+                              value={editedClientFields.assignedDeveloper ?? client.assignedDeveloper ?? ''}
+                              onChange={(e) => handleSpecialistChange('developer', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2.5 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="">Select Developer (Unassigned)</option>
+                              {devsList.map(dev => (
+                                <option key={dev._id || dev.id} value={dev._id || dev.id}>{dev.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Design Team */}
+                      {(() => {
+                        const currentTeams = editedClientFields.assignedTeam ?? client.assignedTeam ?? [];
+                        const hasDesign = Array.isArray(currentTeams) ? currentTeams.includes('design') : currentTeams === 'design';
+                        if (!hasDesign) return null;
+
+                        const designersList = technicalList.filter(m => m.team === 'design');
+                        return (
+                          <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-100">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Designer Specialist</label>
+                            <select
+                              value={editedClientFields.assignedDesigner ?? client.assignedDesigner ?? ''}
+                              onChange={(e) => handleSpecialistChange('design', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2.5 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="">Select Designer (Unassigned)</option>
+                              {designersList.map(designer => (
+                                <option key={designer._id || designer.id} value={designer._id || designer.id}>{designer.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Ads Team */}
+                      {(() => {
+                        const currentTeams = editedClientFields.assignedTeam ?? client.assignedTeam ?? [];
+                        const hasAds = Array.isArray(currentTeams) ? currentTeams.includes('ads') : currentTeams === 'ads';
+                        if (!hasAds) return null;
+
+                        const adsList = technicalList.filter(m => m.team === 'ads');
+                        return (
+                          <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-100">
+                            <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Ads Specialist</label>
+                            <select
+                              value={editedClientFields.assignedAdSpecialist ?? client.assignedAdSpecialist ?? ''}
+                              onChange={(e) => handleSpecialistChange('ads', e.target.value)}
+                              className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2 px-2.5 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
+                            >
+                              <option value="">Select Ads Specialist (Unassigned)</option>
+                              {adsList.map(ads => (
+                                <option key={ads._id || ads.id} value={ads._id || ads.id}>{ads.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                  </div>
+
+                  {/* Footer Buttons */}
+                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-slate-800/50">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setViewedClientId(null);
+                        setIsEditingClient(false);
+                        setEditedClientFields({});
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="primary"
+                    >
+                      Save Client Profile
+                    </Button>
+                  </div>
+
+                </form>
+
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }
@@ -2414,13 +3288,13 @@ const handleClientFieldChange = (field, value) => {
                         {client.clientId || 'N/A'}
                       </button>
                     </td>
-                    <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
+                    <td className="p-3 text-indigo-650 text-sm dark:text-indigo-400 font-medium">
                       {client.salespersonName || '-'}
                     </td>
-                    <td className="p-3 font-bold text-gray-900 dark:text-white">
+                    <td className="p-3 font-medium text-gray-900 dark:text-white">
                       {new Date(client.createdAt || client.timestamp).toLocaleDateString()}
                     </td>
-                    <td className="p-3 text-gray-900 dark:text-white font-bold">
+                    <td className="p-3 text-gray-900 dark:text-white font-medium">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span>{client.clientName}</span>
                         {(() => {
@@ -2452,21 +3326,30 @@ const handleClientFieldChange = (field, value) => {
 })()}
                       </div>
                     </td>
-                    <td className="p-3 text-gray-900 dark:text-white font-bold">
+                    <td className="p-3 text-gray-900 dark:text-white font-medium">
                       {client.companyName || '-'}
                     </td>
                     <td className="p-3 font-mono">{client.mobileNumber}</td>
-                    <td className="p-3">
-                      {client.assignedToName ? (
-                        <span className="bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ">
-                          {client.assignedToName}
-                        </span>
-                      ) : (
-                        <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                          {getTeamDisplayLabel(client.assignedTeam)}
-                        </span>
-                      )}
-                    </td>
+                   <td className="p-3">
+  {(() => {
+    const teams = client.assignedTeam;
+    const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+    const assignees = [];
+    if (teamList.includes('ads') || teamList.includes('all')) assignees.push({ team: 'Ads', name: client.assignedAdSpecialistName || null, color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400' });
+    if (teamList.includes('design') || teamList.includes('all')) assignees.push({ team: 'Design', name: client.assignedDesignerName || null, color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' });
+    if (teamList.includes('developer') || teamList.includes('all')) assignees.push({ team: 'Dev', name: client.assignedDeveloperName || null, color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' });
+    if (assignees.length === 0) return <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full text-xs font-bold">Not Assigned</span>;
+    return (
+      <div className="flex flex-col gap-1">
+        {assignees.map((a, i) => (
+          <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${a.color}`}>
+            {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
+          </span>
+        ))}
+      </div>
+    );
+  })()}
+</td>
                     <td className="p-3">
                       {(() => {
                         const sc = (s) => s === 'Completed'
@@ -2981,7 +3864,7 @@ const handleClientFieldChange = (field, value) => {
         if (!client) return null;
 
         return (
-          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-[160] overflow-y-auto">
             <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
               {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
@@ -3996,56 +4879,108 @@ const handleClientFieldChange = (field, value) => {
                   const payStatus = getPaymentStatus(lead);
                   return (
                     <tr key={lead._id || idx} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/3 transition-colors">
-                      <td className="px-4 py-3 text-gray-400 dark:text-gray-500 font-medium">{idx + 1}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{lead.clientId || '—'}</span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
-                        {lead.createdAt
-                          ? new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium whitespace-nowrap">
-                        {lead.salespersonName || '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{lead.clientName || '—'}</div>
-                        <span className={`inline-block mt-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${payStatus.color}`}>
-                          {payStatus.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.companyName || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.mobileNumber || '—'}</td>
-                      <td className="px-4 py-3 min-w-[200px]">
-                        {schedules.length > 0 ? (
-                          <div className="space-y-1">
-                            {schedules.map((s, si) => (
-                              <div key={si} className="flex items-center gap-1.5 flex-wrap">
-                                <span className="px-1.5 py-0.5 bg-indigo-500/10 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 rounded-md font-semibold text-[10px] whitespace-nowrap">
-                                  {s.service}
-                                </span>
-                                <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                  {s.start !== '—' || s.end !== '—' ? `${s.start} → ${s.end}` : 'Dates TBD'}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 dark:text-gray-500">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white whitespace-nowrap">
-                        {plan > 0 ? `₹${plan.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                        {advance > 0 ? `₹${advance.toLocaleString('en-IN')}` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold whitespace-nowrap">
-                        {pending > 0
-                          ? <span className="text-amber-600 dark:text-amber-400">₹{pending.toLocaleString('en-IN')}</span>
-                          : <span className="text-gray-400">—</span>}
-                      </td>
-                    </tr>
+  <td className="px-4 py-3 text-gray-400 dark:text-gray-500 font-medium">{idx + 1}</td>
+  <td className="px-4 py-3">
+    <button
+      type="button"
+      onClick={() => {
+        // setIsSalesReportOpen(false); 
+        setViewedClientId(lead._id);
+        setIsEditingClient(false);
+        setEditedClientFields({});
+      }}
+      className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+    >
+      {lead.clientId || '—'}
+    </button>
+  </td>
+  <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
+    {lead.createdAt
+      ? new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      : '—'}
+  </td>
+  <td className="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium whitespace-nowrap">
+    {lead.salespersonName || '—'}
+  </td>
+  <td className="px-4 py-3">
+    <div className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{lead.clientName || '—'}</div>
+    <span className={`inline-block mt-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${payStatus.color}`}>
+      {payStatus.label}
+    </span>
+  </td>
+  <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.companyName || '—'}</td>
+  <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.mobileNumber || '—'}</td>
+  <td className="px-4 py-3 min-w-[200px]">
+    {schedules.length > 0 ? (
+      <div className="space-y-1">
+        {schedules.map((s, si) => (
+          <div key={si} className="flex items-center gap-1.5 flex-wrap">
+            <span className="px-1.5 py-0.5 bg-indigo-500/10 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 rounded-md font-semibold text-[10px] whitespace-nowrap">
+              {s.service}
+            </span>
+            <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+              {s.start !== '—' || s.end !== '—' ? `${s.start} → ${s.end}` : 'Dates TBD'}
+            </span>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <span className="text-gray-400 dark:text-gray-500">—</span>
+    )}
+  </td>
+  <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white whitespace-nowrap">
+    {plan > 0 ? `₹${plan.toLocaleString('en-IN')}` : '—'}
+  </td>
+  <td className="px-4 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+    {editingAdvanceFor === lead._id ? (
+      <div className="flex items-center justify-end gap-1.5">
+        <input
+          type="number"
+          min="0"
+          autoFocus
+          value={editingAdvanceValue}
+          onChange={(e) => setEditingAdvanceValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSaveAdvanceAmount(lead);
+            if (e.key === 'Escape') { setEditingAdvanceFor(null); setEditingAdvanceValue(''); }
+          }}
+          className="w-20 rounded-lg border border-emerald-300 dark:border-emerald-700 py-1 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white text-right outline-none"
+        />
+        <button
+          type="button"
+          onClick={() => handleSaveAdvanceAmount(lead)}
+          className="text-emerald-600 hover:text-emerald-700 cursor-pointer"
+          title="Save"
+        >
+          <CheckCircle className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => { setEditingAdvanceFor(null); setEditingAdvanceValue(''); }}
+          className="text-gray-400 hover:text-gray-600 cursor-pointer"
+          title="Cancel"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    ) : (
+      <button
+        type="button"
+        onClick={() => { setEditingAdvanceFor(lead._id); setEditingAdvanceValue(String(advance || 0)); }}
+        className="inline-flex items-center gap-1 hover:underline cursor-pointer group ml-auto"
+        title="Edit advance amount"
+      >
+        {advance > 0 ? `₹${advance.toLocaleString('en-IN')}` : '—'}
+        <Edit3 className="w-3 h-3 opacity-0 group-hover:opacity-70 transition-opacity" />
+      </button>
+    )}
+  </td>
+  <td className="px-4 py-3 text-right font-bold whitespace-nowrap">
+    {pending > 0
+      ? <span className="text-amber-600 dark:text-amber-400">₹{pending.toLocaleString('en-IN')}</span>
+      : <span className="text-gray-400">—</span>}
+  </td>
+</tr>
                   );
                 })}
               </tbody>

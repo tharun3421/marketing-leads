@@ -174,6 +174,8 @@ export default function TechnicalPortal({
   const [editLinkedinStart, setEditLinkedinStart] = useState('');
   const [editLinkedinStatus, setEditLinkedinStatus] = useState('Pending');
   const [editSeoStart, setEditSeoStart] = useState('');
+  const [editYoutubeStart, setEditYoutubeStart] = useState('');
+  const [editYoutubeStatus, setEditYoutubeStatus] = useState('Pending');
   const [editSeoStatus, setEditSeoStatus] = useState('Pending');
   const [editGmbStatus, setEditGmbStatus] = useState('Pending');
   const [postingsPostersStatus, setPostingsPostersStatus] = useState('Pending');
@@ -239,6 +241,8 @@ export default function TechnicalPortal({
       setEditMetaStatus(selectedLead.metaAdsCampaignStatus || 'Pending');
       setEditGoogleStart(selectedLead.googleAdsStartDate || '');
       setEditGoogleStatus(selectedLead.googleAdsCampaignStatus || 'Pending');
+      setEditYoutubeStart(selectedLead.youtubeAdsStartDate || '');
+      setEditYoutubeStatus(selectedLead.youtubeAdsCampaignStatus || 'Pending');
       setEditLinkedinStart(selectedLead.linkedinAdsStartDate || '');
       setEditLinkedinStatus(selectedLead.linkedinAdsCampaignStatus || 'Pending');
       setEditSeoStart(selectedLead.seoStartDate || '');
@@ -263,6 +267,8 @@ export default function TechnicalPortal({
       setEditMetaStatus('Pending');
       setEditGoogleStart('');
       setEditGoogleStatus('Pending');
+      setEditYoutubeStart('');
+      setEditYoutubeStatus('Pending');
       setEditLinkedinStart('');
       setEditLinkedinStatus('Pending');
       setEditSeoStart('');
@@ -301,6 +307,8 @@ export default function TechnicalPortal({
       setEditMetaStatus(selectedLead.metaAdsCampaignStatus || 'Pending');
       setEditGoogleStart(selectedLead.googleAdsStartDate || '');
       setEditGoogleStatus(selectedLead.googleAdsCampaignStatus || 'Pending');
+      setEditYoutubeStart(selectedLead.youtubeAdsStartDate || '');
+      setEditYoutubeStatus(selectedLead.youtubeAdsCampaignStatus || 'Pending');
       setEditLinkedinStart(selectedLead.linkedinAdsStartDate || '');
       setEditLinkedinStatus(selectedLead.linkedinAdsCampaignStatus || 'Pending');
       setEditSeoStart(selectedLead.seoStartDate || '');
@@ -443,6 +451,15 @@ updatePayload.workflowStatus = allDone
           updatePayload.googleAdsEndDate = googleEnd.toISOString().split('T')[0];
         }
         updatePayload.googleAdsCampaignStatus = editGoogleStatus;
+
+        const youtubeDur = Number(selectedLead.youtubeAdsPlanDuration || 0);
+        if (youtubeDur > 0 && editYoutubeStart) {
+        const youtubeEnd = new Date(editYoutubeStart);
+        youtubeEnd.setDate(youtubeEnd.getDate() + youtubeDur);
+        updatePayload.youtubeAdsStartDate = editYoutubeStart;
+        updatePayload.youtubeAdsEndDate = youtubeEnd.toISOString().split('T')[0];
+        }
+        updatePayload.youtubeAdsCampaignStatus = editYoutubeStatus;
 
         const linkedinDur = Number(selectedLead.linkedinAdsPlanDuration || 0);
         if (linkedinDur > 0 && editLinkedinStart) {
@@ -1625,6 +1642,48 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                   </div>
                                 </div>
                               )}
+
+                              {Number(lead.youtubeAdsPlanDuration || 0) > 0 && (
+  <div className="p-3 bg-rose-500/5 border border-rose-500/15 rounded-xl space-y-2.5">
+    <div className="flex items-center justify-between">
+      <span className="text-xs font-bold text-rose-600 dark:text-rose-400">YouTube Ads</span>
+      <span className="text-[10px] bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full font-bold">{lead.youtubeAdsPlanDuration} Days</span>
+    </div>
+    <div className="flex flex-col gap-1">
+      <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Start Date</label>
+      <input
+        type="date"
+        value={editYoutubeStart}
+        onChange={(e) => setEditYoutubeStart(e.target.value)}
+        className="rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white text-xs cursor-pointer"
+      />
+    </div>
+    {editYoutubeStart && (
+      <div className="flex justify-between items-center text-xs p-2 bg-white/60 dark:bg-slate-900/40 rounded-lg border border-rose-500/10">
+        <span className="text-gray-400">End Date:</span>
+        <strong className="text-rose-600 dark:text-rose-400">
+          {(() => {
+            const d = new Date(editYoutubeStart);
+            d.setDate(d.getDate() + Number(lead.youtubeAdsPlanDuration));
+            return d.toLocaleDateString('en-IN');
+          })()}
+        </strong>
+      </div>
+    )}
+    <div className="flex flex-col gap-1">
+      <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Campaign Status</label>
+      <select
+        value={editYoutubeStatus}
+        onChange={(e) => setEditYoutubeStatus(e.target.value)}
+        className="w-full rounded-lg border border-gray-250 dark:border-slate-800 py-1.5 px-2 bg-white dark:bg-slate-900/60 text-gray-955 dark:text-white cursor-pointer text-xs"
+      >
+        <option value="Pending">Pending</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </div>
+  </div>
+                                )}
 
                               {Number(lead.linkedinAdsPlanDuration || 0) > 0 && (
                                 <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-xl space-y-2.5">

@@ -399,6 +399,7 @@ export default function SalesPortal({
       adBudgetPerDay: 0,
       metaAdsPlanDuration: 0,
       googleAdsPlanDuration: 0,
+      youtubeAdsPlanDuration: 0,
       linkedinAdsPlanDuration: 0,
       seoPlanDuration: 0,
       startDate: '',
@@ -551,6 +552,7 @@ export default function SalesPortal({
       adBudgetPerDay: 0,
       metaAdsPlanDuration: 0,
       googleAdsPlanDuration: 0,
+      youtubeAdsPlanDuration: 0,
       linkedinAdsPlanDuration: 0,
       seoPlanDuration: 0,
       startDate: '',
@@ -1184,48 +1186,38 @@ export default function SalesPortal({
                                 {client.clientId || 'N/A'}
                               </button>
                             </td>
-                            <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
+                            <td className="p-2  text-indigo-650 dark:text-indigo-400 font-medium">
                               {client.salespersonName || '—'}
                             </td>
-                            <td className="p-3 text-gray-900 dark:text-white font-bold">
+                            <td className="p-3 text-gray-800 dark:text-white font-medium">
                               <div className="flex items-center gap-2 flex-wrap"> 
                                 <span>{client.clientName}</span>
-                                {/* {(() => {
-                                  const badge = getPaymentStatus(client);
-                                  return (
-                                    <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
-                                      {badge.label}
-                                    </span>
-                                  );
-                                })()}
-                                {(() => {
-                                  const deadlineAlert = checkDeadlineAlert(client.deliveryDeadline);
-                                  if (deadlineAlert) {
-                                    return (
-                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${deadlineAlert.color}`}>
-                                        {deadlineAlert.label}
-                                      </span>
-                                    );
-                                  }
-                                  return null;
-                                })()} */}
                               </div>
                             </td>
-                            <td className="p-3 text-gray-900 dark:text-white font-bold">
+                            <td className="p-3 text-gray-800  dark:text-white font-medium">
                               {client.companyName || '—'}
                             </td>
                             <td className="p-3 font-mono">{client.mobileNumber}</td>
-                            <td className="p-3">
-                               {client.assignedToName ? (
-                                 <span className="bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ">
-                                    {client.assignedToName}
-                                 </span>
-                               ) : (
-                                 <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold">
-                                   {getTeamDisplayLabel(client.assignedTeam)}
-                                 </span>
-                               )}
-                            </td>
+                           <td className="p-3">
+  {(() => {
+    const teams = client.assignedTeam;
+    const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+    const assignees = [];
+    if (teamList.includes('ads') || teamList.includes('all')) assignees.push({ team: 'Ads', name: client.assignedAdSpecialistName || null, color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400' });
+    if (teamList.includes('design') || teamList.includes('all')) assignees.push({ team: 'Design', name: client.assignedDesignerName || null, color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' });
+    if (teamList.includes('developer') || teamList.includes('all')) assignees.push({ team: 'Dev', name: client.assignedDeveloperName || null, color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' });
+    if (assignees.length === 0) return <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full text-xs font-bold">Not Assigned</span>;
+    return (
+      <div className="flex flex-col gap-1">
+        {assignees.map((a, i) => (
+          <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${a.color}`}>
+            {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
+          </span>
+        ))}
+      </div>
+    );
+  })()}
+</td>
                             <td className="p-3">
                               {(() => {
                                 const perTeam = getPerTeamStatusBadges(client);

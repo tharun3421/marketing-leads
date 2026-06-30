@@ -35,7 +35,8 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
   const hasGoogleAds = watchPlatforms.includes('Google Ads');
   const hasLinkedInAds = watchPlatforms.includes('LinkedIn Ads');
   const hasSEO = watchPlatforms.includes('SEO');
-  
+  const hasYoutubeAds = watchPlatforms.includes('YouTube Ads');
+
   const watchPosters = Number(watch('postersRequired') || 0);
   const watchVideos = Number(watch('videosRequired') || 0);
   const watchAds = Number(watch('adsRequired') || 0);
@@ -138,7 +139,7 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
       </div>
 
       {/* Plan Duration for paid/ongoing platforms */}
-      {(hasMetaAds || hasGoogleAds || hasLinkedInAds || hasSEO) && (
+      {(hasMetaAds || hasGoogleAds || hasLinkedInAds || hasSEO || hasYoutubeAds)  && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
@@ -181,6 +182,20 @@ export default function StepRequirementsBrief({ register, errors, setValue, watc
                   })}
                 />
               )}
+              {hasYoutubeAds && (
+  <Input
+    label="YouTube Ads — Plan Duration (Days)"
+    type="number"
+    min="1"
+    placeholder="e.g. 30"
+    icon={CalendarRange}
+    disabled={isReadOnlyProfile}
+    error={errors.youtubeAdsPlanDuration?.message}
+    {...register('youtubeAdsPlanDuration', {
+      min: { value: 1, message: 'Must be at least 1 day' }
+    })}
+  />
+)}
               {hasLinkedInAds && (
                 <Input
                   label="LinkedIn Ads — Plan Duration (Days)"

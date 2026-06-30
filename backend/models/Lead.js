@@ -232,6 +232,17 @@ const leadSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  youtubeAdsPlanDuration: {
+  type: Number,
+  default: 0
+},
+youtubeAdsStartDate: { type: String, default: null },
+youtubeAdsEndDate: { type: String, default: null },
+youtubeAdsCampaignStatus: {
+  type: String,
+  enum: ['Pending', 'In Progress', 'Completed'],
+  default: 'Pending'
+},
   // Per-campaign start dates (set by Ads Team)
   metaAdsStartDate: { type: String, default: null },
   metaAdsEndDate: { type: String, default: null },
