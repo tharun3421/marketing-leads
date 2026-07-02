@@ -79,6 +79,29 @@ const getStatusLabel = (status) => {
   return 'Pending';
 };
 
+// Predefined WhatsApp message templates for the Client Notes section.
+// Uses WhatsApp's free "click to chat" deep link (wa.me) — this only pre-fills a message
+// in the recipient's chat window; it does NOT use the WhatsApp Business API, so it needs
+// no Meta verification, message templates, or API credentials. The staff member still has
+// to press Send inside WhatsApp itself once it opens.
+const CLIENT_MESSAGE_TEMPLATES = [
+  { key: 'payment_reminder', label: 'Payment Reminder', text: (c) => `Hi ${c.clientName || 'there'}, this is a friendly reminder that your payment for ${c.companyName || 'your project'} is currently pending. Please let us know if you have any questions or need help completing it. Thank you!` },
+  { key: 'project_update', label: 'Project Update', text: (c) => `Hi ${c.clientName || 'there'}, quick update — our team is actively working on your project and progressing well. We'll keep you posted as things move forward. Thanks for your patience!` },
+  { key: 'work_completed', label: 'Work Completed', text: (c) => `Hi ${c.clientName || 'there'}, great news! The work on your project has been completed. Please take a look and share your feedback whenever you get a chance.` },
+  { key: 'meeting_reminder', label: 'Meeting Reminder', text: (c) => `Hi ${c.clientName || 'there'}, just a quick reminder about our upcoming meeting regarding your project. Looking forward to connecting with you!` },
+  { key: 'welcome', label: 'Welcome Message', text: (c) => `Hi ${c.clientName || 'there'}, welcome aboard! We're excited to start working with you and will keep you updated at every step of the process.` },
+  { key: 'documents_pending', label: 'Documents Pending', text: (c) => `Hi ${c.clientName || 'there'}, we're still waiting on a few documents/details from your end to move forward. Could you please share them at your earliest convenience?` },
+];
+
+// Formats a stored mobile number into the digits-only, country-code-prefixed format wa.me
+// expects. Assumes a bare 10-digit number is an Indian mobile number (no +91 stored).
+const formatForWhatsApp = (mobileNumber) => {
+  const digits = String(mobileNumber || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.length === 10) return `91${digits}`;
+  return digits;
+};
+
 // Render per-team status badges for a lead
 const getPerTeamStatusBadges = (lead) => {
   const teams = lead.assignedTeam;
@@ -305,6 +328,20 @@ export default function SalesPortal({
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // { clientId, key, text } of the template currently selected/being previewed in the Client Notes section
+  const [selectedWhatsAppTemplate, setSelectedWhatsAppTemplate] = useState(null);
+
+  const handleSendWhatsAppTemplate = (client, messageText) => {
+    const number = formatForWhatsApp(client.mobileNumber);
+    if (!number) {
+      onAddToast?.('Missing Number', 'This client has no valid mobile number on file.', 'error');
+      return;
+    }
+    const url = `https://wa.me/${number}?text=${encodeURIComponent(messageText)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setSelectedWhatsAppTemplate(null);
+  };
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
 
   // Central Clients Management filter states
@@ -875,44 +912,39 @@ export default function SalesPortal({
   };
 
 
-  // Derive overall client project status and completion stats
-  const getProjectStatus = (lead) => {
-    const activeStatuses = [];
-    if (Number(lead.postersRequired) > 0) activeStatuses.push(lead.postersStatus || 'Pending');
-    if (Number(lead.videosRequired) > 0) activeStatuses.push(lead.videosStatus || 'Pending');
-    if (Number(lead.adsRequired) > 0) activeStatuses.push(lead.adsStatus || 'Pending');
-    if (lead.websiteRequired) activeStatuses.push(lead.websiteStatus || 'Pending');
-    
-    if (activeStatuses.length === 0) return 'Pending';
-    if (activeStatuses.every(s => s === 'Completed')) return 'Completed';
-    if (activeStatuses.every(s => s === 'Pending')) return 'Pending';
-    return 'In Progress';
-  };
-
   const getMetricsModalTitleAndList = () => {
     switch (activeMetricsModal) {
       case 'total':
-        return { title: 'Total Clients', list: leads };
+        return { title: 'Total Clients', list: salespersonLeads };
       case 'non-allocated':
-        return { title: 'Non-Allocated Clients', list: leads.filter(l => (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated') };
+        return { title: 'Non-Allocated Clients', list: salespersonLeads.filter(l => (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated') };
       case 'allocated':
-        return { title: 'Allocated Clients', list: leads.filter(l => l.workflowStatus === 'Allocated') };
-      case 'pending':
-        return { title: 'Pending Clients/Tasks', list: leads.filter(l => getProjectStatus(l) === 'Pending') };
+        return { title: 'Allocated Clients', list: allocatedSalespersonLeads };
       case 'in-progress':
-        return { title: 'In-Progress Clients/Tasks', list: leads.filter(l => getProjectStatus(l) === 'In Progress') };
+        return { title: 'In-Progress Clients (Awaiting Claim)', list: allocatedSalespersonLeads.filter(l => l.workflowStatus === 'Allocated') };
+      case 'pending':
+        return { title: 'Pending Clients (Claimed, Work Underway)', list: allocatedSalespersonLeads.filter(l => l.workflowStatus === 'In Progress') };
       case 'completed':
-        return { title: 'Completed Clients/Tasks', list: leads.filter(l => getProjectStatus(l) === 'Completed') };
+        return { title: 'Completed Clients/Tasks', list: allocatedSalespersonLeads.filter(l => l.workflowStatus === 'Completed') };
       default:
         return { title: '', list: [] };
     }
   };
 
-  const completedProjectsCount = salespersonLeads.filter(l => getProjectStatus(l) === 'Completed').length;
-  const pendingProjectsCount = salespersonLeads.filter(l => getProjectStatus(l) === 'Pending').length;
-  const inProgressProjectsCount = salespersonLeads.filter(l => getProjectStatus(l) === 'In Progress').length;
-  const allocatedClientsCount = salespersonLeads.filter(l => l.workflowStatus === 'Allocated').length;
+  // Sales dashboard lifecycle, driven directly by workflowStatus (the same field the
+  // Client Workflow table uses):
+  //   Non-Allocated -> Allocated (routed to a team, nobody has claimed it yet -> shown
+  //   under "In Progress") -> claimed by the technical team, work underway -> shown under
+  //   "Pending" (workflowStatus flips to 'In Progress' the instant it's claimed) -> Completed.
+  // "Allocated" is the umbrella count of every client that has left Non-Allocated; the
+  // In Progress / Pending / Completed cards are mutually-exclusive sub-stages of it, so
+  // they always sum back to the Allocated total.
+  const allocatedSalespersonLeads = salespersonLeads.filter(l => l.workflowStatus && l.workflowStatus !== 'Non-Allocated');
   const nonAllocatedClientsCount = salespersonLeads.filter(l => (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated').length;
+  const allocatedClientsCount = allocatedSalespersonLeads.length;
+  const inProgressProjectsCount = allocatedSalespersonLeads.filter(l => l.workflowStatus === 'Allocated').length;
+  const pendingProjectsCount = allocatedSalespersonLeads.filter(l => l.workflowStatus === 'In Progress').length;
+  const completedProjectsCount = allocatedSalespersonLeads.filter(l => l.workflowStatus === 'Completed').length;
 
   // Personal performance service metrics
   let totalTasks = 0;
@@ -1858,142 +1890,166 @@ export default function SalesPortal({
       </div>
 
                {/* Metrics List Modal */}
-      <AnimatePresence>
-        {activeMetricsModal && (() => {
-          const { title, list } = getMetricsModalTitleAndList();
-          return (
-            <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
-              >
-                {/* Modal Header */}
-                <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
-                  <div>
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Showing {list.length} matching client briefs</p>
-                  </div>
-                  <button 
-                    onClick={() => setActiveMetricsModal(null)}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-650 dark:hover:text-gray-250 transition-colors cursor-pointer"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Modal Content - Table */}
-                <div className="p-6 overflow-y-auto flex-1">
-                  {list.length === 0 ? (
-                    <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-                      No client records match this category.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
-                      <table className="w-full text-left text-sm border-collapse">
-                        <thead>
-                          <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
-                          {list.map((client) => (
-                            <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors">
-                              <td className="p-3">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveMetricsModal(null);
-                                    setViewedClientId(client._id || client.id);
-                                  }}
-                                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                                >
-                                  {client.clientId || 'N/A'}
-                                </button>
-                              </td>
-                               <td className="p-3 text-gray-900 dark:text-white font-bold">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span>{client.clientName}</span>
-                                  {(() => {
-                                    const badge = getPaymentStatus(client);
-                                    return (
-                                      <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>
-                                        {badge.label}
-                                      </span>
-                                    );
-                                  })()}
-                                </div>
-                                {client.companyName && (
-                                  <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">
-                                    {client.companyName}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="p-3 font-mono">{client.mobileNumber}</td>
-                              <td className="p-3">
-                                {(() => {
-                                  const perTeam = getPerTeamStatusBadges(client);
-                                  if (perTeam && perTeam.length > 0 && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
-                                    const statusColor = (s) => s === 'Completed'
-                                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                      : s === 'In Progress'
-                                        ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
-                                    return (
-                                      <div className="flex flex-col gap-1">
-                                        {perTeam.map((t, i) => (
-                                          <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${statusColor(t.status)}`}>
-                                            {t.label}: {t.status}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    );
-                                  }
-                                  return (
-                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                      client.workflowStatus === 'Completed'
-                                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                        : client.workflowStatus === 'In Progress'
-                                          ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                                    }`}>
-                                      {getStatusLabel(client.workflowStatus)}
-                                    </span>
-                                  );
-                                })()}
-                              </td>
-                              <td className="p-3 text-xs">
-                                {client.assignedToName ? (
-                                  <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-full font-bold flex items-center gap-1.5 w-max">
-                                    👤 {client.assignedToName}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-700 dark:text-slate-350 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full font-bold">
-                                    {getTeamDisplayLabel(client.assignedTeam)}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
-                                {client.salespersonName}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
+      {/* Metrics List Modal */}
+<AnimatePresence>
+  {activeMetricsModal && (() => {
+    const { title, list } = getMetricsModalTitleAndList();
+    return (
+      <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-[92vw] xl:max-w-7xl max-h-[88vh] flex flex-col shadow-2xl overflow-hidden"
+        >
+          {/* Modal Header */}
+          <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Showing {list.length} matching client briefs</p>
             </div>
-          );
-        })()}
-      </AnimatePresence>
+            <button 
+              onClick={() => setActiveMetricsModal(null)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-650 dark:hover:text-gray-250 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Modal Content - Table */}
+          <div className="p-6 overflow-y-auto flex-1">
+            {list.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 dark:text-gray-500">
+                No client records match this category.
+              </div>
+            ) : (
+              <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
+                <table className="w-full min-w-[1000px] text-left text-sm border-collapse table-fixed">
+                  <colgroup>
+                    <col className="w-[9%]" />
+                    <col className="w-[17%]" />
+                    <col className="w-[11%]" />
+                    <col className="w-[20%]" />
+                    <col className="w-[24%]" />
+                    <col className="w-[19%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
+                      <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
+                    {list.map((client) => (
+                      <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors align-top">
+                        <td className="p-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMetricsModal(null);
+                              setViewedClientId(client._id || client.id);
+                            }}
+                            className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                          >
+                            {client.clientId || 'N/A'}
+                          </button>
+                        </td>
+                         <td className="p-3 text-gray-900 dark:text-white font-bold">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{client.clientName}</span>
+                            {(() => {
+                              const badge = getPaymentStatus(client);
+                              return (
+                                <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${badge.color}`}>
+                                  {badge.label}
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          {client.companyName && (
+                            <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5">
+                              {client.companyName}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3 font-mono">{client.mobileNumber}</td>
+                        <td className="p-3">
+                          {(() => {
+                            const perTeam = getPerTeamStatusBadges(client);
+                            if (perTeam && perTeam.length > 0 && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
+                              const statusColor = (s) => s === 'Completed'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                : s === 'In Progress'
+                                  ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+                              return (
+                                <div className="flex flex-col gap-1">
+                                  {perTeam.map((t, i) => (
+                                    <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap w-fit ${statusColor(t.status)}`}>
+                                      {t.label}: {t.status}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            return (
+                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
+                                client.workflowStatus === 'Completed'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  : client.workflowStatus === 'In Progress'
+                                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                    : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                              }`}>
+                                {getStatusLabel(client.workflowStatus)}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td className="p-3 text-xs">
+                          {(() => {
+                            const teams = client.assignedTeam;
+                            const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
+                            const assignees = [];
+                            if (teamList.includes('ads') || teamList.includes('all')) assignees.push({ team: 'Ads', name: client.assignedAdSpecialistName || null, color: 'bg-pink-500/10 text-pink-600 dark:text-pink-400' });
+                            if (teamList.includes('design') || teamList.includes('all')) assignees.push({ team: 'Design', name: client.assignedDesignerName || null, color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' });
+                            if (teamList.includes('developer') || teamList.includes('all')) assignees.push({ team: 'Dev', name: client.assignedDeveloperName || null, color: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' });
+                            if (assignees.length === 0) {
+                              return (
+                                <span className="text-slate-700 dark:text-slate-350 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full font-bold inline-block">
+                                  {getTeamDisplayLabel(client.assignedTeam)}
+                                </span>
+                              );
+                            }
+                            return (
+                              <div className="flex flex-col gap-1">
+                                {assignees.map((a, i) => (
+                                  <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap w-fit ${a.color}`}>
+                                    {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
+                                  </span>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold">
+                          {client.salespersonName}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    );
+  })()}
+</AnimatePresence>
 
 
 
@@ -2407,6 +2463,56 @@ export default function SalesPortal({
                         <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-800/60">
                           {client.notes || 'No notes provided.'}
                         </p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Quick WhatsApp Templates</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {CLIENT_MESSAGE_TEMPLATES.map((tpl) => {
+                            const cid = client._id || client.id;
+                            const isActive = selectedWhatsAppTemplate?.clientId === cid && selectedWhatsAppTemplate?.key === tpl.key;
+                            return (
+                              <button
+                                key={tpl.key}
+                                type="button"
+                                onClick={() => setSelectedWhatsAppTemplate({ clientId: cid, key: tpl.key, text: tpl.text(client) })}
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors ${
+                                  isActive
+                                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-300 hover:border-emerald-500/40 hover:text-emerald-600'
+                                }`}
+                              >
+                                {tpl.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {selectedWhatsAppTemplate?.clientId === (client._id || client.id) && (
+                          <div className="mt-2 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-2">
+                            <textarea
+                              value={selectedWhatsAppTemplate.text}
+                              onChange={(e) => setSelectedWhatsAppTemplate((prev) => ({ ...prev, text: e.target.value }))}
+                              rows="3"
+                              className="w-full rounded-lg border border-emerald-500/30 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white resize-y"
+                            />
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[10px] text-gray-450 dark:text-gray-500">
+                                Opens WhatsApp chat with {client.mobileNumber || 'N/A'} — you still press Send inside WhatsApp.
+                              </span>
+                              <div className="flex gap-2 shrink-0">
+                                <button type="button" onClick={() => setSelectedWhatsAppTemplate(null)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800">
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendWhatsAppTemplate(client, selectedWhatsAppTemplate.text)}
+                                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-500 text-white hover:bg-emerald-600"
+                                >
+                                  📲 Send via WhatsApp
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Internal Production Remarks</span>

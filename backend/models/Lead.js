@@ -358,5 +358,8 @@ postingsVideosPending: {
   timestamps: true
 });
 
+// TTL index to automatically delete client records after 1 year (31536000 seconds)
+leadSchema.index({ createdAt: 1 }, { expireAfterSeconds: 31536000 });
+
 const Lead = mongoose.model('Lead', leadSchema);
 module.exports = Lead;
