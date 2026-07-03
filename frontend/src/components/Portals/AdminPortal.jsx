@@ -38,29 +38,6 @@ import AppsScriptGuide from '../Help/AppsScriptGuide';
 import { useAuth } from '../../context/AuthContext';
 import ClientChat from '../UI/ClientChat';
 
-// Predefined WhatsApp message templates for the Client Notes section.
-// Uses WhatsApp's free "click to chat" deep link (wa.me) — this only pre-fills a message
-// in the recipient's chat window; it does NOT use the WhatsApp Business API, so it needs
-// no Meta verification, message templates, or API credentials. The staff member still has
-// to press Send inside WhatsApp itself once it opens.
-const CLIENT_MESSAGE_TEMPLATES = [
-  { key: 'payment_reminder', label: 'Payment Reminder', text: (c) => `Hi ${c.clientName || 'there'}, this is a friendly reminder that your payment for ${c.companyName || 'your project'} is currently pending. Please let us know if you have any questions or need help completing it. Thank you!` },
-  { key: 'project_update', label: 'Project Update', text: (c) => `Hi ${c.clientName || 'there'}, quick update — our team is actively working on your project and progressing well. We'll keep you posted as things move forward. Thanks for your patience!` },
-  { key: 'work_completed', label: 'Work Completed', text: (c) => `Hi ${c.clientName || 'there'}, great news! The work on your project has been completed. Please take a look and share your feedback whenever you get a chance.` },
-  { key: 'meeting_reminder', label: 'Meeting Reminder', text: (c) => `Hi ${c.clientName || 'there'}, just a quick reminder about our upcoming meeting regarding your project. Looking forward to connecting with you!` },
-  { key: 'welcome', label: 'Welcome Message', text: (c) => `Hi ${c.clientName || 'there'}, welcome aboard! We're excited to start working with you and will keep you updated at every step of the process.` },
-  { key: 'documents_pending', label: 'Documents Pending', text: (c) => `Hi ${c.clientName || 'there'}, we're still waiting on a few documents/details from your end to move forward. Could you please share them at your earliest convenience?` },
-];
-
-// Formats a stored mobile number into the digits-only, country-code-prefixed format wa.me
-// expects. Assumes a bare 10-digit number is an Indian mobile number (no +91 stored).
-const formatForWhatsApp = (mobileNumber) => {
-  const digits = String(mobileNumber || '').replace(/\D/g, '');
-  if (!digits) return null;
-  if (digits.length === 10) return `91${digits}`;
-  return digits;
-};
-
 const getTeamDisplayLabel = (assignedTeam) => {
   if (!assignedTeam) return 'Not Assigned';
   if (assignedTeam === 'all') return 'All Teams';
@@ -198,19 +175,6 @@ export default function AdminPortal({
   const [localUrl, setLocalUrl] = useState('');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  // { clientId, key, text } of the template currently selected/being previewed in the Client Notes section
-  const [selectedWhatsAppTemplate, setSelectedWhatsAppTemplate] = useState(null);
-
-  const handleSendWhatsAppTemplate = (client, messageText) => {
-    const number = formatForWhatsApp(client.mobileNumber);
-    if (!number) {
-      onAddToast?.('Missing Number', 'This client has no valid mobile number on file.', 'error');
-      return;
-    }
-    const url = `https://wa.me/${number}?text=${encodeURIComponent(messageText)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setSelectedWhatsAppTemplate(null);
-  };
 
 
   const [selectedRep, setSelectedRep] = useState(null); // name string | 'All' | null
@@ -2423,56 +2387,6 @@ export default function AdminPortal({
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Quick WhatsApp Templates</label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {CLIENT_MESSAGE_TEMPLATES.map((tpl) => {
-                              const cid = client._id || client.id;
-                              const isActive = selectedWhatsAppTemplate?.clientId === cid && selectedWhatsAppTemplate?.key === tpl.key;
-                              return (
-                                <button
-                                  key={tpl.key}
-                                  type="button"
-                                  onClick={() => setSelectedWhatsAppTemplate({ clientId: cid, key: tpl.key, text: tpl.text(client) })}
-                                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors ${
-                                    isActive
-                                      ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
-                                      : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-300 hover:border-emerald-500/40 hover:text-emerald-600'
-                                  }`}
-                                >
-                                  {tpl.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {selectedWhatsAppTemplate?.clientId === (client._id || client.id) && (
-                            <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-2">
-                              <textarea
-                                value={selectedWhatsAppTemplate.text}
-                                onChange={(e) => setSelectedWhatsAppTemplate((prev) => ({ ...prev, text: e.target.value }))}
-                                rows="3"
-                                className="w-full rounded-lg border border-emerald-500/30 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white resize-y"
-                              />
-                              <div className="flex items-center justify-between gap-2 flex-wrap">
-                                <span className="text-[10px] text-gray-450 dark:text-gray-500">
-                                  Opens WhatsApp chat with {client.mobileNumber || 'N/A'} — you still press Send inside WhatsApp.
-                                </span>
-                                <div className="flex gap-2 shrink-0">
-                                  <button type="button" onClick={() => setSelectedWhatsAppTemplate(null)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800">
-                                    Cancel
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSendWhatsAppTemplate(client, selectedWhatsAppTemplate.text)}
-                                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-500 text-white hover:bg-emerald-600"
-                                  >
-                                    📲 Send via WhatsApp
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="space-y-2">
                           <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Internal Remarks (Admin/Team)</label>
                           <textarea 
                             value={editedClientFields.remarks ?? client.remarks ?? ''}
@@ -4004,7 +3918,7 @@ const handleClientFieldChange = (field, value) => {
         const { title, list } = getMetricsModalTitleAndList();
         return (
           <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-7xl max-h-[90vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
               
               {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
@@ -4028,21 +3942,29 @@ const handleClientFieldChange = (field, value) => {
                   </div>
                 ) : (
                   <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
-                    <table className="w-full min-w-[1000px] text-left text-sm border-collapse">
+                    <table className="w-full text-left text-sm border-collapse table-fixed">
+                      <colgroup>
+                        <col className="w-[11%]" />
+                        <col className="w-[20%]" />
+                        <col className="w-[13%]" />
+                        <col className="w-[18%]" />
+                        <col className="w-[22%]" />
+                        <col className="w-[16%]" />
+                      </colgroup>
                       <thead>
                         <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Client ID</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
                           <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
-                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Business Number</th>
-                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Workflow Status</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
                           <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
-                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Created By</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                         {list.map((client) => (
                           <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors align-top">
-                            <td className="p-3 whitespace-nowrap">
+                            <td className="p-3 truncate">
                               <button
                                 onClick={() => {
                                   setActiveMetricsModal(null); // Close metrics list modal
@@ -4050,21 +3972,22 @@ const handleClientFieldChange = (field, value) => {
                                   setIsEditingClient(false);
                                   setEditedClientFields({});
                                 }}
-                                className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                                className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer truncate block"
+                                title={client.clientId}
                               >
                                 {client.clientId || 'N/A'}
                               </button>
                             </td>
-                            <td className="p-3 text-gray-900 dark:text-white font-bold">
-                              <div>{client.clientName}</div>
+                            <td className="p-3 text-gray-900 dark:text-white font-bold overflow-hidden">
+                              <div className="truncate" title={client.clientName}>{client.clientName}</div>
                               {client.companyName && (
-                                <div className="text-xs text-gray-405 dark:text-gray-500 font-normal mt-0.5">
+                                <div className="text-xs text-gray-405 dark:text-gray-500 font-normal mt-0.5 truncate" title={client.companyName}>
                                   {client.companyName}
                                 </div>
                               )}
                             </td>
-                            <td className="p-3 font-mono whitespace-nowrap">{client.mobileNumber}</td>
-                            <td className="p-3 whitespace-nowrap">
+                            <td className="p-3 font-mono truncate">{client.mobileNumber}</td>
+                            <td className="p-3">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
                                 client.workflowStatus === 'Completed'
                                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
@@ -4077,7 +4000,7 @@ const handleClientFieldChange = (field, value) => {
                                 {getStatusLabel(client.workflowStatus, client.assignedTeam)}
                               </span>
                             </td>
-                            <td className="p-3 text-xs">
+                            <td className="p-3 text-xs overflow-hidden">
                               {(() => {
                                 const teams = client.assignedTeam;
                                 const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
@@ -4089,7 +4012,7 @@ const handleClientFieldChange = (field, value) => {
                                 return (
                                   <div className="flex flex-col gap-1">
                                     {assignees.map((a, i) => (
-                                      <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold w-fit ${a.color}`}>
+                                      <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold truncate ${a.color}`} title={`${a.team}: ${a.name || 'Unclaimed'}`}>
                                         {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
                                       </span>
                                     ))}
@@ -4097,7 +4020,7 @@ const handleClientFieldChange = (field, value) => {
                                 );
                               })()}
                             </td>
-                            <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold whitespace-nowrap">
+                            <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold truncate">
                               {client.salespersonName}
                             </td>
                           </tr>
@@ -4637,56 +4560,6 @@ const handleClientFieldChange = (field, value) => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Quick WhatsApp Templates</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {CLIENT_MESSAGE_TEMPLATES.map((tpl) => {
-                            const cid = client._id || client.id;
-                            const isActive = selectedWhatsAppTemplate?.clientId === cid && selectedWhatsAppTemplate?.key === tpl.key;
-                            return (
-                              <button
-                                key={tpl.key}
-                                type="button"
-                                onClick={() => setSelectedWhatsAppTemplate({ clientId: cid, key: tpl.key, text: tpl.text(client) })}
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors ${
-                                  isActive
-                                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
-                                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-300 hover:border-emerald-500/40 hover:text-emerald-600'
-                                }`}
-                              >
-                                {tpl.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {selectedWhatsAppTemplate?.clientId === (client._id || client.id) && (
-                          <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-2">
-                            <textarea
-                              value={selectedWhatsAppTemplate.text}
-                              onChange={(e) => setSelectedWhatsAppTemplate((prev) => ({ ...prev, text: e.target.value }))}
-                              rows="3"
-                              className="w-full rounded-lg border border-emerald-500/30 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white resize-y"
-                            />
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[10px] text-gray-450 dark:text-gray-500">
-                                Opens WhatsApp chat with {client.mobileNumber || 'N/A'} — you still press Send inside WhatsApp.
-                              </span>
-                              <div className="flex gap-2 shrink-0">
-                                <button type="button" onClick={() => setSelectedWhatsAppTemplate(null)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800">
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendWhatsAppTemplate(client, selectedWhatsAppTemplate.text)}
-                                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-500 text-white hover:bg-emerald-600"
-                                >
-                                  📲 Send via WhatsApp
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-2">
                         <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase">Internal Remarks (Admin/Team)</label>
                         <textarea 
                           value={editedClientFields.remarks ?? client.remarks ?? ''}
@@ -5165,9 +5038,9 @@ const handleClientFieldChange = (field, value) => {
                   <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">#</th>
                   <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client ID</th>
                   <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Created Date</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap w-28">Created By</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Created By</th>
                   <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client Name</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap w-32">Business Name</th>
+                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Business Name</th>
                   <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Business Number</th>
                   <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Plan Schedule</th>
                   <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Plan Amount</th>
@@ -5204,10 +5077,7 @@ const handleClientFieldChange = (field, value) => {
       ? new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
       : '—'}
   </td>
-  <td
-    className="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium w-28 max-w-[7rem] truncate"
-    title={lead.salespersonName || '—'}
-  >
+  <td className="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium whitespace-nowrap">
     {lead.salespersonName || '—'}
   </td>
   <td className="px-4 py-3">
@@ -5216,12 +5086,7 @@ const handleClientFieldChange = (field, value) => {
       {payStatus.label}
     </span>
   </td>
-  <td
-    className="px-4 py-3 text-gray-600 dark:text-gray-300 w-32 max-w-[8rem] truncate"
-    title={lead.companyName || '—'}
-  >
-    {lead.companyName || '—'}
-  </td>
+  <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.companyName || '—'}</td>
   <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.mobileNumber || '—'}</td>
   <td className="px-4 py-3 min-w-[200px]">
     {schedules.length > 0 ? (

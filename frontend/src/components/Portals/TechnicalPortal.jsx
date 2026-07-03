@@ -56,29 +56,6 @@ const hasTeamVal = (teamVal, team) => {
   return teamVal === team || teamVal === 'all';
 };
 
-// Predefined WhatsApp message templates for the Client Notes section.
-// Uses WhatsApp's free "click to chat" deep link (wa.me) — this only pre-fills a message
-// in the recipient's chat window; it does NOT use the WhatsApp Business API, so it needs
-// no Meta verification, message templates, or API credentials. The staff member still has
-// to press Send inside WhatsApp itself once it opens.
-const CLIENT_MESSAGE_TEMPLATES = [
-  { key: 'payment_reminder', label: 'Payment Reminder', text: (c) => `Hi ${c.clientName || 'there'}, this is a friendly reminder that your payment for ${c.companyName || 'your project'} is currently pending. Please let us know if you have any questions or need help completing it. Thank you!` },
-  { key: 'project_update', label: 'Project Update', text: (c) => `Hi ${c.clientName || 'there'}, quick update — our team is actively working on your project and progressing well. We'll keep you posted as things move forward. Thanks for your patience!` },
-  { key: 'work_completed', label: 'Work Completed', text: (c) => `Hi ${c.clientName || 'there'}, great news! The work on your project has been completed. Please take a look and share your feedback whenever you get a chance.` },
-  { key: 'meeting_reminder', label: 'Meeting Reminder', text: (c) => `Hi ${c.clientName || 'there'}, just a quick reminder about our upcoming meeting regarding your project. Looking forward to connecting with you!` },
-  { key: 'welcome', label: 'Welcome Message', text: (c) => `Hi ${c.clientName || 'there'}, welcome aboard! We're excited to start working with you and will keep you updated at every step of the process.` },
-  { key: 'documents_pending', label: 'Documents Pending', text: (c) => `Hi ${c.clientName || 'there'}, we're still waiting on a few documents/details from your end to move forward. Could you please share them at your earliest convenience?` },
-];
-
-// Formats a stored mobile number into the digits-only, country-code-prefixed format wa.me
-// expects. Assumes a bare 10-digit number is an Indian mobile number (no +91 stored).
-const formatForWhatsApp = (mobileNumber) => {
-  const digits = String(mobileNumber || '').replace(/\D/g, '');
-  if (!digits) return null;
-  if (digits.length === 10) return `91${digits}`;
-  return digits;
-};
-
 const getStatusLabel = (status) => {
   if (status === 'Completed') return 'Completed';
   if (status === 'In Progress') return 'In Progress';
@@ -171,20 +148,6 @@ export default function TechnicalPortal({
 
   const [selectedLeadId, setSelectedLeadId] = useState(null);
   const [listSearchQuery, setListSearchQuery] = useState('');
-
-  // { clientId, key, text } of the template currently selected/being previewed in the Client Notes section
-  const [selectedWhatsAppTemplate, setSelectedWhatsAppTemplate] = useState(null);
-
-  const handleSendWhatsAppTemplate = (client, messageText) => {
-    const number = formatForWhatsApp(client.mobileNumber);
-    if (!number) {
-      onAddToast?.('Missing Number', 'This client has no valid mobile number on file.', 'error');
-      return;
-    }
-    const url = `https://wa.me/${number}?text=${encodeURIComponent(messageText)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setSelectedWhatsAppTemplate(null);
-  };
 
   const [postersStatus, setPostersStatus] = useState('Pending');
   const [postersPending, setPostersPending] = useState(0);
@@ -1466,8 +1429,8 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                           </div>
                         </div>
 
-                        {/* Postings Card — Ads Team internal tracking only */}
-{user?.team === 'ads' && (Number(lead.postersRequired) > 0 || Number(lead.videosRequired) > 0) && (
+                        {/* Postings Card — Ads Team internal tracking only, and only after they've claimed the client */}
+{user?.team === 'ads' && isClaimed && (Number(lead.postersRequired) > 0 || Number(lead.videosRequired) > 0) && (
   <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-3 md:col-span-2">
     <div className="flex justify-between items-center">
       <h4 className="text-[10px] font-bold text-gray-400 dark:text-gray-555 uppercase tracking-wider">Postings</h4>
@@ -2138,56 +2101,6 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                         <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-800/60">{client.notes || 'No notes provided.'}</p>
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Quick WhatsApp Templates</span>
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {CLIENT_MESSAGE_TEMPLATES.map((tpl) => {
-                            const cid = client._id || client.id;
-                            const isActive = selectedWhatsAppTemplate?.clientId === cid && selectedWhatsAppTemplate?.key === tpl.key;
-                            return (
-                              <button
-                                key={tpl.key}
-                                type="button"
-                                onClick={() => setSelectedWhatsAppTemplate({ clientId: cid, key: tpl.key, text: tpl.text(client) })}
-                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-colors ${
-                                  isActive
-                                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
-                                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-300 hover:border-emerald-500/40 hover:text-emerald-600'
-                                }`}
-                              >
-                                {tpl.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {selectedWhatsAppTemplate?.clientId === (client._id || client.id) && (
-                          <div className="mt-2 p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-2">
-                            <textarea
-                              value={selectedWhatsAppTemplate.text}
-                              onChange={(e) => setSelectedWhatsAppTemplate((prev) => ({ ...prev, text: e.target.value }))}
-                              rows="3"
-                              className="w-full rounded-lg border border-emerald-500/30 py-2 px-3 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white resize-y"
-                            />
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[10px] text-gray-450 dark:text-gray-500">
-                                Opens WhatsApp chat with {client.mobileNumber || 'N/A'} — you still press Send inside WhatsApp.
-                              </span>
-                              <div className="flex gap-2 shrink-0">
-                                <button type="button" onClick={() => setSelectedWhatsAppTemplate(null)} className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800">
-                                  Cancel
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendWhatsAppTemplate(client, selectedWhatsAppTemplate.text)}
-                                  className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-emerald-500 text-white hover:bg-emerald-600"
-                                >
-                                  📲 Send via WhatsApp
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div>
                         <span className="text-[10px] font-bold text-gray-400 dark:text-gray-550 block uppercase">Internal Production Remarks</span>
                         <p className="text-xs text-gray-800 dark:text-gray-200 mt-1 whitespace-pre-line leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-gray-100 dark:border-slate-805 font-medium">{client.remarks || 'No internal remarks.'}</p>
                       </div>
@@ -2225,7 +2138,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-7xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
+                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
               >
                 <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                   <div>
@@ -2241,39 +2154,47 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                     <div className="text-center py-12 text-gray-400 dark:text-gray-500">No client records match this category.</div>
                   ) : (
                     <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
-                      <table className="w-full min-w-[1000px] text-left text-sm border-collapse">
+                      <table className="w-full text-left text-sm border-collapse table-fixed">
+                        <colgroup>
+                          <col className="w-[10%]" />
+                          <col className="w-[19%]" />
+                          <col className="w-[12%]" />
+                          <col className="w-[19%]" />
+                          <col className="w-[24%]" />
+                          <col className="w-[16%]" />
+                        </colgroup>
                         <thead>
                           <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Client ID</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
                             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Business Number</th>
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Workflow Status</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
                             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
-                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300 whitespace-nowrap">Created By</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Created By</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                           {list.map((client) => (
                             <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors align-top">
-                              <td className="p-3 whitespace-nowrap">
-                                <button type="button" onClick={() => { setActiveMetricsModal(null); setViewedClientId(client._id || client.id); }} className="font-bold text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer">
+                              <td className="p-3 truncate">
+                                <button type="button" onClick={() => { setActiveMetricsModal(null); setViewedClientId(client._id || client.id); }} className="font-bold text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer truncate block" title={client.clientId}>
                                   {client.clientId || 'N/A'}
                                 </button>
                               </td>
-                              <td className="p-3 text-gray-900 dark:text-white font-bold">
+                              <td className="p-3 text-gray-900 dark:text-white font-bold overflow-hidden">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span>{client.clientName}</span>
+                                  <span className="truncate" title={client.clientName}>{client.clientName}</span>
                                   {(() => { const badge = getPaymentStatus(client); return <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 ${badge.color}`}>{badge.label}</span>; })()}
                                 </div>
-                                {client.companyName && <div className="text-xs text-gray-405 dark:text-gray-550 font-normal mt-0.5">{client.companyName}</div>}
+                                {client.companyName && <div className="text-xs text-gray-405 dark:text-gray-550 font-normal mt-0.5 truncate" title={client.companyName}>{client.companyName}</div>}
                               </td>
-                              <td className="p-3 font-mono whitespace-nowrap">{client.mobileNumber}</td>
-                              <td className="p-3 whitespace-nowrap">
+                              <td className="p-3 font-mono truncate">{client.mobileNumber}</td>
+                              <td className="p-3">
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${client.workflowStatus === 'Completed' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : client.workflowStatus === 'In Progress' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
                                   {getStatusLabel(client.workflowStatus)}
                                 </span>
                               </td>
-                              <td className="p-3 text-xs">
+                              <td className="p-3 text-xs overflow-hidden">
                                 {(() => {
                                   const teams = client.assignedTeam;
                                   const teamList = !teams ? [] : Array.isArray(teams) ? teams : teams === 'all' ? ['design', 'developer', 'ads'] : [teams];
@@ -2287,7 +2208,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                   return (
                                     <div className="flex flex-col gap-1">
                                       {assignees.map((a, i) => (
-                                        <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold w-fit ${a.color}`}>
+                                        <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold truncate ${a.color}`} title={`${a.team}: ${a.name || 'Unclaimed'}`}>
                                           {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
                                         </span>
                                       ))}
@@ -2295,7 +2216,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                                   );
                                 })()}
                               </td>
-                              <td className="p-3 text-xs text-gray-500 font-semibold whitespace-nowrap">{client.salespersonName}</td>
+                              <td className="p-3 text-xs text-gray-500 font-semibold truncate">{client.salespersonName}</td>
                             </tr>
                           ))}
                         </tbody>

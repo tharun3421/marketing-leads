@@ -1,11 +1,55 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Send, CornerDownRight, X, MessageSquare, Clock, User, Layers, Briefcase } from 'lucide-react';
+import { Send, CornerDownRight, X, MessageSquare, Clock, User, Layers, Briefcase, MessageCircle } from 'lucide-react';
 import Button from './Button';
+
+// Predefined WhatsApp message templates offered inside the "Client Notes" chat card.
+// Uses WhatsApp's free "click to chat" deep link (wa.me) — this only pre-fills a message
+// in the recipient's chat window; it does NOT use the WhatsApp Business API, so it needs
+// no Meta verification, message templates, or API credentials. Whoever clicks Send still
+// has to press Send inside WhatsApp itself once it opens — that's inherent to this approach.
+const WHATSAPP_TEMPLATES = [
+  { key: 'payment_reminder', label: 'Payment Reminder', text: (c) => `Hi ${c.clientName || 'there'}, this is a friendly reminder that your payment for ${c.companyName || 'your project'} is currently pending. Please let us know if you have any questions or need help completing it. Thank you!` },
+  { key: 'project_update', label: 'Project Update', text: (c) => `Hi ${c.clientName || 'there'}, quick update — our team is actively working on your project and progressing well. We'll keep you posted as things move forward. Thanks for your patience!` },
+  { key: 'work_completed', label: 'Work Completed', text: (c) => `Hi ${c.clientName || 'there'}, great news! The work on your project has been completed. Please take a look and share your feedback whenever you get a chance.` },
+  { key: 'meeting_reminder', label: 'Meeting Reminder', text: (c) => `Hi ${c.clientName || 'there'}, just a quick reminder about our upcoming meeting regarding your project. Looking forward to connecting with you!` },
+  { key: 'welcome', label: 'Welcome Message', text: (c) => `Hi ${c.clientName || 'there'}, welcome aboard! We're excited to start working with you and will keep you updated at every step of the process.` },
+  { key: 'documents_pending', label: 'Documents Pending', text: (c) => `Hi ${c.clientName || 'there'}, we're still waiting on a few documents/details from your end to move forward. Could you please share them at your earliest convenience?` },
+];
+
+// Formats a stored mobile number into the digits-only, country-code-prefixed format wa.me
+// expects. Assumes a bare 10-digit number is an Indian mobile number (no +91 stored).
+const formatForWhatsApp = (mobileNumber) => {
+  const digits = String(mobileNumber || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (digits.length === 10) return `91${digits}`;
+  return digits;
+};
+
 
 export default function ClientChat({ leadId, layout = 'grid' }) {
   const { user, authFetch } = useAuth();
   const [localMessages, setLocalMessages] = useState([]);
+
+  // Basic client details (name/company/mobile) needed to personalize & send WhatsApp templates.
+  // Pulled from the same lead fetch used for messages, so no extra request or prop drilling needed.
+  const [clientInfo, setClientInfo] = useState({ clientName: '', companyName: '', mobileNumber: '' });
+
+  // WhatsApp quick-template state — only used by the "Client Notes" card
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null); // { key, text }
+
+  const handleSendWhatsAppTemplate = () => {
+    if (!selectedTemplate) return;
+    const number = formatForWhatsApp(clientInfo.mobileNumber);
+    if (!number) {
+      window.alert('This client has no valid mobile number on file.');
+      return;
+    }
+    const url = `https://wa.me/${number}?text=${encodeURIComponent(selectedTemplate.text)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setSelectedTemplate(null);
+  };
   
   // States for Work Notes (Workflow Card)
   const [workInput, setWorkInput] = useState('');
@@ -52,6 +96,11 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
         if (res.ok) {
           const data = await res.json();
           const nextMsgs = data.communications || [];
+          setClientInfo({
+            clientName: data.clientName || '',
+            companyName: data.companyName || '',
+            mobileNumber: data.mobileNumber || ''
+          });
           setLocalMessages(prev => {
             if (prev.length === nextMsgs.length) {
               const hasChanged = prev.some((msg, idx) => 
@@ -225,7 +274,8 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
     userSentRef,
     Icon,
     badgeText,
-    badgeColor
+    badgeColor,
+    showWhatsAppTemplates = false
   ) => {
     return (
       <div className={`flex flex-col bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs ${
@@ -238,9 +288,25 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
             <Icon className="w-4 h-4 text-indigo-500" />
             <span className="text-xs font-bold text-gray-800 dark:text-gray-200">{title}</span>
           </div>
-          <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider ${badgeColor}`}>
-            {badgeText}
-          </span>
+          <div className="flex items-center gap-2">
+            {showWhatsAppTemplates && (
+              <button
+                type="button"
+                onClick={() => setShowTemplates(v => !v)}
+                title="WhatsApp quick templates"
+                className={`flex items-center gap-1 text-[8.5px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider border transition-colors cursor-pointer ${
+                  showTemplates
+                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-500 dark:text-gray-400 hover:border-emerald-500/40 hover:text-emerald-600'
+                }`}
+              >
+                <MessageCircle className="w-2.5 h-2.5" /> Templates
+              </button>
+            )}
+            <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider ${badgeColor}`}>
+              {badgeText}
+            </span>
+          </div>
         </div>
 
         {/* Messages List Area */}
@@ -312,6 +378,66 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
           )}
           <div ref={endRef} />
         </div>
+
+        {/* WhatsApp Quick Templates Panel — chat-bubble style suggestions the user picks from,
+            then confirms with Send, which opens the pre-filled WhatsApp chat */}
+        {showWhatsAppTemplates && showTemplates && (
+          <div className="border-t border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/5 p-2.5 space-y-2 max-h-[220px] overflow-y-auto scrollbar-thin">
+            <div className="flex items-center gap-1.5 text-[9px] font-extrabold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider px-0.5">
+              <MessageCircle className="w-3 h-3" /> WhatsApp Templates — tap one to preview
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {WHATSAPP_TEMPLATES.map((tpl) => {
+                const isActive = selectedTemplate?.key === tpl.key;
+                return (
+                  <button
+                    key={tpl.key}
+                    type="button"
+                    onClick={() => setSelectedTemplate({ key: tpl.key, label: tpl.label, text: tpl.text(clientInfo) })}
+                    className={`text-left p-2 px-3 rounded-xl rounded-tl-none text-[11px] leading-relaxed border shadow-2xs transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-emerald-500 border-emerald-600 text-white'
+                        : 'bg-white dark:bg-slate-850 border-dashed border-emerald-500/30 text-gray-700 dark:text-gray-300 hover:border-emerald-500/60'
+                    }`}
+                  >
+                    <span className={`block text-[8.5px] font-extrabold uppercase tracking-wider mb-0.5 ${isActive ? 'text-emerald-100' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {tpl.label}
+                    </span>
+                    <span className="line-clamp-2">{tpl.text(clientInfo)}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedTemplate && (
+              <div className="mt-1 p-2.5 rounded-xl border border-emerald-500/40 bg-white dark:bg-slate-900 space-y-2">
+                <textarea
+                  value={selectedTemplate.text}
+                  onChange={(e) => setSelectedTemplate((prev) => ({ ...prev, text: e.target.value }))}
+                  rows="3"
+                  className="w-full resize-y rounded-lg border border-emerald-500/30 p-2 text-[11px] bg-slate-500/2 dark:bg-slate-950/20 text-gray-900 dark:text-white outline-hidden focus:border-emerald-500"
+                />
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[9px] text-gray-450 dark:text-gray-500">
+                    Opens WhatsApp with {clientInfo.mobileNumber || 'N/A'} — you still press Send inside WhatsApp.
+                  </span>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button type="button" onClick={() => setSelectedTemplate(null)} className="px-2.5 py-1 rounded-lg text-[9.5px] font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 cursor-pointer">
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSendWhatsAppTemplate}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9.5px] font-bold bg-emerald-500 text-white hover:bg-emerald-600 cursor-pointer"
+                    >
+                      <Send className="w-2.5 h-2.5" /> Send via WhatsApp
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Input Composer Panel */}
         <form 
@@ -412,7 +538,8 @@ export default function ClientChat({ leadId, layout = 'grid' }) {
         clientUserSentRef,
         User,
         'Customer Facing',
-        'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10'
+        'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/10',
+        true
       )}
 
       {/* Sales Notes Card — only visible to admin and salesperson */}
