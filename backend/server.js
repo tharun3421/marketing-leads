@@ -37,11 +37,11 @@ const seedDatabase = async () => {
       // Seed Admin
       await User.create({
         name: 'CRM Administrator',
-        username: 'admin',
-        password: 'admin123', // Will be auto-hashed by pre-save hook
+        username: 'admin@livedigit.in',
+        password: 'Livedigit.admin@2026', // Will be auto-hashed by pre-save hook
         role: 'admin'
       });
-      console.log('Seeded Administrator account: admin / admin123');
+      console.log('Seeded Administrator account: admin@livedigit.in');
 
       // Seed default Salespeople
       const defaultSalespeople = [

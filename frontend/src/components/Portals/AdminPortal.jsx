@@ -2608,9 +2608,9 @@ const getMetricsModalTitleAndList = () => {
       case 'total':
         return { title: 'Total Clients', list: leads };
       case 'non-allocated':
-        return { title: 'Non-Allocated Clients', list: leads.filter(l => (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated') };
+        return { title: 'Non-Allocated Clients', list: leads.filter(l => !l.assignedTeam) };
       case 'allocated':
-        return { title: 'Allocated Clients', list: leads.filter(l => l.workflowStatus === 'Allocated') };
+        return { title: 'Allocated Clients', list: leads.filter(l => !!l.assignedTeam) };
       case 'claimed':
         return { title: 'Claimed Tasks', list: leads.filter(l => l.assignedTo !== null) };
       case 'in-progress':
@@ -2822,7 +2822,7 @@ const handleClientFieldChange = (field, value) => {
           <div>
             <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Non-Allocated</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">
-              {leads.filter(l => (l.workflowStatus || 'Non-Allocated') === 'Non-Allocated').length}
+              {leads.filter(l => !l.assignedTeam).length}
             </p>
           </div>
         </div>
@@ -2838,7 +2838,7 @@ const handleClientFieldChange = (field, value) => {
           <div>
             <p className="text-[10px] font-bold text-gray-555 dark:text-gray-400 uppercase tracking-wider">Allocated</p>
             <p className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">
-              {leads.filter(l => l.workflowStatus === 'Allocated').length}
+              {leads.filter(l => !!l.assignedTeam).length}
             </p>
           </div>
         </div>
@@ -3944,12 +3944,12 @@ const handleClientFieldChange = (field, value) => {
                   <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
                     <table className="w-full text-left text-sm border-collapse table-fixed">
                       <colgroup>
-                        <col className="w-[11%]" />
-                        <col className="w-[20%]" />
-                        <col className="w-[13%]" />
-                        <col className="w-[18%]" />
-                        <col className="w-[22%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[24%]" />
+                        <col className="w-[12%]" />
                         <col className="w-[16%]" />
+                        <col className="w-[24%]" />
+                        <col className="w-[14%]" />
                       </colgroup>
                       <thead>
                         <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
@@ -3964,7 +3964,7 @@ const handleClientFieldChange = (field, value) => {
                       <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                         {list.map((client) => (
                           <tr key={client._id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors align-top">
-                            <td className="p-3 truncate">
+                            <td className="p-3 break-words">
                               <button
                                 onClick={() => {
                                   setActiveMetricsModal(null); // Close metrics list modal
@@ -3972,21 +3972,20 @@ const handleClientFieldChange = (field, value) => {
                                   setIsEditingClient(false);
                                   setEditedClientFields({});
                                 }}
-                                className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer truncate block"
-                                title={client.clientId}
+                                className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer break-words block"
                               >
                                 {client.clientId || 'N/A'}
                               </button>
                             </td>
-                            <td className="p-3 text-gray-900 dark:text-white font-bold overflow-hidden">
-                              <div className="truncate" title={client.clientName}>{client.clientName}</div>
+                            <td className="p-3 text-gray-900 dark:text-white font-bold">
+                              <div className="break-words">{client.clientName}</div>
                               {client.companyName && (
-                                <div className="text-xs text-gray-405 dark:text-gray-500 font-normal mt-0.5 truncate" title={client.companyName}>
+                                <div className="text-xs text-gray-405 dark:text-gray-500 font-normal mt-0.5 break-words">
                                   {client.companyName}
                                 </div>
                               )}
                             </td>
-                            <td className="p-3 font-mono truncate">{client.mobileNumber}</td>
+                            <td className="p-3 font-mono break-words">{client.mobileNumber}</td>
                             <td className="p-3">
                               <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
                                 client.workflowStatus === 'Completed'
@@ -4012,7 +4011,7 @@ const handleClientFieldChange = (field, value) => {
                                 return (
                                   <div className="flex flex-col gap-1">
                                     {assignees.map((a, i) => (
-                                      <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold truncate ${a.color}`} title={`${a.team}: ${a.name || 'Unclaimed'}`}>
+                                      <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold break-words ${a.color}`} title={`${a.team}: ${a.name || 'Unclaimed'}`}>
                                         {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
                                       </span>
                                     ))}
@@ -4020,7 +4019,7 @@ const handleClientFieldChange = (field, value) => {
                                 );
                               })()}
                             </td>
-                            <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold truncate">
+                            <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold break-words">
                               {client.salespersonName}
                             </td>
                           </tr>

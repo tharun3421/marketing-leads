@@ -1909,14 +1909,14 @@ export default function SalesPortal({
                         <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
                           {list.map((client) => (
                             <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors align-top">
-                              <td className="p-3 truncate">
+                              <td className="p-3 break-words">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setActiveMetricsModal(null);
                                     setViewedClientId(client._id || client.id);
                                   }}
-                                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer truncate block"
+                                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer break-words block"
                                   title={client.clientId}
                                 >
                                   {client.clientId || 'N/A'}
@@ -1924,7 +1924,7 @@ export default function SalesPortal({
                               </td>
                                <td className="p-3 text-gray-900 dark:text-white font-bold overflow-hidden">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="truncate" title={client.clientName}>{client.clientName}</span>
+                                  <span className="break-words" title={client.clientName}>{client.clientName}</span>
                                   {(() => {
                                     const badge = getPaymentStatus(client);
                                     return (
@@ -1935,12 +1935,12 @@ export default function SalesPortal({
                                   })()}
                                 </div>
                                 {client.companyName && (
-                                  <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5 truncate" title={client.companyName}>
+                                  <div className="text-xs text-gray-400 dark:text-gray-500 font-normal mt-0.5 break-words" title={client.companyName}>
                                     {client.companyName}
                                   </div>
                                 )}
                               </td>
-                              <td className="p-3 font-mono truncate">{client.mobileNumber}</td>
+                              <td className="p-3 font-mono break-words">{client.mobileNumber}</td>
                               <td className="p-3">
                                 {(() => {
                                   const perTeam = getPerTeamStatusBadges(client);
@@ -1991,7 +1991,7 @@ export default function SalesPortal({
                                   return (
                                     <div className="flex flex-col gap-1">
                                       {assignees.map((a, i) => (
-                                        <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold truncate ${a.color}`} title={`${a.team}: ${a.name || 'Unclaimed'}`}>
+                                        <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold break-words ${a.color}`} title={`${a.team}: ${a.name || 'Unclaimed'}`}>
                                           {a.team}: {a.name || <span className="opacity-50 italic">Unclaimed</span>}
                                         </span>
                                       ))}
@@ -1999,7 +1999,7 @@ export default function SalesPortal({
                                   );
                                 })()}
                               </td>
-                              <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold truncate">
+                              <td className="p-3 text-indigo-650 dark:text-indigo-400 font-semibold break-words">
                                 {client.salespersonName}
                               </td>
                             </tr>
