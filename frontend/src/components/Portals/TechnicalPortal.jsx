@@ -302,7 +302,7 @@ export default function TechnicalPortal({
       setPostingsVideosStatus('Pending');
       setPostingsVideosPending(0);
     }
-  }, [selectedLeadId, teamAssigneeId]);
+  }, [selectedLeadId, teamAssigneeId, selectedLead?.updatedAt]);
 
   const handleSelectLead = (leadId) => {
     setSelectedLeadId(leadId);
@@ -363,13 +363,13 @@ export default function TechnicalPortal({
        }
 
       if (selectedLead.postersRequired !== undefined) {
-        const postersPendingCount = postersStatus === 'Completed' ? 0 : (postersStatus === 'Pending' ? Number(selectedLead.postersRequired || 0) : Number(postersPending));
+        const postersPendingCount = postersStatus === 'Completed' ? 0 : Number(postersPending);
         updatePayload.postersStatus = postersStatus;
         updatePayload.postersPending = postersPendingCount;
       }
 
       if (selectedLead.videosRequired !== undefined) {
-        const videosPendingCount = videosStatus === 'Completed' ? 0 : (videosStatus === 'Pending' ? Number(selectedLead.videosRequired || 0) : Number(videosPending));
+        const videosPendingCount = videosStatus === 'Completed' ? 0 : Number(videosPending);
         updatePayload.videosStatus = videosStatus;
         updatePayload.videosPending = videosPendingCount;
       }
@@ -610,14 +610,12 @@ export default function TechnicalPortal({
   const completedCampaigns = useMemo(() => totalCampaigns - pendingCampaigns, [totalCampaigns, pendingCampaigns]);
 
   const totalClientsCount = useMemo(() => teamLeads.length, [teamLeads]);
-  const claimedClientsCount = useMemo(() => teamLeads.filter(l => {
-    const ta = user?.team === 'developer' ? l.assignedDeveloper
-      : user?.team === 'design' ? l.assignedDesigner
-      : user?.team === 'ads' ? l.assignedAdSpecialist
-      : l.assignedTo;
-    return !!ta;
-  }).length, [teamLeads, user?.team]);
+  // Claimed should reflect leads claimed BY THIS USER, not every claimed lead across
+  // the whole department — myLeads is already scoped to the logged-in user's claims.
+  const claimedClientsCount = useMemo(() => myLeads.length, [myLeads]);
 
+  // Unclaimed stays department-wide on purpose: an unclaimed lead has no owner yet,
+  // so it can't be scoped to "this user" — it represents the shared claimable pool.
   const unclaimedClientsCount = useMemo(() => teamLeads.filter(l => {
     const ta = user?.team === 'developer' ? l.assignedDeveloper
       : user?.team === 'design' ? l.assignedDesigner
@@ -637,21 +635,18 @@ export default function TechnicalPortal({
     return lead.workflowStatus || 'Non-Allocated';
   };
 
-  const inProgressClientsCount = useMemo(() => teamLeads.filter(l => getMyTeamStatus(l) === 'In Progress').length, [teamLeads, user?.team]);
-  const pendingClientsCount = useMemo(() => teamLeads.filter(l => getMyTeamStatus(l) !== 'In Progress' && getMyTeamStatus(l) !== 'Completed').length, [teamLeads, user?.team]);
-  const completedClientsCount = useMemo(() => teamLeads.filter(l => getMyTeamStatus(l) === 'Completed').length, [teamLeads, user?.team]);
+  // Same fix here: In Progress / Pending / Completed are per-user work status,
+  // so they must be derived from myLeads (claimed by this user), not the whole team.
+  const inProgressClientsCount = useMemo(() => myLeads.filter(l => getMyTeamStatus(l) === 'In Progress').length, [myLeads, user?.team]);
+  const pendingClientsCount = useMemo(() => myLeads.filter(l => getMyTeamStatus(l) !== 'In Progress' && getMyTeamStatus(l) !== 'Completed').length, [myLeads, user?.team]);
+  const completedClientsCount = useMemo(() => myLeads.filter(l => getMyTeamStatus(l) === 'Completed').length, [myLeads, user?.team]);
 
   const getMetricsModalTitleAndList = () => {
     switch (activeMetricsModal) {
       case 'total': return { title: 'Total Department Clients', list: teamLeads };
       case 'claimed': return {
-        title: 'Claimed Department Clients',
-        list: teamLeads.filter(l => {
-          const ta = user?.team === 'developer' ? l.assignedDeveloper
-            : user?.team === 'design' ? l.assignedDesigner
-            : user?.team === 'ads' ? l.assignedAdSpecialist : l.assignedTo;
-          return !!ta;
-        })
+        title: 'My Claimed Clients',
+        list: myLeads
       };
       case 'unclaimed': return {
         title: 'Unclaimed Department Clients',
@@ -662,9 +657,9 @@ export default function TechnicalPortal({
           return !ta;
         })
       };
-      case 'in-progress': return { title: 'In-Progress Campaigns', list: teamLeads.filter(l => getMyTeamStatus(l) === 'In Progress') };
-      case 'pending': return { title: 'Pending Campaigns', list: teamLeads.filter(l => getMyTeamStatus(l) !== 'In Progress' && getMyTeamStatus(l) !== 'Completed') };
-      case 'completed': return { title: 'Completed Campaigns', list: teamLeads.filter(l => getMyTeamStatus(l) === 'Completed') };
+      case 'in-progress': return { title: 'My In-Progress Campaigns', list: myLeads.filter(l => getMyTeamStatus(l) === 'In Progress') };
+      case 'pending': return { title: 'My Pending Campaigns', list: myLeads.filter(l => getMyTeamStatus(l) !== 'In Progress' && getMyTeamStatus(l) !== 'Completed') };
+      case 'completed': return { title: 'My Completed Campaigns', list: myLeads.filter(l => getMyTeamStatus(l) === 'Completed') };
       default: return { title: '', list: [] };
     }
   };

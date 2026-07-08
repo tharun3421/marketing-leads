@@ -979,11 +979,64 @@ export default function AdminPortal({
     return schedules;
   };
 
+  // Builds the accurate list of deliverables owed to a client, matching exactly the
+  // same "is this actually required" checks the Technical portal uses to decide
+  // completion (postersRequired/videosRequired counts, per-platform plan durations,
+  // and the GMB platform flag) — so this never shows a deliverable that isn't real.
+  const getDeliverables = (lead) => {
+    const items = [];
+
+    if (lead.websiteRequired) {
+      items.push({ label: 'Website', status: lead.websiteStatus || 'Pending' });
+    }
+    if (Number(lead.postersRequired || 0) > 0) {
+      const total = Number(lead.postersRequired || 0);
+      const pending = Number(lead.postersPending ?? total);
+      const done = Math.max(0, total - pending);
+      items.push({ label: `Posters ${done}/${total}`, status: lead.postersStatus || 'Pending' });
+    }
+    if (Number(lead.videosRequired || 0) > 0) {
+      const total = Number(lead.videosRequired || 0);
+      const pending = Number(lead.videosPending ?? total);
+      const done = Math.max(0, total - pending);
+      items.push({ label: `Videos ${done}/${total}`, status: lead.videosStatus || 'Pending' });
+    }
+    if (Number(lead.metaAdsPlanDuration || 0) > 0) {
+      items.push({ label: 'Meta Ads', status: lead.metaAdsCampaignStatus || 'Pending' });
+    }
+    if (Number(lead.googleAdsPlanDuration || 0) > 0) {
+      items.push({ label: 'Google Ads', status: lead.googleAdsCampaignStatus || 'Pending' });
+    }
+    if (Number(lead.youtubeAdsPlanDuration || 0) > 0) {
+      items.push({ label: 'YouTube Ads', status: lead.youtubeAdsCampaignStatus || 'Pending' });
+    }
+    if (Number(lead.linkedinAdsPlanDuration || 0) > 0) {
+      items.push({ label: 'LinkedIn Ads', status: lead.linkedinAdsCampaignStatus || 'Pending' });
+    }
+    if (Number(lead.seoPlanDuration || 0) > 0) {
+      items.push({ label: 'SEO', status: lead.seoCampaignStatus || 'Pending' });
+    }
+    if (lead.platforms && lead.platforms.includes('GMB')) {
+      items.push({ label: 'GMB', status: lead.gmbCampaignStatus || 'Pending' });
+    }
+    return items;
+  };
+
+  const getDeliverableBadgeColor = (status) => {
+    if (status === 'Completed') return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
+    if (status === 'In Progress') return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20';
+    return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+  };
+
   const handleSalesReportExcelDownload = () => {
     const rows = filteredSalesReportLeads.map(lead => {
       const schedules = getCampaignSchedule(lead);
       const scheduleStr = schedules.length > 0
         ? schedules.map(s => `${s.service}: ${s.start} → ${s.end}`).join(' | ')
+        : '—';
+      const deliverables = getDeliverables(lead);
+      const deliverablesStr = deliverables.length > 0
+        ? deliverables.map(d => `${d.label} (${d.status})`).join(' | ')
         : '—';
       return {
         'Client ID': lead.clientId || '—',
@@ -993,6 +1046,7 @@ export default function AdminPortal({
         'Business Name': lead.companyName || '—',
         'Business Number': lead.mobileNumber || '—',
         'Plan Schedule': scheduleStr,
+        'Deliverables': deliverablesStr,
         'Plan Amount (₹)': Number(lead.planAmount || 0),
         'Advance Amount (₹)': Number(lead.advanceAmount || 0),
         'Pending Amount (₹)': Number(lead.pendingAmount || 0),
@@ -1009,6 +1063,7 @@ export default function AdminPortal({
       'Business Name': '',
       'Business Number': '',
       'Plan Schedule': '',
+      'Deliverables': '',
       'Plan Amount (₹)': salesReportTotals.totalPlan,
       'Advance Amount (₹)': '',
       'Pending Amount (₹)': salesReportTotals.totalPayable,
@@ -1066,6 +1121,10 @@ export default function AdminPortal({
         const scheduleStr = schedules.length > 0
           ? schedules.map(s => `${s.service}: ${s.start} → ${s.end}`).join(' | ')
           : '—';
+        const deliverables = getDeliverables(lead);
+        const deliverablesStr = deliverables.length > 0
+          ? deliverables.map(d => `${d.label} (${d.status})`).join(' | ')
+          : '—';
         return {
           clientId: lead.clientId || '—',
           createdDate: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-IN') : '—',
@@ -1074,6 +1133,7 @@ export default function AdminPortal({
           businessName: lead.companyName || '—',
           businessNumber: lead.mobileNumber || '—',
           planSchedule: scheduleStr,
+          deliverables: deliverablesStr,
           planAmount: Number(lead.planAmount || 0),
           advanceAmount: Number(lead.advanceAmount || 0),
           pendingAmount: Number(lead.pendingAmount || 0),
@@ -5031,33 +5091,33 @@ const handleClientFieldChange = (field, value) => {
               No clients match your filters.
             </div>
           ) : (
-            <table className="min-w-[1100px] w-full text-left text-xs border-collapse">
+            <table className="min-w-[1080px] w-full text-left text-xs border-collapse">
               <thead className="sticky top-0 z-[5]">
                 <tr className="bg-gray-50 dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800">
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">#</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client ID</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Created Date</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Created By</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client Name</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Business Name</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Business Number</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Plan Schedule</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Plan Amount</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Advance</th>
-                  <th className="px-4 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Pending</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">#</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client ID</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Created</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client Name</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Business</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap w-[130px]">Plan Schedule</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap w-[150px]">Deliverables</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Plan Amt</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Advance</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap text-right">Pending</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-slate-800/50">
                 {filteredSalesReportLeads.map((lead, idx) => {
                   const schedules = getCampaignSchedule(lead);
+                  const deliverables = getDeliverables(lead);
                   const plan = Number(lead.planAmount || 0);
                   const advance = Number(lead.advanceAmount || 0);
                   const pending = Number(lead.pendingAmount || 0);
                   const payStatus = getPaymentStatus(lead);
                   return (
                     <tr key={lead._id || idx} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/3 transition-colors">
-  <td className="px-4 py-3 text-gray-400 dark:text-gray-500 font-medium">{idx + 1}</td>
-  <td className="px-4 py-3">
+  <td className="px-2.5 py-2.5 text-gray-400 dark:text-gray-500 font-medium">{idx + 1}</td>
+  <td className="px-2.5 py-2.5">
     <button
       type="button"
       onClick={() => {
@@ -5066,36 +5126,38 @@ const handleClientFieldChange = (field, value) => {
         setIsEditingClient(false);
         setEditedClientFields({});
       }}
-      className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+      className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer break-words text-left"
     >
       {lead.clientId || '—'}
     </button>
   </td>
-  <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">
-    {lead.createdAt
-      ? new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-      : '—'}
+  <td className="px-2.5 py-2.5 text-gray-600 dark:text-gray-300">
+    <div className="whitespace-nowrap">
+      {lead.createdAt
+        ? new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '—'}
+    </div>
+    <div className="text-[10px] text-gray-400 dark:text-gray-500 break-words">{lead.salespersonName || '—'}</div>
   </td>
-  <td className="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium whitespace-nowrap">
-    {lead.salespersonName || '—'}
-  </td>
-  <td className="px-4 py-3">
-    <div className="font-semibold text-gray-900 dark:text-white whitespace-nowrap">{lead.clientName || '—'}</div>
+  <td className="px-2.5 py-2.5">
+    <div className="font-semibold text-gray-900 dark:text-white break-words">{lead.clientName || '—'}</div>
     <span className={`inline-block mt-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${payStatus.color}`}>
       {payStatus.label}
     </span>
   </td>
-  <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.companyName || '—'}</td>
-  <td className="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">{lead.mobileNumber || '—'}</td>
-  <td className="px-4 py-3 min-w-[200px]">
+  <td className="px-2.5 py-2.5">
+    <div className="text-gray-600 dark:text-gray-300 break-words">{lead.companyName || '—'}</div>
+    <div className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">{lead.mobileNumber || '—'}</div>
+  </td>
+  <td className="px-2.5 py-2.5">
     {schedules.length > 0 ? (
-      <div className="space-y-1">
+      <div className="flex flex-col gap-1">
         {schedules.map((s, si) => (
-          <div key={si} className="flex items-center gap-1.5 flex-wrap">
-            <span className="px-1.5 py-0.5 bg-indigo-500/10 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 rounded-md font-semibold text-[10px] whitespace-nowrap">
+          <div key={si} className="flex flex-col gap-0.5 leading-tight">
+            <span className="px-1 py-0.5 bg-indigo-500/10 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 rounded-md font-semibold text-[9px] whitespace-nowrap inline-block w-fit">
               {s.service}
             </span>
-            <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+            <span className="text-[9px] text-gray-500 dark:text-gray-400 break-words">
               {s.start !== '—' || s.end !== '—' ? `${s.start} → ${s.end}` : 'Dates TBD'}
             </span>
           </div>
@@ -5105,10 +5167,27 @@ const handleClientFieldChange = (field, value) => {
       <span className="text-gray-400 dark:text-gray-500">—</span>
     )}
   </td>
-  <td className="px-4 py-3 text-right font-bold text-gray-900 dark:text-white whitespace-nowrap">
+  <td className="px-2.5 py-2.5">
+    {deliverables.length > 0 ? (
+      <div className="flex flex-col gap-0.5">
+        {deliverables.map((d, di) => (
+          <span
+            key={di}
+            className={`px-1 py-0.5 rounded-md font-semibold text-[9px] leading-tight inline-block w-fit ${getDeliverableBadgeColor(d.status)}`}
+            title={d.status}
+          >
+            {d.label}
+          </span>
+        ))}
+      </div>
+    ) : (
+      <span className="text-gray-400 dark:text-gray-500">—</span>
+    )}
+  </td>
+  <td className="px-2.5 py-2.5 text-right font-bold text-gray-900 dark:text-white whitespace-nowrap">
     {plan > 0 ? `₹${plan.toLocaleString('en-IN')}` : '—'}
   </td>
-  <td className="px-4 py-3 text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+  <td className="px-2.5 py-2.5 text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
     {editingAdvanceFor === lead._id ? (
       <div className="flex items-center justify-end gap-1.5">
         <input
@@ -5152,7 +5231,7 @@ const handleClientFieldChange = (field, value) => {
       </button>
     )}
   </td>
-  <td className="px-4 py-3 text-right font-bold whitespace-nowrap">
+  <td className="px-2.5 py-2.5 text-right font-bold whitespace-nowrap">
     {pending > 0
       ? <span className="text-amber-600 dark:text-amber-400">₹{pending.toLocaleString('en-IN')}</span>
       : <span className="text-gray-400">—</span>}
