@@ -391,7 +391,7 @@ export default function TechnicalPortal({
       // Auto-derive team status and workflowStatus from postings/tasks completion
       // Auto-derive team status and workflowStatus from postings/tasks completion
       if (user?.team === 'developer') {
-        updatePayload.workflowStatus = editDevTeamStatus === 'Completed' ? 'Completed' : 'In Progress';
+        updatePayload.workflowStatus = editDevTeamStatus;
 
       } else if (user?.team === 'design') {
         const hasPosters = Number(selectedLead.postersRequired || 0) > 0;

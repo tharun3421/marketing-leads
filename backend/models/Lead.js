@@ -168,7 +168,7 @@ const leadSchema = new mongoose.Schema({
   },
   workflowStatus: {
     type: String,
-    enum: ['Non-Allocated', 'Allocated', 'In Progress', 'Completed'],
+    enum: ['Non-Allocated', 'Allocated', 'Pending', 'In Progress', 'Completed'],
     default: 'Non-Allocated'
   },
   assignedTo: {
