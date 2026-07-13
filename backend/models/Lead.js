@@ -157,6 +157,11 @@ const leadSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  salesReviewNote: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   status: {
     type: String,
     enum: ['Draft', 'Submitted to Admin'],

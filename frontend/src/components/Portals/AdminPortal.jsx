@@ -29,7 +29,8 @@ import {
   Edit3,
   BarChart3,
   Sheet,
-  ExternalLink
+  ExternalLink,
+  FileText
 } from 'lucide-react';
 import Card from '../UI/Card';
 import Button from '../UI/Button';
@@ -229,6 +230,17 @@ export default function AdminPortal({
   const [salesReportYear, setSalesReportYear] = useState(new Date().getFullYear());
   const [salesReportStartDate, setSalesReportStartDate] = useState('');
   const [salesReportEndDate, setSalesReportEndDate] = useState('');
+
+  // Sales Review modal state (same layout/functionality as Sales Report, minus payment columns)
+  const [isSalesReviewOpen, setIsSalesReviewOpen] = useState(false);
+  const [salesReviewSearch, setSalesReviewSearch] = useState('');
+  const [salesReviewSheetsLoading, setSalesReviewSheetsLoading] = useState(false);
+  const [salesReviewRepFilter, setSalesReviewRepFilter] = useState('All');
+  const [salesReviewDateMode, setSalesReviewDateMode] = useState('all'); // 'all' | 'monthly' | 'custom'
+  const [salesReviewMonth, setSalesReviewMonth] = useState(new Date().getMonth() + 1);
+  const [salesReviewYear, setSalesReviewYear] = useState(new Date().getFullYear());
+  const [salesReviewStartDate, setSalesReviewStartDate] = useState('');
+  const [salesReviewEndDate, setSalesReviewEndDate] = useState('');
 
   // Central Clients Management filter states
   const [clientSearchQuery, setClientSearchQuery] = useState('');
@@ -917,6 +929,54 @@ export default function AdminPortal({
     totalPayable: filteredSalesReportLeads.reduce((s, l) => s + Number(l.pendingAmount || 0), 0),
   }), [filteredSalesReportLeads]);
 
+  const filteredSalesReviewLeads = useMemo(() => {
+  return leads.filter(lead => {
+    // 1. Client name / ID / business / phone search
+    const q = salesReviewSearch.toLowerCase().trim();
+    if (q) {
+      const match =
+        (lead.clientId || '').toLowerCase().includes(q) ||
+        (lead.clientName || '').toLowerCase().includes(q) ||
+        (lead.companyName || '').toLowerCase().includes(q) ||
+        (lead.salespersonName || '').toLowerCase().includes(q) ||
+        (lead.mobileNumber || '').toLowerCase().includes(q);
+      if (!match) return false;
+    }
+
+    // 2. Salesperson filter
+    if (salesReviewRepFilter !== 'All' && lead.salespersonName !== salesReviewRepFilter) {
+      return false;
+    }
+
+    // 3. Date filter
+    const createdAt = lead.createdAt ? new Date(lead.createdAt) : null;
+    if (salesReviewDateMode === 'monthly' && createdAt) {
+      if (
+        createdAt.getMonth() + 1 !== salesReviewMonth ||
+        createdAt.getFullYear() !== salesReviewYear
+      ) return false;
+    }
+    if (salesReviewDateMode === 'custom') {
+      if (salesReviewStartDate && createdAt) {
+        const start = new Date(salesReviewStartDate);
+        start.setHours(0, 0, 0, 0);
+        if (createdAt < start) return false;
+      }
+      if (salesReviewEndDate && createdAt) {
+        const end = new Date(salesReviewEndDate);
+        end.setHours(23, 59, 59, 999);
+        if (createdAt > end) return false;
+      }
+    }
+
+    return true;
+  });
+}, [leads, salesReviewSearch, salesReviewRepFilter, salesReviewDateMode, salesReviewMonth, salesReviewYear, salesReviewStartDate, salesReviewEndDate]);
+
+  const salesReviewTotals = useMemo(() => ({
+    totalWithNotes: filteredSalesReviewLeads.filter(l => (l.salesReviewNote || '').trim().length > 0).length,
+  }), [filteredSalesReviewLeads]);
+
   if (isLoading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center text-gray-905 dark:text-white">
@@ -1156,6 +1216,97 @@ export default function AdminPortal({
   };
 
   // ── END SALES REPORT HELPERS ───────────────────────────────────────────────
+
+  // ── SALES REVIEW HELPERS ────────────────────────────────────────────────────
+
+  const handleSalesReviewExcelDownload = () => {
+    const rows = filteredSalesReviewLeads.map(lead => {
+      const schedules = getCampaignSchedule(lead);
+      const scheduleStr = schedules.length > 0
+        ? schedules.map(s => `${s.service}: ${s.start} → ${s.end}`).join(' | ')
+        : '—';
+      const deliverables = getDeliverables(lead);
+      const deliverablesStr = deliverables.length > 0
+        ? deliverables.map(d => `${d.label} (${d.status})`).join(' | ')
+        : '—';
+      return {
+        'Client ID': lead.clientId || '—',
+        'Created Date': lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-IN') : '—',
+        'Created By': lead.salespersonName || '—',
+        'Client Name': lead.clientName || '—',
+        'Business Name': lead.companyName || '—',
+        'Business Number': lead.mobileNumber || '—',
+        'Plan Schedule': scheduleStr,
+        'Deliverables': deliverablesStr,
+        'Sales Review Note': lead.salesReviewNote || '—',
+      };
+    });
+
+    // Summary row
+    rows.push({});
+    rows.push({
+      'Client ID': 'SUMMARY',
+      'Created Date': '',
+      'Created By': '',
+      'Client Name': `Total Clients: ${filteredSalesReviewLeads.length}`,
+      'Business Name': '',
+      'Business Number': '',
+      'Plan Schedule': '',
+      'Deliverables': '',
+      'Sales Review Note': `With Notes: ${salesReviewTotals.totalWithNotes}`,
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Sales Review');
+    XLSX.writeFile(wb, `sales_review_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handleSalesReviewSheetsSync = async () => {
+    if (!appsScriptUrl) {
+      onAddToast('Sheets Not Configured', 'Please configure Google Sheets URL in Sheets Config first.', 'warning');
+      return;
+    }
+    setSalesReviewSheetsLoading(true);
+    try {
+      const payload = filteredSalesReviewLeads.map(lead => {
+        const schedules = getCampaignSchedule(lead);
+        const scheduleStr = schedules.length > 0
+          ? schedules.map(s => `${s.service}: ${s.start} → ${s.end}`).join(' | ')
+          : '—';
+        const deliverables = getDeliverables(lead);
+        const deliverablesStr = deliverables.length > 0
+          ? deliverables.map(d => `${d.label} (${d.status})`).join(' | ')
+          : '—';
+        return {
+          clientId: lead.clientId || '—',
+          createdDate: lead.createdAt ? new Date(lead.createdAt).toLocaleDateString('en-IN') : '—',
+          createdBy: lead.salespersonName || '—',
+          clientName: lead.clientName || '—',
+          businessName: lead.companyName || '—',
+          businessNumber: lead.mobileNumber || '—',
+          planSchedule: scheduleStr,
+          deliverables: deliverablesStr,
+          salesReviewNote: lead.salesReviewNote || '—',
+        };
+      });
+
+      const res = await fetch(appsScriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'sales_review', data: payload })
+      });
+      onAddToast('Synced to Sheets', 'Sales review data sent to Google Sheets successfully.', 'success');
+    } catch (err) {
+      console.error(err);
+      onAddToast('Sync Failed', 'Could not send data to Google Sheets. Check your Apps Script URL.', 'error');
+    } finally {
+      setSalesReviewSheetsLoading(false);
+    }
+  };
+
+  // ── END SALES REVIEW HELPERS ────────────────────────────────────────────────
 
   // Export specific Salesperson's clients to CSV
   const handleExportRepCSV = () => {
@@ -2759,6 +2910,16 @@ const handleClientFieldChange = (field, value) => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Sales Review Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsSalesReviewOpen(true)}
+            icon={FileText}
+          >
+            Sales Review
+          </Button>
+
           {/* Sales Report Button */}
           <Button
             variant="outline"
@@ -4873,6 +5034,344 @@ const handleClientFieldChange = (field, value) => {
 
 
       {/* ── SALES REPORT MODAL ───────────────────────────────────────────────── */}
+{isSalesReviewOpen && (() => {
+  // All filter state is driven by: salesReviewSearch, salesReviewDateMode,
+  // salesReviewMonth, salesReviewYear, salesReviewStartDate, salesReviewEndDate,
+  // salesReviewRepFilter — declared at top of component.
+  return (
+    <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-start justify-center p-4 z-150 overflow-y-auto animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-7xl my-6 shadow-2xl flex flex-col">
+
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 rounded-t-2xl z-10">
+          <div>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <FileText className="w-4.5 h-4.5 text-indigo-500" /> Sales Review
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Daily sales review notes &amp; campaign overview — {filteredSalesReviewLeads.length} client{filteredSalesReviewLeads.length !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-2.5">
+            {/* Google Sheets Sync */}
+            <button
+              onClick={handleSalesReviewSheetsSync}
+              disabled={salesReviewSheetsLoading}
+              title="Sync to Google Sheets"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {salesReviewSheetsLoading
+                ? <div className="w-3.5 h-3.5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                : <Sheet className="w-3.5 h-3.5" />
+              }
+              Google Sheets
+            </button>
+            {/* Excel Download */}
+            <button
+              onClick={handleSalesReviewExcelDownload}
+              title="Download Excel"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-indigo-50 dark:bg-indigo-950/20 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/40 transition-all cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download Excel
+            </button>
+            {/* Close */}
+            <button
+              onClick={() => {
+                setIsSalesReviewOpen(false);
+                setSalesReviewSearch('');
+                setSalesReviewRepFilter('All');
+                setSalesReviewDateMode('all');
+                setSalesReviewMonth(new Date().getMonth() + 1);
+                setSalesReviewYear(new Date().getFullYear());
+                setSalesReviewStartDate('');
+                setSalesReviewEndDate('');
+              }}
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── FILTER BAR ── */}
+        <div className="px-6 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800/60 bg-gray-50/40 dark:bg-slate-900/50 space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+
+            {/* Client Name Search */}
+            <div className="flex flex-col gap-1 min-w-[180px] flex-1">
+              <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Client Name</label>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search client, business, ID..."
+                  value={salesReviewSearch}
+                  onChange={e => setSalesReviewSearch(e.target.value)}
+                  className="pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 w-full transition-all"
+                />
+              </div>
+            </div>
+
+            {/* Salesperson Filter */}
+            <div className="flex flex-col gap-1 min-w-[160px]">
+              <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Sales Person</label>
+              <select
+                value={salesReviewRepFilter}
+                onChange={e => setSalesReviewRepFilter(e.target.value)}
+                className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer transition-all"
+              >
+                <option value="All">All Sales Persons</option>
+                {salespersonsList.map(sp => (
+                  <option key={sp._id || sp.id} value={sp.name}>{sp.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date Mode Toggle */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Date Filter Mode</label>
+              <div className="flex rounded-xl overflow-hidden border border-gray-200 dark:border-slate-700 text-xs font-semibold">
+                {[
+                  { val: 'all', label: 'All Time' },
+                  { val: 'monthly', label: 'Monthly' },
+                  { val: 'custom', label: 'Custom Range' },
+                ].map(opt => (
+                  <button
+                    key={opt.val}
+                    type="button"
+                    onClick={() => setSalesReviewDateMode(opt.val)}
+                    className={`px-3 py-2 transition-all cursor-pointer ${
+                      salesReviewDateMode === opt.val
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Monthly Picker */}
+            {salesReviewDateMode === 'monthly' && (
+              <div className="flex flex-col gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Month & Year</label>
+                <div className="flex gap-2">
+                  <select
+                    value={salesReviewMonth}
+                    onChange={e => setSalesReviewMonth(Number(e.target.value))}
+                    className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer"
+                  >
+                    {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                      <option key={i} value={i + 1}>{m}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={salesReviewYear}
+                    onChange={e => setSalesReviewYear(Number(e.target.value))}
+                    className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer"
+                  >
+                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(yr => (
+                      <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Custom Date Range */}
+            {salesReviewDateMode === 'custom' && (
+              <div className="flex flex-col gap-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Date Range</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={salesReviewStartDate}
+                    onChange={e => setSalesReviewStartDate(e.target.value)}
+                    className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer"
+                  />
+                  <span className="text-xs text-gray-400 font-semibold">to</span>
+                  <input
+                    type="date"
+                    value={salesReviewEndDate}
+                    onChange={e => setSalesReviewEndDate(e.target.value)}
+                    className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Reset Filters */}
+            {(salesReviewSearch || salesReviewRepFilter !== 'All' || salesReviewDateMode !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSalesReviewSearch('');
+                  setSalesReviewRepFilter('All');
+                  setSalesReviewDateMode('all');
+                  setSalesReviewStartDate('');
+                  setSalesReviewEndDate('');
+                }}
+                className="self-end py-2 px-3 text-xs font-semibold rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
+
+          {/* Active filter summary chips */}
+          {(salesReviewRepFilter !== 'All' || salesReviewDateMode !== 'all') && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {salesReviewRepFilter !== 'All' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold">
+                  Rep: {salesReviewRepFilter}
+                  <button onClick={() => setSalesReviewRepFilter('All')} className="hover:text-indigo-800 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              {salesReviewDateMode === 'monthly' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold">
+                  Month: {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][salesReviewMonth - 1]} {salesReviewYear}
+                  <button onClick={() => setSalesReviewDateMode('all')} className="hover:text-indigo-800 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+              {salesReviewDateMode === 'custom' && (salesReviewStartDate || salesReviewEndDate) && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold">
+                  Range: {salesReviewStartDate || '...'} → {salesReviewEndDate || '...'}
+                  <button onClick={() => { setSalesReviewStartDate(''); setSalesReviewEndDate(''); setSalesReviewDateMode('all'); }} className="hover:text-indigo-800 cursor-pointer"><X className="w-3 h-3" /></button>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Table */}
+        <div className="overflow-auto flex-1 px-1">
+          {filteredSalesReviewLeads.length === 0 ? (
+            <div className="text-center py-16 text-sm text-gray-400">
+              No clients match your filters.
+            </div>
+          ) : (
+            <table className="min-w-[1080px] w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 z-[5]">
+                <tr className="bg-gray-50 dark:bg-slate-900 border-b border-gray-100 dark:border-slate-800">
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">#</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client ID</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Created</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Client Name</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">Business</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap w-[130px]">Plan Schedule</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap w-[150px]">Deliverables</th>
+                  <th className="px-2.5 py-3 font-bold text-gray-600 dark:text-gray-300 min-w-[240px]">Sales Review Note</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-slate-800/50">
+                {filteredSalesReviewLeads.map((lead, idx) => {
+                  const schedules = getCampaignSchedule(lead);
+                  const deliverables = getDeliverables(lead);
+                  const payStatus = getPaymentStatus(lead);
+                  return (
+                    <tr key={lead._id || idx} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/3 transition-colors">
+  <td className="px-2.5 py-2.5 text-gray-400 dark:text-gray-500 font-medium">{idx + 1}</td>
+  <td className="px-2.5 py-2.5">
+    <button
+      type="button"
+      onClick={() => {
+        setViewedClientId(lead._id);
+        setIsEditingClient(false);
+        setEditedClientFields({});
+      }}
+      className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer break-words text-left"
+    >
+      {lead.clientId || '—'}
+    </button>
+  </td>
+  <td className="px-2.5 py-2.5 text-gray-600 dark:text-gray-300">
+    <div className="whitespace-nowrap">
+      {lead.createdAt
+        ? new Date(lead.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '—'}
+    </div>
+    <div className="text-[10px] text-gray-400 dark:text-gray-500 break-words">{lead.salespersonName || '—'}</div>
+  </td>
+  <td className="px-2.5 py-2.5">
+    <div className="font-semibold text-gray-900 dark:text-white break-words">{lead.clientName || '—'}</div>
+    <span className={`inline-block mt-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded-md ${payStatus.color}`}>
+      {payStatus.label}
+    </span>
+  </td>
+  <td className="px-2.5 py-2.5">
+    <div className="text-gray-600 dark:text-gray-300 break-words">{lead.companyName || '—'}</div>
+    <div className="text-[10px] text-gray-400 dark:text-gray-500 whitespace-nowrap">{lead.mobileNumber || '—'}</div>
+  </td>
+  <td className="px-2.5 py-2.5">
+    {schedules.length > 0 ? (
+      <div className="flex flex-col gap-1">
+        {schedules.map((s, si) => (
+          <div key={si} className="flex flex-col gap-0.5 leading-tight">
+            <span className="px-1 py-0.5 bg-indigo-500/10 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 rounded-md font-semibold text-[9px] whitespace-nowrap inline-block w-fit">
+              {s.service}
+            </span>
+            <span className="text-[9px] text-gray-500 dark:text-gray-400 break-words">
+              {s.start !== '—' || s.end !== '—' ? `${s.start} → ${s.end}` : 'Dates TBD'}
+            </span>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <span className="text-gray-400 dark:text-gray-500">—</span>
+    )}
+  </td>
+  <td className="px-2.5 py-2.5">
+    {deliverables.length > 0 ? (
+      <div className="flex flex-col gap-0.5">
+        {deliverables.map((d, di) => (
+          <span
+            key={di}
+            className={`px-1 py-0.5 rounded-md font-semibold text-[9px] leading-tight inline-block w-fit ${getDeliverableBadgeColor(d.status)}`}
+            title={d.status}
+          >
+            {d.label}
+          </span>
+        ))}
+      </div>
+    ) : (
+      <span className="text-gray-400 dark:text-gray-500">—</span>
+    )}
+  </td>
+  <td className="px-2.5 py-2.5 text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">
+    {lead.salesReviewNote && lead.salesReviewNote.trim()
+      ? lead.salesReviewNote
+      : <span className="text-gray-400 dark:text-gray-500 italic">No review note submitted yet.</span>}
+  </td>
+</tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer Summary */}
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-slate-800 bg-gray-50/60 dark:bg-slate-900/60 rounded-b-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Showing <span className="font-bold text-gray-700 dark:text-gray-300">{filteredSalesReviewLeads.length}</span> of <span className="font-bold text-gray-700 dark:text-gray-300">{leads.length}</span> total clients
+          </p>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Reviews Submitted</p>
+              <p className="text-base font-extrabold text-gray-900 dark:text-white">
+                {salesReviewTotals.totalWithNotes} / {filteredSalesReviewLeads.length}
+              </p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+})()}
+
 {isSalesReportOpen && (() => {
   // All filter state is driven by: salesReportSearch, salesReportDateMode,
   // salesReportMonth, salesReportYear, salesReportStartDate, salesReportEndDate,

@@ -326,6 +326,10 @@ export default function SalesPortal({
   const [showIgPass, setShowIgPass] = useState(false);
   const [viewedClientId, setViewedClientId] = useState(null);
 
+  // Sales Review Note draft state (keyed by leadId)
+  const [reviewNoteDrafts, setReviewNoteDrafts] = useState({});
+  const [savingReviewNoteFor, setSavingReviewNoteFor] = useState(null);
+
   const isFirstLoadRef = React.useRef(true);
 
   // Fetch leads on mount
@@ -696,6 +700,31 @@ export default function SalesPortal({
     } catch (err) {
       console.error('Quick status update failed:', err);
       onAddToast('Update Error', 'Failed to update milestone status.', 'error');
+    }
+  };
+
+  const handleSaveSalesReviewNote = async (lead) => {
+    const leadId = lead._id || lead.id;
+    const noteValue = reviewNoteDrafts[leadId] !== undefined ? reviewNoteDrafts[leadId] : (lead.salesReviewNote || '');
+
+    setSavingReviewNoteFor(leadId);
+    try {
+      const res = await authFetch(`/api/leads/${leadId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ salesReviewNote: noteValue })
+      });
+
+      if (res.ok) {
+        fetchLeads();
+        onAddToast('Review Note Saved', `Sales review note updated for ${lead.clientName}.`, 'success');
+      } else {
+        onAddToast('Update Error', 'Failed to save sales review note.', 'error');
+      }
+    } catch (err) {
+      console.error('Sales review note update failed:', err);
+      onAddToast('Update Error', 'Network error while saving sales review note.', 'error');
+    } finally {
+      setSavingReviewNoteFor(null);
     }
   };
 
@@ -1820,6 +1849,33 @@ export default function SalesPortal({
                               )}
                             </div>
                           )}
+
+                          {/* Sales Review Note */}
+                          <div className="bg-white/60 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-150/40 dark:border-slate-800/40 space-y-2 md:col-span-2">
+                            <h5 className="font-bold text-gray-405 text-[10px] uppercase tracking-wider">Sales Review Note</h5>
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                              Add a daily review or update for this client. Visible to Admin in the Sales Review section.
+                            </p>
+                            <textarea
+                              rows={3}
+                              placeholder="Write today's review or update for this client..."
+                              value={reviewNoteDrafts[leadId] !== undefined ? reviewNoteDrafts[leadId] : (lead.salesReviewNote || '')}
+                              onChange={(e) => setReviewNoteDrafts(prev => ({ ...prev, [leadId]: e.target.value }))}
+                              className="w-full rounded-lg border border-gray-200 dark:border-slate-700 py-2 px-2.5 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white outline-none focus:border-indigo-400 resize-none transition-all"
+                            />
+                            <div className="flex justify-end">
+                              <Button
+                                type="button"
+                                variant="primary"
+                                size="sm"
+                                onClick={() => handleSaveSalesReviewNote(lead)}
+                                disabled={savingReviewNoteFor === leadId}
+                                icon={CheckCircle}
+                              >
+                                {savingReviewNoteFor === leadId ? 'Saving...' : 'Save Review Note'}
+                              </Button>
+                            </div>
+                          </div>
                         </div>
 
                         {/* Assignee Information */}
