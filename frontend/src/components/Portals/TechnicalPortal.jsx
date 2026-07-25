@@ -18,7 +18,11 @@ import {
   Phone,
   Eye,
   EyeOff,
-  Bell
+  Bell,
+  ClipboardList,
+  Calendar,
+  Trash2,
+  Plus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Card from '../UI/Card';
@@ -107,6 +111,23 @@ const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
   return null;
 };
 
+const getExpiryStatus = (deadlineStr) => {
+  if (!deadlineStr) return null;
+  const deadlineDate = new Date(deadlineStr);
+  if (isNaN(deadlineDate.getTime())) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const deadline = new Date(deadlineDate);
+  deadline.setHours(0, 0, 0, 0);
+
+  if (deadline >= today) {
+    return { label: 'Active', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold' };
+  }
+  return { label: 'Expired', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-455 border border-rose-500/20 font-bold' };
+};
+
 const getPaymentStatus = (lead) => {
   if (lead.paymentStatus) {
     if (lead.paymentStatus === 'Paid') {
@@ -161,9 +182,20 @@ export default function TechnicalPortal({
   const [viewedClientId, setViewedClientId] = useState(null);
   const [showFbPass, setShowFbPass] = useState(false);
   const [showIgPass, setShowIgPass] = useState(false);
+  const [isEditingSocials, setIsEditingSocials] = useState(false);
+  const [editedSocialFields, setEditedSocialFields] = useState({});
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
   const [editWorkflowStatus, setEditWorkflowStatus] = useState('Allocated');
   const [showNotifications, setShowNotifications] = useState(false);
+
+  // Daily Report state (Google Sheets-style editable grid)
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
+  const [dailyReportSelectedDate, setDailyReportSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dailyReportRows, setDailyReportRows] = useState([]);
+  const [dailyReportsLoading, setDailyReportsLoading] = useState(false);
+  const [dailyReportRowSearch, setDailyReportRowSearch] = useState('');
+  const [isDailyReportSaving, setIsDailyReportSaving] = useState(false);
+  const [dailyReportDeletingRowKey, setDailyReportDeletingRowKey] = useState(null);
   const [editPlanStartDate, setEditPlanStartDate] = useState('');
   const [editAdsTeamStatus, setEditAdsTeamStatus] = useState('Pending');
   const [editDesignTeamStatus, setEditDesignTeamStatus] = useState('Pending');
@@ -208,6 +240,196 @@ export default function TechnicalPortal({
       }
     }
   };
+
+  const dailyReportRowKey = (row) => row._id || row._tempId;
+
+  const createEmptyDailyReportRow = (date) => ({
+    _id: null,
+    _tempId: `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    date,
+    clientBusinessName: '',
+    workStatus: '',
+    isNew: true,
+    isDirty: false
+  });
+
+  const fetchDailyReportRowsForDate = async (date) => {
+    setDailyReportsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('date', date);
+      const res = await authFetch(`/api/daily-reports?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        const rows = data.map((r) => ({
+          _id: r._id,
+          _tempId: null,
+          date: r.date ? new Date(r.date).toISOString().slice(0, 10) : date,
+          clientBusinessName: r.clientBusinessName || '',
+          workStatus: r.workStatus || '',
+          isNew: false,
+          isDirty: false
+        }));
+        setDailyReportRows(rows.length > 0 ? rows : [createEmptyDailyReportRow(date)]);
+      } else {
+        onAddToast('Fetch Failed', 'Could not load your daily reports for this date.', 'error');
+        setDailyReportRows([createEmptyDailyReportRow(date)]);
+      }
+    } catch (error) {
+      console.error('Fetch daily reports error:', error);
+      onAddToast('Fetch Failed', 'Network error while loading daily reports.', 'error');
+      setDailyReportRows([createEmptyDailyReportRow(date)]);
+    } finally {
+      setDailyReportsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isDailyReportOpen) {
+      fetchDailyReportRowsForDate(dailyReportSelectedDate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDailyReportOpen]);
+
+  const dailyReportHasUnsavedChanges = () =>
+    dailyReportRows.some((r) => r.isDirty || (r.isNew && (r.clientBusinessName.trim() || r.workStatus.trim())));
+
+  const handleDailyReportDateChange = (newDate) => {
+    if (dailyReportHasUnsavedChanges()) {
+      const confirmSwitch = window.confirm('You have unsaved changes for this date. Switching dates will discard them. Continue?');
+      if (!confirmSwitch) return;
+    }
+    setDailyReportSelectedDate(newDate);
+    fetchDailyReportRowsForDate(newDate);
+  };
+
+  const handleDailyReportCellChange = (rowKey, field, value) => {
+    setDailyReportRows((prev) =>
+      prev.map((r) => {
+        if (dailyReportRowKey(r) !== rowKey) return r;
+        return { ...r, [field]: value, isDirty: r.isNew ? r.isDirty : true };
+      })
+    );
+  };
+
+  const handleAddDailyReportRow = () => {
+    setDailyReportRows((prev) => [...prev, createEmptyDailyReportRow(dailyReportSelectedDate)]);
+  };
+
+  const handleDeleteDailyReportRow = async (row) => {
+    const rowKey = dailyReportRowKey(row);
+
+    if (!row._id) {
+      setDailyReportRows((prev) => {
+        const filtered = prev.filter((r) => dailyReportRowKey(r) !== rowKey);
+        return filtered.length > 0 ? filtered : [createEmptyDailyReportRow(dailyReportSelectedDate)];
+      });
+      return;
+    }
+
+    setDailyReportDeletingRowKey(rowKey);
+    try {
+      const res = await authFetch(`/api/daily-reports/${row._id}`, { method: 'DELETE' });
+      if (res.ok) {
+        onAddToast('Row Deleted', 'Daily report row removed.', 'success');
+        setDailyReportRows((prev) => {
+          const filtered = prev.filter((r) => dailyReportRowKey(r) !== rowKey);
+          return filtered.length > 0 ? filtered : [createEmptyDailyReportRow(dailyReportSelectedDate)];
+        });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        onAddToast('Delete Failed', data.message || 'Could not delete row.', 'error');
+      }
+    } catch (error) {
+      console.error('Delete daily report row error:', error);
+      onAddToast('Delete Failed', 'Network error while deleting row.', 'error');
+    } finally {
+      setDailyReportDeletingRowKey(null);
+    }
+  };
+
+  const handleSaveDailyReportRows = async () => {
+    const rowsToSave = dailyReportRows.filter((r) => r.isNew || r.isDirty);
+    if (rowsToSave.length === 0) {
+      onAddToast('Nothing to Save', 'No changes to save.', 'info');
+      return;
+    }
+
+    const completeRows = rowsToSave.filter((r) => r.date && r.clientBusinessName.trim() && r.workStatus.trim());
+    const incompleteCount = rowsToSave.length - completeRows.length;
+
+    if (completeRows.length === 0) {
+      onAddToast('Missing Details', 'Fill in Date, Client Business Name, and Work Status before saving.', 'error');
+      return;
+    }
+
+    setIsDailyReportSaving(true);
+    let successCount = 0;
+    let failCount = 0;
+    let syncWarningCount = 0;
+
+    for (const row of completeRows) {
+      const rowKey = dailyReportRowKey(row);
+      try {
+        const payload = {
+          date: row.date,
+          clientBusinessName: row.clientBusinessName.trim(),
+          workStatus: row.workStatus.trim()
+        };
+        const url = row._id ? `/api/daily-reports/${row._id}` : '/api/daily-reports';
+        const method = row._id ? 'PUT' : 'POST';
+        const res = await authFetch(url, { method, body: JSON.stringify(payload) });
+        const data = await res.json();
+
+        if (res.ok) {
+          successCount += 1;
+          if (data.syncWarning) syncWarningCount += 1;
+          const wasNew = !row._id;
+          setDailyReportRows((prev) =>
+            prev.map((r) => {
+              if (dailyReportRowKey(r) !== rowKey) return r;
+              return {
+                _id: data._id || r._id,
+                _tempId: null,
+                date: data.date ? new Date(data.date).toISOString().slice(0, 10) : row.date,
+                clientBusinessName: data.clientBusinessName ?? row.clientBusinessName,
+                workStatus: data.workStatus ?? row.workStatus,
+                isNew: false,
+                isDirty: false
+              };
+            })
+          );
+          if (wasNew && onAddNotification) {
+            onAddNotification(`Daily report submitted by ${user?.name} for ${payload.clientBusinessName}`);
+          }
+        } else {
+          failCount += 1;
+          console.error('Row save failed:', data.message);
+        }
+      } catch (error) {
+        failCount += 1;
+        console.error('Row save error:', error);
+      }
+    }
+
+    setIsDailyReportSaving(false);
+
+    if (successCount > 0 && failCount === 0 && incompleteCount === 0) {
+      onAddToast(
+        'Saved',
+        `${successCount} row${successCount !== 1 ? 's' : ''} saved and synced to Google Sheets.${syncWarningCount ? ' Some rows had a sheet sync issue.' : ''}`,
+        syncWarningCount ? 'info' : 'success'
+      );
+    } else if (successCount > 0) {
+      onAddToast('Partially Saved', `${successCount} saved, ${failCount + incompleteCount} skipped or incomplete.`, 'info');
+    } else {
+      onAddToast('Save Failed', 'Could not save rows. Check required fields.', 'error');
+    }
+  };
+
+  const visibleDailyReportRows = dailyReportRows.filter(
+    (r) => !dailyReportRowSearch.trim() || r.clientBusinessName.toLowerCase().includes(dailyReportRowSearch.trim().toLowerCase())
+  );
 
   const fetchEmployees = async () => {
     try {
@@ -561,6 +783,42 @@ export default function TechnicalPortal({
     }
   };
 
+  // Reset the social-credentials edit draft whenever a different client dossier is opened/closed
+  useEffect(() => {
+    setIsEditingSocials(false);
+    setEditedSocialFields({});
+  }, [viewedClientId]);
+
+  const handleSocialFieldChange = (field, value) => {
+    setEditedSocialFields(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveSocialCredentials = async () => {
+    if (!viewedClientId) return;
+    if (Object.keys(editedSocialFields).length === 0) {
+      setIsEditingSocials(false);
+      return;
+    }
+    try {
+      const res = await authFetch(`/api/leads/${viewedClientId}`, {
+        method: 'PUT',
+        body: JSON.stringify(editedSocialFields)
+      });
+      if (res.ok) {
+        onAddToast('Credentials Updated', 'Facebook/Instagram credentials updated successfully.', 'success');
+        setIsEditingSocials(false);
+        setEditedSocialFields({});
+        await fetchAssignedLeads();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        onAddToast('Update Failed', errData.message || 'Error updating credentials.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      onAddToast('Update Failed', 'Network or server error while saving credentials.', 'error');
+    }
+  };
+
   const handleCentralStatusChange = async (leadId, newStatus) => {
     try {
       const res = await authFetch(`/api/leads/${leadId}`, {
@@ -792,50 +1050,60 @@ export default function TechnicalPortal({
   }
 
   const renderLeadCard = (lead, isClaimed) => {
-    const leadId = lead._id || lead.id;
-    const isSelected = leadId === selectedLeadId;
-    return (
-      <div
-        key={leadId}
-        onClick={() => handleSelectLead(leadId)}
-        className={`p-3.5 rounded-xl border transition-all duration-200 cursor-pointer relative overflow-hidden group ${
-          isSelected
-            ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 shadow-sm'
-            : 'border-gray-200/80 dark:border-slate-800/40 bg-white/60 hover:bg-slate-500/3 dark:bg-slate-900/20 dark:hover:bg-slate-900/40'
-        }`}
-      >
-        {isSelected && <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500" />}
-        <div className="space-y-1.5 pl-1.5">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={(e) => { e.stopPropagation(); setViewedClientId(leadId); }}
-              className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono hover:underline cursor-pointer"
-            >
-              {lead.clientId || 'N/A'}
-            </button>
-            <div className="flex items-center gap-1.5">
-              {(() => {
-                const badge = getPaymentStatus(lead);
-                return <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>{badge.label}</span>;
-              })()}
-              {(() => {
-                const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
-                if (deadlineAlert) return <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>{deadlineAlert.label}</span>;
-                return null;
-              })()}
-            </div>
+  const leadId = lead._id || lead.id;
+  const isSelected = leadId === selectedLeadId;
+  return (
+    <div
+      key={leadId}
+      onClick={() => handleSelectLead(leadId)}
+      className={`p-3.5 rounded-xl border transition-all duration-200 cursor-pointer relative overflow-hidden group ${
+        isSelected
+          ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10 shadow-sm'
+          : 'border-gray-200/80 dark:border-slate-800/40 bg-white/60 hover:bg-slate-500/3 dark:bg-slate-900/20 dark:hover:bg-slate-900/40'
+      }`}
+    >
+      {isSelected && <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500" />}
+      <div className="space-y-1.5 pl-1.5">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={(e) => { e.stopPropagation(); setViewedClientId(leadId); }}
+            className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 font-mono hover:underline cursor-pointer"
+          >
+            {lead.clientId || 'N/A'}
+          </button>
+          <div className="flex items-center gap-1.5">
+            {(() => {
+              const badge = getPaymentStatus(lead);
+              return <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${badge.color}`}>{badge.label}</span>;
+            })()}
+            {(() => {
+              const expiryStatus = getExpiryStatus(lead.deliveryDeadline);
+              if (expiryStatus) return <span className={`text-[8.5px] font-extrabold px-1.5 py-0.5 rounded-md ${expiryStatus.color}`}>{expiryStatus.label}</span>;
+              return null;
+            })()}
+            {(() => {
+              const deadlineAlert = checkDeadlineAlert(lead.deliveryDeadline, lead.workflowStatus);
+              if (deadlineAlert) return <span className={`text-[8.5px] font-extrabold px-1 py-0.5 rounded-md ${deadlineAlert.color}`}>{deadlineAlert.label}</span>;
+              return null;
+            })()}
           </div>
-          <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">{lead.clientName}</h4>
-          <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-            {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
-          </p>
-          <p className="text-[9px] text-gray-405 dark:text-gray-550 mt-1 font-semibold">
+        </div>
+        <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate">{lead.clientName}</h4>
+        <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+          {lead.companyName || 'No Company'} • {lead.businessCategory || 'No Category'}
+        </p>
+        <div className="flex items-end justify-between mt-1">
+          <p className="text-[9px] text-gray-405 dark:text-gray-550 font-semibold">
             Created By: {lead.salespersonName}
+          </p>
+          <p className="text-[9px] text-gray-405 dark:text-gray-550 font-semibold whitespace-nowrap">
+            Deadline: <span className="text-rose-500 dark:text-rose-400 font-bold">{lead.deliveryDeadline || '-'}</span>
           </p>
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   const getGridColsClass = () => {
     const team = user?.team;
@@ -862,6 +1130,16 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
           </div>
         </div>
         <div className="flex items-center gap-2.5">
+          {/* Daily Report Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsDailyReportOpen(true)}
+            icon={ClipboardList}
+          >
+            Daily Report
+          </Button>
+
           <div className="relative">
             <button
               type="button"
@@ -943,7 +1221,8 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
             </div>
           </div>
         )}
-        {(user?.team === 'developer' || user?.team === 'all') && (
+        {/* {(user?.team === 'developer' || user?.team === 'all') && ( */}
+        {( user?.team === 'all') && (
           <div className="glass-card p-5 rounded-xl border border-purple-500/5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-gray-100 dark:border-slate-800/40 pb-2.5 mb-3">
               <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Websites</span>
@@ -1215,7 +1494,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto max-h-[600px] space-y-4 pr-1.5 scrollbar-thin">
+              <div className="flex-1 overflow-y-auto max-h-[1200px] space-y-4 pr-1.5 scrollbar-thin">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between border-b border-gray-150/40 dark:border-slate-800/40 pb-1.5">
                     <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
@@ -1942,35 +2221,115 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
 
                     {/* 2. Social Credentials */}
                     <div className="bg-gray-50/50 dark:bg-slate-900/40 p-4 rounded-xl border border-gray-100 dark:border-slate-800/50 space-y-3">
-                      <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">2. Social Channels Credentials</h4>
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">2. Social Channels Credentials</h4>
+                        {user?.team === 'ads' && (
+                          isEditingSocials ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => { setIsEditingSocials(false); setEditedSocialFields({}); }}
+                                className="text-[10px] font-bold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveSocialCredentials}
+                                className="flex items-center gap-1 text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Save className="w-3 h-3" /> Save
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingSocials(true)}
+                              className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Edit2 className="w-3 h-3" /> Edit
+                            </button>
+                          )
+                        )}
+                      </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
                           <span className="text-[10px] font-bold text-gray-450 block mb-1">Facebook ID</span>
-                          <span className="font-mono text-xs text-gray-905 dark:text-white font-semibold">{client.facebookId || '—'}</span>
-                          {client.facebookPassword && (
+                          {isEditingSocials && user?.team === 'ads' ? (
+                            <input
+                              type="text"
+                              value={editedSocialFields.facebookId ?? client.facebookId ?? ''}
+                              onChange={(e) => handleSocialFieldChange('facebookId', e.target.value)}
+                              className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                              placeholder="Facebook ID"
+                            />
+                          ) : (
+                            <span className="font-mono text-xs text-gray-905 dark:text-white font-semibold">{client.facebookId || '—'}</span>
+                          )}
+                          {(client.facebookPassword || (isEditingSocials && user?.team === 'ads')) && (
                             <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40 flex items-center justify-between gap-2">
-                              <div>
-                                <span className="text-[10px] font-bold text-gray-450 block mb-0.5">Password</span>
-                                <span className="font-mono text-xs text-rose-500 select-all font-bold">{showFbPass ? client.facebookPassword : '••••••••'}</span>
-                              </div>
-                              <button type="button" onClick={() => setShowFbPass(!showFbPass)} className="text-gray-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors p-1">
-                                {showFbPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                              </button>
+                              {isEditingSocials && user?.team === 'ads' ? (
+                                <div className="w-full">
+                                  <span className="text-[10px] font-bold text-gray-450 block mb-0.5">Password</span>
+                                  <input
+                                    type="text"
+                                    value={editedSocialFields.facebookPassword ?? client.facebookPassword ?? ''}
+                                    onChange={(e) => handleSocialFieldChange('facebookPassword', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                                    placeholder="Facebook Password"
+                                  />
+                                </div>
+                              ) : (
+                                <>
+                                  <div>
+                                    <span className="text-[10px] font-bold text-gray-450 block mb-0.5">Password</span>
+                                    <span className="font-mono text-xs text-rose-500 select-all font-bold">{showFbPass ? client.facebookPassword : '••••••••'}</span>
+                                  </div>
+                                  <button type="button" onClick={() => setShowFbPass(!showFbPass)} className="text-gray-400 hover:text-indigo-650 dark:hover:text-indigo-400 transition-colors p-1">
+                                    {showFbPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
                         <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-gray-100 dark:border-slate-800/50">
                           <span className="text-[10px] font-bold text-gray-455 block mb-1">Instagram ID</span>
-                          <span className="font-mono text-xs text-gray-905 dark:text-white font-semibold">{client.instagramId || '—'}</span>
-                          {client.instagramPassword && (
+                          {isEditingSocials && user?.team === 'ads' ? (
+                            <input
+                              type="text"
+                              value={editedSocialFields.instagramId ?? client.instagramId ?? ''}
+                              onChange={(e) => handleSocialFieldChange('instagramId', e.target.value)}
+                              className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                              placeholder="Instagram ID"
+                            />
+                          ) : (
+                            <span className="font-mono text-xs text-gray-905 dark:text-white font-semibold">{client.instagramId || '—'}</span>
+                          )}
+                          {(client.instagramPassword || (isEditingSocials && user?.team === 'ads')) && (
                             <div className="mt-2 pt-2 border-t border-gray-100 dark:border-slate-800/40 flex items-center justify-between gap-2">
-                              <div>
-                                <span className="text-[10px] font-bold text-gray-455 block mb-0.5">Password</span>
-                                <span className="font-mono text-xs text-rose-500 select-all font-bold">{showIgPass ? client.instagramPassword : '••••••••'}</span>
-                              </div>
-                              <button type="button" onClick={() => setShowIgPass(!showIgPass)} className="text-gray-400 hover:text-indigo-655 dark:hover:text-indigo-400 transition-colors p-1">
-                                {showIgPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                              </button>
+                              {isEditingSocials && user?.team === 'ads' ? (
+                                <div className="w-full">
+                                  <span className="text-[10px] font-bold text-gray-455 block mb-0.5">Password</span>
+                                  <input
+                                    type="text"
+                                    value={editedSocialFields.instagramPassword ?? client.instagramPassword ?? ''}
+                                    onChange={(e) => handleSocialFieldChange('instagramPassword', e.target.value)}
+                                    className="w-full rounded-lg border border-gray-200 dark:border-slate-800 py-1.5 px-2 text-xs bg-white dark:bg-slate-900 text-gray-900 dark:text-white font-mono"
+                                    placeholder="Instagram Password"
+                                  />
+                                </div>
+                              ) : (
+                                <>
+                                  <div>
+                                    <span className="text-[10px] font-bold text-gray-455 block mb-0.5">Password</span>
+                                    <span className="font-mono text-xs text-rose-500 select-all font-bold">{showIgPass ? client.instagramPassword : '••••••••'}</span>
+                                  </div>
+                                  <button type="button" onClick={() => setShowIgPass(!showIgPass)} className="text-gray-400 hover:text-indigo-655 dark:hover:text-indigo-400 transition-colors p-1">
+                                    {showIgPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -2227,6 +2586,195 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
           );
         })()}
       </AnimatePresence>
+
+      {/* Daily Report Modal — Google Sheets style editable grid */}
+      {isDailyReportOpen && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-start justify-center p-4 z-150 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-5xl my-6 shadow-2xl flex flex-col">
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 rounded-t-2xl z-10">
+              <div>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <ClipboardList className="w-4.5 h-4.5 text-indigo-500" /> Daily Report
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {getTeamDisplayLabel(user?.team)} — track and sync your daily work reports
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (dailyReportHasUnsavedChanges()) {
+                    const confirmClose = window.confirm('You have unsaved changes. Close anyway?');
+                    if (!confirmClose) return;
+                  }
+                  setIsDailyReportOpen(false);
+                  setDailyReportRowSearch('');
+                }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Toolbar: date picker + search + save */}
+            <div className="px-6 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800/60 bg-gray-50/40 dark:bg-slate-900/50 flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Date</label>
+                <div className="relative">
+                  <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={dailyReportSelectedDate}
+                    onChange={(e) => handleDailyReportDateChange(e.target.value)}
+                    className="pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer transition-all font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-[220px] flex-1">
+                <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Search Client Business Name</label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Filter rows on this date..."
+                    value={dailyReportRowSearch}
+                    onChange={(e) => setDailyReportRowSearch(e.target.value)}
+                    className="pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 w-full transition-all"
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                icon={Save}
+                isLoading={isDailyReportSaving}
+                onClick={handleSaveDailyReportRows}
+                disabled={!dailyReportHasUnsavedChanges()}
+              >
+                Save
+              </Button>
+            </div>
+
+            {/* Spreadsheet Grid */}
+            <div className="overflow-auto flex-1 px-1 max-h-[480px]">
+              {dailyReportsLoading ? (
+                <div className="text-center py-16 text-sm text-gray-400">Loading daily reports...</div>
+              ) : (
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50/70 dark:bg-slate-900/40 border-b border-gray-200 dark:border-slate-800 sticky top-0 z-[1]">
+                      <th className="p-2.5 font-bold text-gray-500 dark:text-gray-400 text-[11px] uppercase tracking-wider border-r border-gray-200 dark:border-slate-800 w-36">Date</th>
+                      <th className="p-2.5 font-bold text-gray-500 dark:text-gray-400 text-[11px] uppercase tracking-wider border-r border-gray-200 dark:border-slate-800">Client Business Name</th>
+                      <th className="p-2.5 font-bold text-gray-500 dark:text-gray-400 text-[11px] uppercase tracking-wider border-r border-gray-200 dark:border-slate-800">Work Status</th>
+                      <th className="p-2.5 font-bold text-gray-500 dark:text-gray-400 text-[11px] uppercase tracking-wider text-center w-16">•••</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleDailyReportRows.map((row, idx) => {
+                      const rowKey = dailyReportRowKey(row);
+                      const rowStateClass = row.isNew
+                        ? 'bg-amber-50/60 dark:bg-amber-500/5'
+                        : row.isDirty
+                        ? 'bg-indigo-50/60 dark:bg-indigo-500/5'
+                        : idx % 2 === 0
+                        ? 'bg-white dark:bg-transparent'
+                        : 'bg-gray-50/40 dark:bg-slate-900/20';
+                      return (
+                        <tr key={rowKey} className={`border-b border-gray-100 dark:border-slate-800/60 group ${rowStateClass}`}>
+                          <td className="p-0 border-r border-gray-100 dark:border-slate-800/60">
+                            <input
+                              type="date"
+                              value={row.date}
+                              onChange={(e) => handleDailyReportCellChange(rowKey, 'date', e.target.value)}
+                              className="w-full h-full px-2.5 py-2.5 bg-transparent text-xs font-mono text-gray-800 dark:text-gray-200 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-400 cursor-pointer"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-gray-100 dark:border-slate-800/60">
+                            <input
+                              type="text"
+                              value={row.clientBusinessName}
+                              placeholder="e.g. Birdie Golf & Landscape"
+                              onChange={(e) => handleDailyReportCellChange(rowKey, 'clientBusinessName', e.target.value)}
+                              className="w-full h-full px-2.5 py-2.5 bg-transparent text-sm font-semibold text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-400"
+                            />
+                          </td>
+                          <td className="p-0 border-r border-gray-100 dark:border-slate-800/60">
+                            <input
+                              type="text"
+                              value={row.workStatus}
+                              placeholder="e.g. Completed 3 posters, ads review pending"
+                              onChange={(e) => handleDailyReportCellChange(rowKey, 'workStatus', e.target.value)}
+                              className="w-full h-full px-2.5 py-2.5 bg-transparent text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-400"
+                            />
+                          </td>
+                          <td className="p-0 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDailyReportRow(row)}
+                              disabled={dailyReportDeletingRowKey === rowKey}
+                              className="p-1.5 my-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 text-gray-300 group-hover:text-rose-500 dark:text-gray-600 dark:group-hover:text-rose-400 transition-colors cursor-pointer disabled:opacity-40"
+                              title="Delete Row"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+
+              {/* Add Row */}
+              <button
+                type="button"
+                onClick={handleAddDailyReportRow}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50/60 dark:hover:bg-indigo-500/5 transition-colors cursor-pointer border-b border-gray-100 dark:border-slate-800/60"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Row
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between p-5 border-t border-gray-100 dark:border-slate-800/80">
+              <p className="text-[11px] text-gray-400">
+                {dailyReportHasUnsavedChanges() ? 'You have unsaved changes.' : 'All changes saved and synced to Google Sheets.'}
+              </p>
+              <div className="flex items-center gap-2.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (dailyReportHasUnsavedChanges()) {
+                      const confirmClose = window.confirm('You have unsaved changes. Close anyway?');
+                      if (!confirmClose) return;
+                    }
+                    setIsDailyReportOpen(false);
+                    setDailyReportRowSearch('');
+                  }}
+                >
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  icon={Save}
+                  isLoading={isDailyReportSaving}
+                  onClick={handleSaveDailyReportRows}
+                  disabled={!dailyReportHasUnsavedChanges()}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

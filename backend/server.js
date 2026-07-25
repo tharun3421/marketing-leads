@@ -19,6 +19,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/leads', require('./routes/leads'));
+app.use('/api/daily-reports', require('./routes/dailyReports'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/notifications', require('./routes/notifications'));
 

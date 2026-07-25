@@ -28,6 +28,12 @@ function doPost(e) {
 
   try {
     var data = JSON.parse(e.postData.contents);
+
+    // Daily Report rows are routed into their own team sheet (Ads / Design / Developer)
+    if (data.type === "dailyReport") {
+      return handleDailyReportSync(data);
+    }
+
     var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     
     // Auto-create headers if the sheet is empty
@@ -93,6 +99,59 @@ function doPost(e) {
     }))
     .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// Handles Daily Report sync — writes into a dedicated sheet tab per team
+// (Ads / Design / Developer), auto-creating the tab if it doesn't exist yet.
+// Existing rows are matched by Report ID and updated in place instead of
+// being duplicated when a report is edited.
+function handleDailyReportSync(data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetName = data.sheetName || "Ads";
+  var sheet = ss.getSheetByName(sheetName);
+
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  }
+
+  if (sheet.getLastRow() === 0) {
+    var headerRow = ["Report ID", "Date", "Team Member", "Client Business Name", "Work Status", "Last Updated"];
+    sheet.appendRow(headerRow);
+    sheet.getRange(1, 1, 1, headerRow.length).setFontWeight("bold").setBackground("#e0e7ff");
+  }
+
+  var rowData = [
+    data.reportId || "",
+    data.date || "",
+    data.teamMemberName || "",
+    data.clientBusinessName || "",
+    data.workStatus || "",
+    data.updatedAt || new Date().toISOString()
+  ];
+
+  var lastRow = sheet.getLastRow();
+  var updatedExisting = false;
+
+  if (data.reportId && lastRow > 1) {
+    var idColumn = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < idColumn.length; i++) {
+      if (idColumn[i][0] === data.reportId) {
+        sheet.getRange(i + 2, 1, 1, rowData.length).setValues([rowData]);
+        updatedExisting = true;
+        break;
+      }
+    }
+  }
+
+  if (!updatedExisting) {
+    sheet.appendRow(rowData);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "success",
+    message: "Daily report synced!"
+  }))
+  .setMimeType(ContentService.MimeType.JSON);
 }
 
 // Handle preflight OPTIONS requests for CORS
@@ -206,6 +265,14 @@ export default function AppsScriptGuide({ isOpen, onClose }) {
             <div>
               <strong className="font-semibold block mb-0.5">Authorization Permission Popup:</strong>
               When deploying, Google will ask to authorize permissions to access Google Sheets on your account. Click "Advanced" → "Go to Untitled Project (unsafe)" to grant permission. Since you are the sole author of this script, this is completely safe!
+            </div>
+          </div>
+
+          <div className="p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-xl text-xs text-indigo-800 dark:text-indigo-400 flex items-start gap-3">
+            <FileCode className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              <strong className="font-semibold block mb-0.5">Daily Reports:</strong>
+              This same URL also powers Technical Team Daily Reports. The script automatically creates and updates three separate tabs — "Ads", "Design", and "Developer" — in this spreadsheet, no extra setup needed.
             </div>
           </div>
         </div>

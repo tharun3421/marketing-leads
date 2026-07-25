@@ -659,6 +659,16 @@ const updateLead = async (req, res) => {
     // Sanitize numeric fields
     sanitizeNumberFields(req.body);
 
+    // Only Admin and the Ads team may update client social credentials
+    if (req.user.role === 'technical' && req.user.team !== 'ads') {
+      delete req.body.facebookId;
+      delete req.body.facebookPassword;
+      delete req.body.instagramId;
+      delete req.body.instagramPassword;
+      delete req.body.facebookAccountStatus;
+      delete req.body.instagramAccountStatus;
+    }
+
     // Update fields and preserve existing status
     const updatedData = {
       ...req.body

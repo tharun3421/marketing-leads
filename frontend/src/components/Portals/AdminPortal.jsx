@@ -30,7 +30,13 @@ import {
   BarChart3,
   Sheet,
   ExternalLink,
-  FileText
+  FileText,
+  ClipboardList,
+  Calendar,
+  Building2,
+  Megaphone,
+  Palette,
+  Code2
 } from 'lucide-react';
 import Card from '../UI/Card';
 import Button from '../UI/Button';
@@ -215,6 +221,15 @@ export default function AdminPortal({
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isSheetsModalOpen, setIsSheetsModalOpen] = useState(false);
 
+  // Daily Report modal state (Technical Team: Ads / Design / Developer)
+  const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
+  const [dailyReportTeam, setDailyReportTeam] = useState(null); // null | 'ads' | 'design' | 'developer'
+  const [dailyReports, setDailyReports] = useState([]);
+  const [dailyReportsLoading, setDailyReportsLoading] = useState(false);
+  const [dailyReportClientSearch, setDailyReportClientSearch] = useState('');
+  const [dailyReportMemberSearch, setDailyReportMemberSearch] = useState('');
+  const [dailyReportDateFilter, setDailyReportDateFilter] = useState('');
+
   // Sales Report modal state
   const [isSalesReportOpen, setIsSalesReportOpen] = useState(false);
   const [salesReportSearch, setSalesReportSearch] = useState('');
@@ -252,8 +267,10 @@ export default function AdminPortal({
   const [clientEndDateFilter, setClientEndDateFilter] = useState('');
 
   // Advanced filters state
-  const [filterWorkflowStatus, setFilterWorkflowStatus] = useState('All');
-  const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
+const [filterWorkflowStatus, setFilterWorkflowStatus] = useState('All');
+const [filterAssignedTeam, setFilterAssignedTeam] = useState('All');
+const [filterStartDate, setFilterStartDate] = useState('');
+const [filterEndDate, setFilterEndDate] = useState('');
 
   const isFirstLoadRef = React.useRef(true);
 
@@ -303,6 +320,37 @@ export default function AdminPortal({
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchDailyReports = async (team) => {
+    if (!team) return;
+    setDailyReportsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('team', team);
+      if (dailyReportMemberSearch.trim()) params.set('member', dailyReportMemberSearch.trim());
+      if (dailyReportClientSearch.trim()) params.set('search', dailyReportClientSearch.trim());
+      if (dailyReportDateFilter) params.set('date', dailyReportDateFilter);
+      const res = await authFetch(`/api/daily-reports?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDailyReports(data);
+      } else {
+        onAddToast('Fetch Failed', 'Could not load daily reports for this team.', 'error');
+      }
+    } catch (error) {
+      console.error('Fetch daily reports error:', error);
+      onAddToast('Fetch Failed', 'Network error while loading daily reports.', 'error');
+    } finally {
+      setDailyReportsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isDailyReportOpen && dailyReportTeam) {
+      fetchDailyReports(dailyReportTeam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDailyReportOpen, dailyReportTeam, dailyReportMemberSearch, dailyReportClientSearch, dailyReportDateFilter]);
 
   const handleCentralStatusChange = async (leadId, newStatus) => {
     try {
@@ -364,8 +412,12 @@ export default function AdminPortal({
         if (!nameMatch && !phoneMatch && !idMatch && !createdByMatch && !businessMatch && !assignedToMatch) return false;
       }
 
-      if (clientStatusFilter !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== clientStatusFilter) {
-        return false;
+      if (clientStatusFilter !== 'All') {
+        const rawStatus = lead.workflowStatus || 'Non-Allocated';
+        const mappedStatus = (rawStatus === 'Completed' || rawStatus === 'In Progress') ? rawStatus : 'Pending';
+        if (mappedStatus !== clientStatusFilter) {
+          return false;
+        }
       }
 
       if (clientTeamFilter !== 'All') {
@@ -863,22 +915,37 @@ export default function AdminPortal({
   }, [leads, selectedRep, selectedTech]);
 
   const filteredInspectedLeads = useMemo(() => {
-    return inspectedLeads.filter(lead => {
-      // 1. Status filter
-      if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
+  return inspectedLeads.filter(lead => {
+    // 1. Status filter
+    if (filterWorkflowStatus !== 'All' && (lead.workflowStatus || 'Non-Allocated') !== filterWorkflowStatus) {
+      return false;
+    }
+
+    // 2. Assigned Team filter
+    if (filterAssignedTeam !== 'All') {
+      if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
         return false;
       }
+    }
 
-      // 2. Assigned Team filter
-      if (filterAssignedTeam !== 'All') {
-        if (!hasTeamVal(lead.assignedTeam, filterAssignedTeam)) {
-          return false;
-        }
+    // 3. Date range filter
+    if (filterStartDate || filterEndDate) {
+      const created = new Date(lead.createdAt || lead.timestamp);
+      if (filterStartDate) {
+        const start = new Date(filterStartDate);
+        start.setHours(0, 0, 0, 0);
+        if (created < start) return false;
       }
+      if (filterEndDate) {
+        const end = new Date(filterEndDate);
+        end.setHours(23, 59, 59, 999);
+        if (created > end) return false;
+      }
+    }
 
-      return true;
-    });
-  }, [inspectedLeads, filterWorkflowStatus, filterAssignedTeam]);
+    return true;
+  });
+}, [inspectedLeads, filterWorkflowStatus, filterAssignedTeam, filterStartDate, filterEndDate]);
 
   const filteredSalesReportLeads = useMemo(() => {
   return leads.filter(lead => {
@@ -1428,72 +1495,92 @@ export default function AdminPortal({
           title={selectedRep ? (selectedRep === 'All' ? 'All System Clients' : `${selectedRep}'s Clients`) : `${selectedTech.name}'s Assigned Tasks`} 
           subtitle="Double click or inspect any record to audit full client brief details"
         >
-          {/* Common Filter Section */}
-          <div className="flex flex-wrap items-center gap-4 mb-6 bg-slate-500/5 dark:bg-slate-500/2 border border-gray-150/40 dark:border-slate-800/40 p-4 rounded-2xl text-xs font-semibold animate-in fade-in duration-200">
-            <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 uppercase tracking-wider">
-              <Sliders className="w-3.5 h-3.5 text-indigo-500" /> Filters:
-            </span>
-            
-            <div className="flex flex-wrap items-center gap-4 flex-1">
-              {/* Status Filter */}
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold">Workflow Status:</span>
-                <select
-                  value={filterWorkflowStatus}
-                  onChange={(e) => setFilterWorkflowStatus(e.target.value)}
-                  className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Non-Allocated">Non-Allocated</option>
-                  <option value="Allocated">Assigned to Specific Team</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
+         {/* Common Filter Section */}
+<div className="flex flex-nowrap items-center gap-3 mb-6 bg-slate-500/5 dark:bg-slate-500/2 border border-gray-150/40 dark:border-slate-800/40 p-4 rounded-2xl text-xs font-semibold animate-in fade-in duration-200 overflow-x-auto">
+  <span className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5 uppercase tracking-wider shrink-0">
+    <Sliders className="w-3.5 h-3.5 text-indigo-500" /> Filters:
+  </span>
+  
+  <div className="flex flex-nowrap items-center gap-4 flex-1">
+    {/* Status Filter */}
+    <div className="flex items-center gap-2 shrink-0">
+      <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold whitespace-nowrap">Workflow Status:</span>
+      <select
+        value={filterWorkflowStatus}
+        onChange={(e) => setFilterWorkflowStatus(e.target.value)}
+        className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+      >
+        <option value="All">All Statuses</option>
+        <option value="Non-Allocated">Non-Allocated</option>
+        <option value="Allocated">Assigned to Specific Team</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Completed">Completed</option>
+      </select>
+    </div>
 
-              {/* Assigned Team Filter */}
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold">Assigned Team:</span>
-                <select
-                  value={filterAssignedTeam}
-                  onChange={(e) => setFilterAssignedTeam(e.target.value)}
-                  className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
-                >
-                  <option value="All">All Teams</option>
-                  <option value="design">Designing Team</option>
-                  <option value="developer">Developer Team</option>
-                  <option value="ads">Ads Team</option>
-                </select>
-              </div>
-            </div>
+    {/* Assigned Team Filter */}
+    <div className="flex items-center gap-2 shrink-0">
+      <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold whitespace-nowrap">Assigned Team:</span>
+      <select
+        value={filterAssignedTeam}
+        onChange={(e) => setFilterAssignedTeam(e.target.value)}
+        className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+      >
+        <option value="All">All Teams</option>
+        <option value="design">Designing Team</option>
+        <option value="developer">Developer Team</option>
+        <option value="ads">Ads Team</option>
+      </select>
+    </div>
 
-            {/* Actions Row */}
-            <div className="flex gap-2 justify-end text-xs">
-              {/* Reset Button */}
-              {(filterWorkflowStatus !== 'All' || filterAssignedTeam !== 'All') && (
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => {
-                    setFilterWorkflowStatus('All');
-                    setFilterAssignedTeam('All');
-                  }}
-                >
-                  Reset Filters
-                </Button>
-              )}
+    {/* Date Range Filter */}
+    <div className="flex items-center gap-2 shrink-0">
+      <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold whitespace-nowrap">Date Range:</span>
+      <input
+        type="date"
+        value={filterStartDate}
+        onChange={(e) => setFilterStartDate(e.target.value)}
+        className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+      />
+      <span className="text-[10px] text-gray-450 dark:text-gray-500 font-bold whitespace-nowrap">to</span>
+      <input
+        type="date"
+        value={filterEndDate}
+        onChange={(e) => setFilterEndDate(e.target.value)}
+        className="rounded-xl border border-gray-200 dark:border-slate-805 py-1.5 px-3 text-xs bg-white dark:bg-slate-905 text-gray-905 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
+      />
+    </div>
+  </div>
 
-              <Button
-                variant="outline"
-                size="xs"
-                icon={Download}
-                onClick={handleExportRepCSV}
-                disabled={inspectedLeads.length === 0}
-              >
-                Export CSV Report
-              </Button>
-            </div>
-          </div>
+  {/* Actions Row */}
+  <div className="flex gap-2 justify-end text-xs shrink-0">
+    {/* Reset Button */}
+    {(filterWorkflowStatus !== 'All' || filterAssignedTeam !== 'All' || filterStartDate || filterEndDate) && (
+      <Button
+        variant="outline"
+        size="xs"
+        onClick={() => {
+          setFilterWorkflowStatus('All');
+          setFilterAssignedTeam('All');
+          setFilterStartDate('');
+          setFilterEndDate('');
+        }}
+      >
+        Reset Filters
+      </Button>
+    )}
+
+    <Button
+      variant="outline"
+      size="xs"
+      icon={Download}
+      onClick={handleExportRepCSV}
+      disabled={inspectedLeads.length === 0}
+    >
+      Export CSV Report
+    </Button>
+  </div>
+</div>
 
       {filteredInspectedLeads.length === 0 ? (
   <div className="text-center py-12 border border-dashed border-gray-200 dark:border-slate-800/80 rounded-xl bg-gray-50/30 dark:bg-slate-900/10">
@@ -2336,7 +2423,6 @@ export default function AdminPortal({
                               className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                             >
                               <option value="Pending">Pending</option>
-                              <option value="In Progress">In Progress</option>
                               <option value="Completed">Completed</option>
                             </select>
                           </div>
@@ -2374,7 +2460,6 @@ export default function AdminPortal({
                               className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                             >
                               <option value="Pending">Pending</option>
-                              <option value="In Progress">In Progress</option>
                               <option value="Completed">Completed</option>
                             </select>
                           </div>
@@ -2412,7 +2497,6 @@ export default function AdminPortal({
                               className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                             >
                               <option value="Pending">Pending</option>
-                              <option value="In Progress">In Progress</option>
                               <option value="Completed">Completed</option>
                             </select>
                           </div>
@@ -2458,7 +2542,6 @@ export default function AdminPortal({
                               className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                             >
                               <option value="Pending">Pending</option>
-                              <option value="In Progress">In Progress</option>
                               <option value="Completed">Completed</option>
                             </select>
                           </div>
@@ -2910,6 +2993,22 @@ const handleClientFieldChange = (field, value) => {
         </div>
 
         <div className="flex items-center gap-2.5">
+          {/* Daily Report Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setDailyReportTeam(null);
+              setDailyReportClientSearch('');
+              setDailyReportMemberSearch('');
+              setDailyReportDateFilter('');
+              setIsDailyReportOpen(true);
+            }}
+            icon={ClipboardList}
+          >
+            Daily Report
+          </Button>
+
           {/* Sales Review Button */}
           <Button
             variant="outline"
@@ -3522,8 +3621,7 @@ const handleClientFieldChange = (field, value) => {
                 className="w-full rounded-xl border border-gray-200 dark:border-slate-800 py-2.5 px-3 text-sm bg-white/60 dark:bg-slate-900/40 text-gray-900 dark:text-white cursor-pointer focus:border-indigo-500 outline-hidden"
               >
                 <option value="All">All Statuses</option>
-                <option value="Non-Allocated">Non-Allocated</option>
-                <option value="Allocated">Assigned to Specific Team</option>
+                <option value="Pending">Pending</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Completed">Completed</option>
               </select>
@@ -3538,9 +3636,8 @@ const handleClientFieldChange = (field, value) => {
               >
                 <option value="All">All Teams</option>
                 <option value="design">Designing Team</option>
-                <option value="developer">Development Team</option>
+                <option value="developer">Developer Team</option>
                 <option value="ads">Ads Team</option>
-                <option value="all">All Teams</option>
               </select>
             </div>
 
@@ -4518,7 +4615,6 @@ const handleClientFieldChange = (field, value) => {
                             className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                           >
                             <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
                           </select>
                         </div>
@@ -4556,7 +4652,6 @@ const handleClientFieldChange = (field, value) => {
                             className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                           >
                             <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
                           </select>
                         </div>
@@ -4594,7 +4689,6 @@ const handleClientFieldChange = (field, value) => {
                             className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                           >
                             <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
                           </select>
                         </div>
@@ -4640,7 +4734,6 @@ const handleClientFieldChange = (field, value) => {
                             className="rounded-lg border border-gray-200 dark:border-slate-800 py-1 px-2 text-[10px] bg-white dark:bg-slate-900 text-gray-900 dark:text-white"
                           >
                             <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
                             <option value="Completed">Completed</option>
                           </select>
                         </div>
@@ -5867,6 +5960,183 @@ const handleClientFieldChange = (field, value) => {
         </div>
       )}
 
+
+      {/* Daily Report Modal */}
+      {isDailyReportOpen && (
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm flex items-start justify-center p-4 z-150 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-6xl my-6 shadow-2xl flex flex-col">
+
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 rounded-t-2xl z-10">
+              <div className="flex items-center gap-3">
+                {dailyReportTeam && (
+                  <button
+                    onClick={() => setDailyReportTeam(null)}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
+                    title="Back to team selection"
+                  >
+                    <ArrowLeft className="w-4.5 h-4.5" />
+                  </button>
+                )}
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <ClipboardList className="w-4.5 h-4.5 text-indigo-500" /> Daily Report
+                    {dailyReportTeam && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                        {dailyReportTeam === 'ads' ? 'Ads' : dailyReportTeam === 'design' ? 'Design' : 'Developer'} Team
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {dailyReportTeam
+                      ? `${dailyReports.length} report${dailyReports.length !== 1 ? 's' : ''} found`
+                      : 'Select a technical team to review daily work reports'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsDailyReportOpen(false);
+                  setDailyReportTeam(null);
+                  setDailyReportClientSearch('');
+                  setDailyReportMemberSearch('');
+                  setDailyReportDateFilter('');
+                }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {!dailyReportTeam ? (
+              /* Team Selector */
+              <div className="p-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {[
+                  { key: 'ads', label: 'Ads Team', icon: Megaphone, color: 'pink' },
+                  { key: 'design', label: 'Design Team', icon: Palette, color: 'indigo' },
+                  { key: 'developer', label: 'Developer Team', icon: Code2, color: 'purple' }
+                ].map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setDailyReportTeam(t.key)}
+                    className="flex flex-col items-center justify-center gap-3 p-8 rounded-2xl border border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-950/20 hover:bg-indigo-500/5 hover:border-indigo-500/30 dark:hover:bg-indigo-500/10 transition-all cursor-pointer group"
+                  >
+                    <div className="p-4 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
+                      <t.icon className="w-7 h-7" />
+                    </div>
+                    <span className="font-bold text-gray-900 dark:text-white text-sm">{t.label}</span>
+                    <span className="text-xs text-gray-400">View submitted reports</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <>
+                {/* Filter Bar */}
+                <div className="px-6 pt-4 pb-3 border-b border-gray-100 dark:border-slate-800/60 bg-gray-50/40 dark:bg-slate-900/50 flex flex-wrap items-end gap-3">
+                  <div className="flex flex-col gap-1 min-w-[180px] flex-1">
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Search Client Business Name</label>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search client business..."
+                        value={dailyReportClientSearch}
+                        onChange={(e) => setDailyReportClientSearch(e.target.value)}
+                        className="pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 w-full transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1 min-w-[180px] flex-1">
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Search Team Member</label>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Search by member name..."
+                        value={dailyReportMemberSearch}
+                        onChange={(e) => setDailyReportMemberSearch(e.target.value)}
+                        className="pl-8 pr-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 w-full transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Filter by Date</label>
+                    <input
+                      type="date"
+                      value={dailyReportDateFilter}
+                      onChange={(e) => setDailyReportDateFilter(e.target.value)}
+                      className="py-2 px-3 text-xs rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white outline-none focus:border-indigo-400 cursor-pointer transition-all"
+                    />
+                  </div>
+                  {(dailyReportClientSearch || dailyReportMemberSearch || dailyReportDateFilter) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDailyReportClientSearch('');
+                        setDailyReportMemberSearch('');
+                        setDailyReportDateFilter('');
+                      }}
+                      className="py-2 px-3 text-xs font-semibold rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all cursor-pointer"
+                    >
+                      Reset Filters
+                    </button>
+                  )}
+                </div>
+
+                {/* Table */}
+                <div className="overflow-auto flex-1 px-1 max-h-[480px]">
+                  {dailyReportsLoading ? (
+                    <div className="text-center py-16 text-sm text-gray-400">Loading daily reports...</div>
+                  ) : dailyReports.length === 0 ? (
+                    <div className="text-center py-16 text-sm text-gray-400">No daily reports found for this team.</div>
+                  ) : (
+                    <table className="w-full text-left text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60 sticky top-0">
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Date</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Team Member</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Business Name</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Work Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
+                        {dailyReports.map((report) => (
+                          <tr key={report._id || report.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors align-top">
+                            <td className="p-3 whitespace-nowrap font-mono text-xs">
+                              {report.date ? new Date(report.date).toLocaleDateString() : 'N/A'}
+                            </td>
+                            <td className="p-3 text-gray-900 dark:text-white font-bold break-words">
+                              {report.teamMemberName}
+                            </td>
+                            <td className="p-3 break-words">{report.clientBusinessName}</td>
+                            <td className="p-3 break-words">{report.workStatus}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end p-5 border-t border-gray-100 dark:border-slate-800/80">
+              <Button
+                onClick={() => {
+                  setIsDailyReportOpen(false);
+                  setDailyReportTeam(null);
+                  setDailyReportClientSearch('');
+                  setDailyReportMemberSearch('');
+                  setDailyReportDateFilter('');
+                }}
+                variant="outline"
+                size="sm"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sheets Integration Modal */}
       {isSheetsModalOpen && (
