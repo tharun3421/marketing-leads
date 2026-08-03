@@ -1425,7 +1425,7 @@ export default function SalesPortal({
                 </div>
 
                 {/* Client List */}
-                <div className="flex-1 overflow-y-auto max-h-[500px] space-y-2.5 pr-1.5 scrollbar-thin">
+                <div className="flex-1 overflow-y-auto max-h-390 space-y-2.5 pr-1.5 scrollbar-thin">
                   {filteredLeads.length === 0 ? (
                     <div className="text-center py-8 border border-dashed border-gray-150 dark:border-slate-800/80 rounded-xl bg-gray-50/20 dark:bg-slate-900/5">
                       <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">No clients found matching search/filters.</p>
