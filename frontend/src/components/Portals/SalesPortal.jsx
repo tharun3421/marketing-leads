@@ -240,6 +240,21 @@ const STEPS_META = [
   { title: 'Review & Submit Brief', desc: 'Final review of details and special instructions' }
 ];
 
+const getClientLifecycleStatus = (deadlineStr) => {
+  if (!deadlineStr) return { label: 'Active', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+  const deadlineDate = new Date(deadlineStr);
+  if (isNaN(deadlineDate.getTime())) return { label: 'Active', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  deadlineDate.setHours(0, 0, 0, 0);
+
+  const hasPassed = deadlineDate < today;
+  return hasPassed
+    ? { label: 'Deadline Expired', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' }
+    : { label: 'Active', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+};
+
 const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
   if (workflowStatus === 'Completed') return null;
   if (!deadlineStr) return null;
@@ -1909,7 +1924,7 @@ export default function SalesPortal({
         </Card>
       </div>
 
-               {/* Metrics List Modal */}
+      {/* Metrics List Modal */}
       <AnimatePresence>
         {activeMetricsModal && (() => {
           const { title, list } = getMetricsModalTitleAndList();
@@ -1919,7 +1934,7 @@ export default function SalesPortal({
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-8xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
               >
                 {/* Modal Header */}
                 <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
@@ -1945,17 +1960,19 @@ export default function SalesPortal({
                     <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
                       <table className="w-full text-left text-sm border-collapse table-fixed">
                         <colgroup>
-                          <col className="w-[10%]" />
-                          <col className="w-[19%]" />
-                          <col className="w-[12%]" />
-                          <col className="w-[19%]" />
-                          <col className="w-[24%]" />
+                          <col className="w-[9%]" />
                           <col className="w-[16%]" />
+                          <col className="w-[10%]" />
+                          <col className="w-[11%]" />
+                          <col className="w-[15%]" />
+                          <col className="w-[20%]" />
+                          <col className="w-[13%]" />
                         </colgroup>
                         <thead>
                           <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
                             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
                             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                            <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Status</th>
                             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
                             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
                             <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
@@ -1995,6 +2012,16 @@ export default function SalesPortal({
                                     {client.companyName}
                                   </div>
                                 )}
+                              </td>
+                              <td className="p-3">
+                                {(() => {
+                                  const lifecycle = getClientLifecycleStatus(client.deliveryDeadline);
+                                  return (
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${lifecycle.color}`}>
+                                      {lifecycle.label}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td className="p-3 font-mono break-words">{client.mobileNumber}</td>
                               <td className="p-3">

@@ -103,6 +103,23 @@ const getPerTeamStatusBadges = (lead) => {
   return entries.length > 0 ? entries : null;
 };
 
+
+const getClientLifecycleStatus = (deadlineStr) => {
+  if (!deadlineStr) return { label: 'Active', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+  const deadlineDate = new Date(deadlineStr);
+  if (isNaN(deadlineDate.getTime())) return { label: 'Active', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  deadlineDate.setHours(0, 0, 0, 0);
+
+  const hasPassed = deadlineDate < today;
+  return hasPassed
+    ? { label: 'Deadline Expired', color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' }
+    : { label: 'Active', color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+};
+
+
 const checkDeadlineAlert = (deadlineStr, workflowStatus) => {
   if (workflowStatus === 'Completed') return null;
   if (!deadlineStr) return null;
@@ -4236,7 +4253,7 @@ const handleClientFieldChange = (field, value) => {
         const { title, list } = getMetricsModalTitleAndList();
         return (
           <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl w-full max-w-8xl max-h-[85vh] flex flex-col shadow-2xl animate-in fade-in duration-200">
               
               {/* Modal Header */}
               <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
@@ -4262,17 +4279,19 @@ const handleClientFieldChange = (field, value) => {
                   <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
                     <table className="w-full text-left text-sm border-collapse table-fixed">
                       <colgroup>
+                        <col className="w-[9%]" />
+                        <col className="w-[20%]" />
                         <col className="w-[10%]" />
-                        <col className="w-[24%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[16%]" />
-                        <col className="w-[24%]" />
+                        <col className="w-[11%]" />
                         <col className="w-[14%]" />
+                        <col className="w-[20%]" />
+                        <col className="w-[12%]" />
                       </colgroup>
                       <thead>
                         <tr className="bg-gray-50/50 dark:bg-slate-900/30 border-b border-gray-100 dark:border-slate-800/60">
                           <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client ID</th>
                           <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Client Name</th>
+                          <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Status</th>
                           <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Business Number</th>
                           <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Workflow Status</th>
                           <th className="p-3 font-bold text-gray-700 dark:text-gray-300">Assigned To</th>
@@ -4303,20 +4322,51 @@ const handleClientFieldChange = (field, value) => {
                                 </div>
                               )}
                             </td>
+                            <td className="p-3">
+                              {(() => {
+                                const lifecycle = getClientLifecycleStatus(client.deliveryDeadline);
+                                return (
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${lifecycle.color}`}>
+                                    {lifecycle.label}
+                                  </span>
+                                );
+                              })()}
+                            </td>
                             <td className="p-3 font-mono break-words">{client.mobileNumber}</td>
                             <td className="p-3">
-                              <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
-                                client.workflowStatus === 'Completed'
-                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                  : client.workflowStatus === 'In Progress'
-                                    ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
-                                    : client.workflowStatus === 'Allocated'
-                                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                              }`}>
-                                {getStatusLabel(client.workflowStatus, client.assignedTeam)}
-                              </span>
-                            </td>
+  {(() => {
+    const sc = (s) => s === 'Completed'
+      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+      : s === 'In Progress'
+        ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+    const perTeam = getPerTeamStatusBadges(client);
+    if (perTeam && perTeam.length > 0 && (client.workflowStatus === 'In Progress' || client.workflowStatus === 'Completed' || client.workflowStatus === 'Allocated')) {
+      return (
+        <div className="flex flex-col gap-1">
+          {perTeam.map((t, i) => (
+            <span key={i} className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${sc(t.status)}`}>
+              {t.label}: {t.status}
+            </span>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block ${
+        client.workflowStatus === 'Completed'
+          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+          : client.workflowStatus === 'In Progress'
+            ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+            : client.workflowStatus === 'Allocated'
+              ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+      }`}>
+        {getStatusLabel(client.workflowStatus, client.assignedTeam)}
+      </span>
+    );
+  })()}
+</td>
                             <td className="p-3 text-xs overflow-hidden">
                               {(() => {
                                 const teams = client.assignedTeam;

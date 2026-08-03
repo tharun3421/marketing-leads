@@ -2492,7 +2492,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
+                className="bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-850 rounded-2xl w-full max-w-7xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
               >
                 <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                   <div>
