@@ -322,6 +322,15 @@ export default function SalesPortal({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
+  const [metricsSearchTerm, setMetricsSearchTerm] = useState('');
+  const [metricsStatusFilter, setMetricsStatusFilter] = useState('all');
+  const [metricsCreatedByFilter, setMetricsCreatedByFilter] = useState('All');
+  // Reset search/filter whenever a different metrics card is opened/closed
+  useEffect(() => {
+  setMetricsSearchTerm('');
+  setMetricsStatusFilter('all');
+  setMetricsCreatedByFilter('All');
+}, [activeMetricsModal]);
 
   // Central Clients Management filter states
   const [clientSearchQuery, setClientSearchQuery] = useState('');
@@ -1928,6 +1937,25 @@ export default function SalesPortal({
       <AnimatePresence>
         {activeMetricsModal && (() => {
           const { title, list } = getMetricsModalTitleAndList();
+          const isTotalMetric = activeMetricsModal === 'total';
+          const filteredList = isTotalMetric
+            ? list.filter((client) => {
+                const q = metricsSearchTerm.trim().toLowerCase();
+                const matchesSearch = !q || [
+                  client.clientName,
+                  client.clientId,
+                  client.companyName,
+                  client.mobileNumber
+                ].filter(Boolean).some((field) => String(field).toLowerCase().includes(q));
+                const matchesStatus =
+  metricsStatusFilter === 'all' ||
+  (metricsStatusFilter === 'active' && getClientLifecycleStatus(client.deliveryDeadline).label === 'Active') ||
+  (metricsStatusFilter === 'expired' && getClientLifecycleStatus(client.deliveryDeadline).label === 'Deadline Expired');
+const matchesCreatedBy =
+  metricsCreatedByFilter === 'All' || client.salespersonName === metricsCreatedByFilter;
+return matchesSearch && matchesStatus && matchesCreatedBy;
+              })
+            : list;
           return (
             <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
               <motion.div
@@ -1940,7 +1968,7 @@ export default function SalesPortal({
                 <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                   <div>
                     <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Showing {list.length} matching client briefs</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Showing {filteredList.length} matching client briefs</p>
                   </div>
                   <button 
                     onClick={() => setActiveMetricsModal(null)}
@@ -1950,9 +1978,50 @@ export default function SalesPortal({
                   </button>
                 </div>
 
+                {/* Search & Filter Bar - Total Clients only */}
+                {isTotalMetric && (
+                  <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-800/80 flex flex-col sm:flex-row gap-3 sm:items-center">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={metricsSearchTerm}
+                        onChange={(e) => setMetricsSearchTerm(e.target.value)}
+                        placeholder="Search by client name, ID, company or number..."
+                        className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                      />
+                    </div>
+                    <div className="relative sm:w-56">
+  <Sliders className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+  <select
+    value={metricsStatusFilter}
+    onChange={(e) => setMetricsStatusFilter(e.target.value)}
+    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 appearance-none cursor-pointer"
+  >
+    <option value="all">All Statuses</option>
+    <option value="active">Active</option>
+    <option value="expired">Expired</option>
+  </select>
+</div>
+<div className="relative sm:w-56">
+  <Users className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+  <select
+    value={metricsCreatedByFilter}
+    onChange={(e) => setMetricsCreatedByFilter(e.target.value)}
+    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 appearance-none cursor-pointer"
+  >
+    <option value="All">All Creators</option>
+    {salespersonsList.map(sp => (
+      <option key={sp._id || sp.id} value={sp.name}>{sp.name}</option>
+    ))}
+  </select>
+</div>
+                  </div>
+                )}
+
                 {/* Modal Content - Table */}
                 <div className="p-6 overflow-y-auto flex-1">
-                  {list.length === 0 ? (
+                  {filteredList.length === 0 ? (
                     <div className="text-center py-12 text-gray-400 dark:text-gray-500">
                       No client records match this category.
                     </div>
@@ -1980,7 +2049,7 @@ export default function SalesPortal({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
-                          {list.map((client) => (
+                          {filteredList.map((client) => (
                             <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors align-top">
                               <td className="p-3 break-words">
                                 <button

@@ -185,6 +185,14 @@ export default function TechnicalPortal({
   const [isEditingSocials, setIsEditingSocials] = useState(false);
   const [editedSocialFields, setEditedSocialFields] = useState({});
   const [activeMetricsModal, setActiveMetricsModal] = useState(null);
+  const [metricsSearchTerm, setMetricsSearchTerm] = useState('');
+  const [metricsStatusFilter, setMetricsStatusFilter] = useState('all');
+
+  // Reset search/filter whenever a different metrics card is opened/closed
+  useEffect(() => {
+    setMetricsSearchTerm('');
+    setMetricsStatusFilter('all');
+  }, [activeMetricsModal]);
   const [editWorkflowStatus, setEditWorkflowStatus] = useState('Allocated');
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -2486,6 +2494,24 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
       <AnimatePresence>
         {activeMetricsModal && (() => {
           const { title, list } = getMetricsModalTitleAndList();
+          const isTotalMetric = activeMetricsModal === 'total';
+          const filteredList = isTotalMetric
+            ? list.filter((client) => {
+                const q = metricsSearchTerm.trim().toLowerCase();
+                const matchesSearch = !q || [
+                  client.clientName,
+                  client.clientId,
+                  client.companyName,
+                  client.mobileNumber
+                ].filter(Boolean).some((field) => String(field).toLowerCase().includes(q));
+                const matchesStatus =
+                  metricsStatusFilter === 'all' ||
+                  (metricsStatusFilter === 'pending' && client.workflowStatus !== 'In Progress' && client.workflowStatus !== 'Completed') ||
+                  (metricsStatusFilter === 'in-progress' && client.workflowStatus === 'In Progress') ||
+                  (metricsStatusFilter === 'completed' && client.workflowStatus === 'Completed');
+                return matchesSearch && matchesStatus;
+              })
+            : list;
           return (
             <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-xs flex items-center justify-center p-4 z-150 overflow-y-auto">
               <motion.div
@@ -2497,14 +2523,41 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                 <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-slate-800/80">
                   <div>
                     <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
-                    <p className="text-xs text-gray-400 dark:text-gray-555 mt-0.5">Showing {list.length} matching client briefs</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-555 mt-0.5">Showing {filteredList.length} matching client briefs</p>
                   </div>
                   <button onClick={() => setActiveMetricsModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors cursor-pointer">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
+                {isTotalMetric && (
+                  <div className="px-5 py-3 border-b border-gray-100 dark:border-slate-800/80 flex flex-col sm:flex-row gap-3 sm:items-center">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={metricsSearchTerm}
+                        onChange={(e) => setMetricsSearchTerm(e.target.value)}
+                        placeholder="Search by client name, ID, company or number..."
+                        className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                      />
+                    </div>
+                    <div className="relative sm:w-56">
+                      <Sliders className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <select
+                        value={metricsStatusFilter}
+                        onChange={(e) => setMetricsStatusFilter(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40 appearance-none cursor-pointer"
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
                 <div className="p-6 overflow-y-auto flex-1">
-                  {list.length === 0 ? (
+                  {filteredList.length === 0 ? (
                     <div className="text-center py-12 text-gray-400 dark:text-gray-500">No client records match this category.</div>
                   ) : (
                     <div className="overflow-x-auto border border-gray-100 dark:border-slate-800/60 rounded-xl">
@@ -2528,7 +2581,7 @@ if (team === 'ads') return 'grid grid-cols-1 sm:grid-cols-1 max-w-xs gap-4';
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 dark:divide-slate-800/40 text-gray-750 dark:text-gray-355 font-medium">
-                          {list.map((client) => (
+                          {filteredList.map((client) => (
                             <tr key={client._id || client.id} className="hover:bg-indigo-500/3 dark:hover:bg-indigo-500/1 transition-colors align-top">
                               <td className="p-3 break-words">
                                 <button type="button" onClick={() => { setActiveMetricsModal(null); setViewedClientId(client._id || client.id); }} className="font-bold text-indigo-650 dark:text-indigo-400 hover:underline cursor-pointer break-words block" title={client.clientId}>
